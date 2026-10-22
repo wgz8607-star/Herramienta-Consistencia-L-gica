@@ -1,18 +1,13 @@
 # Validador Consistencia Lógica Alfanumérica
 
-Complemento para QGIS 3.28 o superior. Ejecuta reglas de validación de consistencia lógica alfanumérica sobre PostgreSQL/PostGIS, organiza los hallazgos como capas temporales de QGIS y permite exportarlos a GeoPackage y Excel. La fuente nunca se modifica y no se conservan esquemas de resultados en PostgreSQL.
-
-La interfaz funciona como panel acoplable de QGIS. Los microfragmentos pueden excluirse mediante un área y un ancho mínimo reportables, sin ajustar las geometrías fuente.
+Plugin para QGIS 3.28 o superior. Ejecuta las reglas SQL para **Modelo Interno de Levantamiento 1.0** y **CICA** contra PostgreSQL/PostGIS, muestra el resultado de cada regla y permite exportar un CSV.
 
 ## Formas de conexión
 
-- **Servidor autorizado:** el complemento solamente permite conexiones al anfitrión PostgreSQL `172.19.3.225`.
 - **Conexión guardada en QGIS:** reutiliza una conexión PostgreSQL registrada en el perfil actual de QGIS. Soporta las credenciales guardadas o configuradas mediante el gestor de autenticación de QGIS.
 - **Conexión manual a PostgreSQL:** permite ingresar servidor, puerto, base de datos, usuario y contraseña para la sesión actual.
 
-Puede ejecutarse con un usuario de consulta que tenga `CONNECT` y `TEMP` sobre la base, `USAGE` sobre el esquema y `SELECT` sobre las tablas involucradas. No requiere permisos de edición ni de creación de esquemas permanentes.
-
-Tras usar **Listar esquemas**, el complemento consulta los esquemas disponibles y permite seleccionar el que se validará.
+Tras usar **Probar conexión**, el plugin lista los esquemas disponibles y permite seleccionar el que se validará.
 
 ## Ingesta CICA
 
@@ -31,3 +26,7 @@ Para ambos modelos, el botón **Cargar referencia R1 y R2** valida los archivos 
 4. Abra el complemento desde el menú **Base de datos** o su botón de barra de herramientas.
 
 Las reglas SQL se incluyen en `resources/sql`. El complemento no guarda la contraseña ni ejecuta instrucciones que modifiquen la base de datos.
+
+## Base de esta distribución
+
+Versión 1.0.2 basada en el archivo `control_calidad_catastral_qgis.zip` (versión original 0.3.3). Se conserva la lógica y las reglas SQL de esa base; se actualiza la identificación del complemento.

@@ -1,15 +1,15 @@
 [general]
 name=Validador Consistencia Lógica Alfanumérica
-description=Valida la consistencia lógica alfanumérica de información catastral sobre PostgreSQL/PostGIS.
-version=1.0.1
+description=Ejecuta reglas SQL de calidad para Modelo Interno de Levantamiento 1.0 y CICA sobre PostgreSQL/PostGIS.
+version=1.0.2
 qgisMinimumVersion=3.28
-author=Equipo Calidad SP
+author=Equipo de Calidad Catastral
 email=
-about=Complemento para seleccionar, ejecutar, visualizar y exportar controles de consistencia lógica alfanumérica.
-category=Validación Gráfica
+about=Plugin para seleccionar, ejecutar y exportar resultados de reglas de control de calidad catastral.
+category=Database
 icon=icon.svg
-tags=Consistencia Lógica,Alfanumérica,Catastro
+tags=catastro,calidad,postgis,cica,levantamiento
 hasProcessingProvider=no
 
 [experimental]
-experimental=False
+experimental=True

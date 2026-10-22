@@ -1,14 +1,14 @@
 [general]
-name=Prevalidador MAILC v1.0 - Componente gráfico
-description=Prevalida el componente gráfico del Modelo Interno de Levantamiento Catastral MAILC v1.0 sobre PostgreSQL/PostGIS.
-version=1.0
+name=Validador Consistencia Lógica Alfanumérica
+description=Valida la consistencia lógica alfanumérica de información catastral sobre PostgreSQL/PostGIS.
+version=1.0.1
 qgisMinimumVersion=3.28
 author=Equipo Calidad SP
 email=
-about=Complemento para seleccionar, ejecutar, visualizar y exportar controles del componente gráfico MAILC v1.0.
+about=Complemento para seleccionar, ejecutar, visualizar y exportar controles de consistencia lógica alfanumérica.
 category=Validación Gráfica
 icon=icon.svg
-tags=MAILC,Componente Gráfico
+tags=Consistencia Lógica,Alfanumérica,Catastro
 hasProcessingProvider=no
 
 [experimental]

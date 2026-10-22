@@ -15,11 +15,11 @@ class ControlCalidadPlugin:
 
     def initGui(self):
         icon = QIcon(str(Path(__file__).resolve().parent / "icon.svg"))
-        self.action = QAction(icon, "Prevalidador MAILC v1.0 - Componente gráfico", self.iface.mainWindow())
-        self.action.setWhatsThis("Prevalidar el componente gráfico del modelo MAILC v1.0")
+        self.action = QAction(icon, "Validador Consistencia Lógica Alfanumérica", self.iface.mainWindow())
+        self.action.setWhatsThis("Validar la consistencia lógica alfanumérica")
         self.action.triggered.connect(self.open_dialog)
         self.iface.addToolBarIcon(self.action)
-        self.iface.addPluginToDatabaseMenu("Prevalidador MAILC v1.0 - Componente gráfico", self.action)
+        self.iface.addPluginToDatabaseMenu("Validador Consistencia Lógica Alfanumérica", self.action)
 
     def unload(self):
         if self.dock:
@@ -29,12 +29,12 @@ class ControlCalidadPlugin:
             self.dialog = None
         if self.action:
             self.iface.removeToolBarIcon(self.action)
-            self.iface.removePluginDatabaseMenu("Prevalidador MAILC v1.0 - Componente gráfico", self.action)
+            self.iface.removePluginDatabaseMenu("Validador Consistencia Lógica Alfanumérica", self.action)
 
     def open_dialog(self):
         if self.dock is None:
-            self.dock = QDockWidget("Prevalidador MAILC v1.0 - Componente gráfico", self.iface.mainWindow())
-            self.dock.setObjectName("PrevalidadorMAILCComponenteGrafico")
+            self.dock = QDockWidget("Validador Consistencia Lógica Alfanumérica", self.iface.mainWindow())
+            self.dock.setObjectName("ValidadorConsistenciaLogicaAlfanumerica")
             self.dock.setAllowedAreas(
                 Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea |
                 Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea

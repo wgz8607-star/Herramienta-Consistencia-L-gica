@@ -1,6 +1,6 @@
-# Prevalidador MAILC v1.0 - Componente gráfico
+# Validador Consistencia Lógica Alfanumérica
 
-Complemento para QGIS 3.28 o superior. Ejecuta reglas de prevalidación del componente gráfico MAILC sobre PostgreSQL/PostGIS, organiza los hallazgos como capas temporales de QGIS y permite exportarlos a GeoPackage y Excel. La fuente nunca se modifica y no se conservan esquemas de resultados en PostgreSQL.
+Complemento para QGIS 3.28 o superior. Ejecuta reglas de validación de consistencia lógica alfanumérica sobre PostgreSQL/PostGIS, organiza los hallazgos como capas temporales de QGIS y permite exportarlos a GeoPackage y Excel. La fuente nunca se modifica y no se conservan esquemas de resultados en PostgreSQL.
 
 La interfaz funciona como panel acoplable de QGIS. Los microfragmentos pueden excluirse mediante un área y un ancho mínimo reportables, sin ajustar las geometrías fuente.
 
@@ -27,7 +27,7 @@ Para ambos modelos, el botón **Cargar referencia R1 y R2** valida los archivos 
 
 1. Copie la carpeta `qgis_control_calidad` al directorio de complementos de su perfil de QGIS.
 2. En QGIS abra **Complementos > Administrar e instalar complementos**.
-3. Active **Control de Calidad Catastral**.
+3. Active **Validador Consistencia Lógica Alfanumérica**.
 4. Abra el complemento desde el menú **Base de datos** o su botón de barra de herramientas.
 
 Las reglas SQL se incluyen en `resources/sql`. El complemento no guarda la contraseña ni ejecuta instrucciones que modifiquen la base de datos.

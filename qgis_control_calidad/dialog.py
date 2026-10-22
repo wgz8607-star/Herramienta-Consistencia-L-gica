@@ -295,7 +295,7 @@ class HelpDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Ayuda · Prevalidador MAILC")
+        self.setWindowTitle("Ayuda · Validador Consistencia Lógica Alfanumérica")
         self.resize(920, 620)
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
@@ -736,7 +736,7 @@ class ControlCalidadDialog(QWidget):
     def __init__(self, parent=None, iface=None):
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle("Prevalidador MAILC v1.0 - Componente gráfico")
+        self.setWindowTitle("Validador Consistencia Lógica Alfanumérica")
         self.setWindowIcon(QIcon(str(PLUGIN_DIR / "icon.svg")))
         self.resize(420, 520)
         self.results: list[RuleResult] = []
@@ -780,7 +780,7 @@ class ControlCalidadDialog(QWidget):
                 "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }"
             )
 
-        self.heading = QLabel("Prevalidador MAILC v1.0 - Componente gráfico")
+        self.heading = QLabel("Validador Consistencia Lógica Alfanumérica")
         self.heading.setWordWrap(True)
         self.heading.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.heading.setStyleSheet("font-size: 18px; font-weight: 700; color: #0468A3;")
@@ -810,7 +810,7 @@ class ControlCalidadDialog(QWidget):
         header_actions.addWidget(help_link)
         header_actions.addStretch()
         layout.addLayout(header_actions)
-        self.subtitle = QLabel("Modelo MAILC v1.0 · Prevalidación del componente gráfico y topológico")
+        self.subtitle = QLabel("Validación de consistencia lógica alfanumérica")
         self.subtitle.setStyleSheet("color: #52666a;")
         layout.addWidget(self.subtitle)
 
@@ -1539,7 +1539,7 @@ class ControlCalidadDialog(QWidget):
             params = {"host": self.host.text().strip(), "port": self.port.text().strip(), "dbname": self.database.text().strip(), "user": self.user.text().strip(), "password": self.password.text()}
         if str(params.get("host", "")).strip() != ALLOWED_POSTGRES_HOST:
             raise ValueError(
-                "Conexión no permitida. El Prevalidador MAILC solamente puede conectarse "
+                "Conexión no permitida. El Validador Consistencia Lógica Alfanumérica solamente puede conectarse "
                 f"al servidor autorizado {ALLOWED_POSTGRES_HOST}."
             )
         return params
@@ -1637,7 +1637,7 @@ class ControlCalidadDialog(QWidget):
             QMessageBox.critical(
                 self,
                 "No fue posible conectar",
-                "El Prevalidador MAILC solo permite validar bases de datos alojadas en el "
+                "El Validador Consistencia Lógica Alfanumérica solo permite validar bases de datos alojadas en el "
                 f"servidor autorizado por la DTIC–IGAC: {ALLOWED_POSTGRES_HOST}.\n\n"
                 "No fue posible establecer conexión con este servidor. Verifique que se "
                 "encuentre conectado a la red institucional o a la VPN y que la conexión "
@@ -2436,7 +2436,7 @@ class ControlCalidadDialog(QWidget):
                 exported_layer.setRenderer(layer.renderer().clone())
                 try:
                     exported_layer.saveStyleToDatabase(
-                        "Prevalidador MAILC", "Simbología del grupo de validación", True, ""
+                        "Validador Consistencia Lógica Alfanumérica", "Simbología del grupo de validación", True, ""
                     )
                 except Exception:
                     # La capa ya fue exportada correctamente; algunos proveedores

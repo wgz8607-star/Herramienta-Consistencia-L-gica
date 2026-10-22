@@ -1,7 +1,7 @@
 [general]
 name=Validador Consistencia Lógica Alfanumérica
-description=Ejecuta reglas SQL de calidad para Modelo Interno de Levantamiento 1.0 y CICA sobre PostgreSQL/PostGIS.
-version=1.0.2
+description=Ejecuta reglas SQL de calidad para Modelo Interno de Levantamiento 1.0, CICA y cargue SNC de CICA/XTF sobre PostgreSQL/PostGIS.
+version=1.0.3
 qgisMinimumVersion=3.28
 author=Equipo de Calidad Catastral
 email=

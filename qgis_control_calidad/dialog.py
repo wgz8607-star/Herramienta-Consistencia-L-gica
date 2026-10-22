@@ -54,7 +54,7 @@ REPOSITORY_CONNECTION = {
     "port": "5432",
     "dbname": "sentencias",
     "user": "admin_ant",
-    "password": "",
+    "password": "ant12726",
 }
 
 
@@ -112,11 +112,18 @@ class SqlVersionDialog(QDialog):
                     if self.repository_source["kind"] == "tables":
                         rows = []
                         for table in self.repository_source["tables"]:
-                            published = "NULL" if self.repository_source.get("snc") else "max(fecha_actualizacion)"
-                            order = "version DESC" if self.repository_source.get("snc") else "max(fecha_actualizacion) DESC, version DESC"
+                            published = "NULL" if self.repository_source.get("snc") else "max(fecha_actualizacion) OVER (PARTITION BY version)"
                             cursor.execute(
-                                f"SELECT version, max(descripcion_regla), 'PUBLICADA', {published} "
-                                f"FROM public.{table} WHERE activa GROUP BY version ORDER BY {order}"
+                                f"WITH cabeceras AS ("
+                                f"SELECT DISTINCT ON (version) version, descripcion_version, version_publicada, "
+                                f"{published} AS publicada FROM public.{table} "
+                                "ORDER BY version, orden NULLS LAST, componente, codigo_regla"
+                                ") SELECT cabecera.version, COALESCE(cabecera.descripcion_version, ''), "
+                                "'PUBLICADA', cabecera.publicada FROM cabeceras AS cabecera "
+                                "WHERE cabecera.version_publicada IS TRUE AND EXISTS ("
+                                f"SELECT 1 FROM public.{table} AS regla "
+                                "WHERE regla.version = cabecera.version AND regla.activa) "
+                                "ORDER BY cabecera.publicada DESC NULLS LAST, cabecera.version DESC"
                             )
                             rows.extend(({"table": table, "version": item[0]}, item[0], item[1], item[2], item[3]) for item in cursor.fetchall())
                     else:
@@ -453,6 +460,8 @@ class ControlCalidadDialog(QDialog):
 
     def repository_connection_params(self):
         params = dict(REPOSITORY_CONNECTION)
+        if params.get("password"):
+            return params
         if self._repository_password is None:
             password, accepted = QInputDialog.getText(
                 self, "Acceso al repositorio de sentencias",
@@ -539,8 +548,12 @@ class ControlCalidadDialog(QDialog):
                     if source["kind"] == "tables":
                         table = version["id"]["table"]
                         cursor.execute(
-                            f"SELECT componente, codigo_regla, tipo, sentencia_sql, COALESCE(descripcion_regla, '') FROM public.{table} "
-                            "WHERE version = %s AND activa ORDER BY componente, orden, codigo_regla",
+                            f"SELECT componente, codigo_regla, tipo, sentencia_sql, COALESCE(descripcion_regla, '') FROM public.{table} AS regla "
+                            "WHERE version = %s AND activa AND ("
+                            f"SELECT cabecera.version_publicada FROM public.{table} AS cabecera "
+                            "WHERE cabecera.version = regla.version "
+                            "ORDER BY cabecera.orden NULLS LAST, cabecera.componente, cabecera.codigo_regla LIMIT 1"
+                            ") IS TRUE ORDER BY componente, orden, codigo_regla",
                             (version["id"]["version"],),
                         )
                     else:

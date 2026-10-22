@@ -33,6 +33,7 @@ class SncTests(unittest.TestCase):
         connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = cursor
         return cursor
 
+    @patch.dict(module.REPOSITORY_CONNECTION, password='')
     def test_repository_password_is_masked_and_session_only(self):
         with patch.object(module.QInputDialog, 'getText', return_value=('test-session-password', True)) as prompt:
             first = self.widget.repository_connection_params()
@@ -43,12 +44,21 @@ class SncTests(unittest.TestCase):
         prompt.assert_called_once()
         self.assertEqual(prompt.call_args.args[3], module.QLineEdit.Password)
 
+    @patch.dict(module.REPOSITORY_CONNECTION, password='')
     def test_cancel_password_blocks_database_access(self):
         with patch.object(module.QInputDialog, 'getText', return_value=('', False)), patch.object(module.psycopg2, 'connect') as connect:
             self.widget.open_sql_version_dialog()
         connect.assert_not_called()
         self.assertFalse(self.widget.run_button.isEnabled())
         self.assertIsNone(self.widget._repository_password)
+
+    def test_internal_repository_credentials_do_not_prompt(self):
+        with patch.object(module.QInputDialog, 'getText') as prompt:
+            params = self.widget.repository_connection_params()
+        prompt.assert_not_called()
+        self.assertEqual(params['user'], 'admin_ant')
+        self.assertTrue(params['password'])
+        self.assertEqual(params['dbname'], 'sentencias')
 
     def test_categories_follow_selected_version_instead_of_model(self):
         self.select_model('CICA')
@@ -177,6 +187,8 @@ class SncTests(unittest.TestCase):
         self.assertFalse(self.widget.run_button.isEnabled())
         query, params = cursor.execute.call_args.args
         self.assertIn('public.reglas_cargue_snc_xtf', query)
+        self.assertIn('cabecera.version_publicada', query)
+        self.assertIn('LIMIT 1', query)
         self.assertEqual(params, ('v1',))
 
     def test_snc_selection_requires_loaded_rules_and_resets_on_model_change(self):
@@ -195,6 +207,22 @@ class SncTests(unittest.TestCase):
                 self.widget.environment.setCurrentIndex(0)
             self.assertFalse(self.widget.run_button.isEnabled())
             self.assertFalse(self.widget.category_checks[module.SNC_CATEGORY].isChecked())
+
+    @patch.object(module.psycopg2, 'connect')
+    def test_version_metadata_comes_from_first_row_before_filtering_active(self, connect):
+        cursor = self.database(connect)
+        cursor.fetchall.return_value = [('v1', 'Descripcion de version', 'PUBLICADA', None)]
+        chooser = module.SqlVersionDialog(self.widget, {}, {
+            'kind': 'tables', 'tables': ['reglas_cargue_snc_cica'], 'snc': True, 'label': 'SNC'})
+        self.addCleanup(chooser.close)
+        query = cursor.execute.call_args.args[0]
+        self.assertIn('DISTINCT ON (version)', query)
+        self.assertIn('version, orden NULLS LAST, componente, codigo_regla', query)
+        self.assertIn('cabecera.version_publicada IS TRUE', query)
+        self.assertIn('descripcion_version', query)
+        self.assertNotIn('descripcion_regla', query)
+        self.assertNotIn('WHERE activa', query)
+        self.assertEqual(chooser.table.item(0, 1).text(), 'Descripcion de version')
 
     @patch.object(module.psycopg2, 'connect')
     def test_versions_do_not_require_extra_timestamp_column(self, connect):

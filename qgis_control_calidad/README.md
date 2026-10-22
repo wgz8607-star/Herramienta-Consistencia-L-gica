@@ -55,6 +55,24 @@ Ejecutar controles permanece deshabilitado hasta cargar una versión del reposit
 
 ## Acceso a sentencias
 
-El repositorio usa la base `sentencias` y el usuario `admin_ant`. Al buscar una versión se solicita la contraseña con entrada enmascarada; se conserva únicamente en memoria durante la sesión del complemento. Cancelar bloquea la consulta y la ejecución. No se incluye una contraseña en el código ni en el ZIP.
+El repositorio usa la base `sentencias` y el usuario `admin_ant`. Por solicitud del propietario, la configuración local incorpora la contraseña y no la solicita ni la muestra en la interfaz. Esta credencial puede extraerse del código distribuido. Este cambio local no se ha publicado en GitHub ni empaquetado en un ZIP. Si se retira la contraseña interna, se conserva la solicitud enmascarada por sesión como alternativa.
 
 Los grupos disponibles y seleccionados se calculan a partir de los controles activos con SQL no vacío de la versión seleccionada. Los grupos ausentes de esa versión no se muestran. Al cambiar de versión se reemplaza la selección completa.
+
+## Metadatos y publicación de versiones
+
+Antes de usar este cambio, ejecutar `sql/agregar_metadatos_version.sql` en
+`sentencias`. Añade `descripcion_version` (texto vacío por defecto) y
+`version_publicada` (verdadero por defecto para conservar la disponibilidad
+existente). La descripción y publicación se leen exclusivamente de la primera
+fila de cada versión, ordenada por `orden NULLS LAST, componente, codigo_regla`,
+incluyendo reglas inactivas. No se usa el orden físico de las filas.
+
+Para retirar una versión, cambiar `version_publicada` a falso en esa primera
+fila; para publicarla de nuevo, cambiarla a verdadero. `activa` sigue siendo
+independiente para cada regla. Solo se listan versiones publicadas con alguna
+regla activa. Al cargar las reglas se comprueba otra vez la publicación. Esto
+no revoca consultas o controles que ya estén cargados en otra sesión.
+Si cambia la primera fila por reordenamiento o eliminación de reglas, transferir
+sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
+los repositorios antiguos basados en esquema mantienen su tabla `versiones`.

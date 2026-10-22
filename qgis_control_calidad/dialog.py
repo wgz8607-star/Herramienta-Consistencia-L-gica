@@ -559,7 +559,7 @@ class ControlCalidadDialog(QDialog):
                          "source_component": row[0], "rule": row[1], "type": row[2], "sql": row[3], "description": row[4]}
                         for row in cursor.fetchall()
                     ]
-            self.selected_sql_version = version
+            self.selected_sql_version = dict(version, source=source)
             self.sql_version_label.setText(f"{version['codigo']} · {len(self.repository_rules)} sentencias")
             self.refresh_categories()
             if any(item["type"] == "CONTROL" and item["sql"] and item["sql"].strip() for item in self.repository_rules):
@@ -660,7 +660,7 @@ class ControlCalidadDialog(QDialog):
         if self.repository_rules:
             counts = defaultdict(int)
             for item in self.repository_rules:
-                if item["type"] == "CONTROL":
+                if item["type"] == "CONTROL" and item["sql"] and item["sql"].strip():
                     counts[item["component"]] += 1
             self.populate_category_cards(sorted(counts.items()))
             return
@@ -668,7 +668,7 @@ class ControlCalidadDialog(QDialog):
 
     def populate_category_cards(self, categories):
         categories = list(categories)
-        if self.model.currentText() in ("CICA", "XTF") and not any(name == SNC_CATEGORY for name, _ in categories):
+        if not self.selected_sql_version and self.model.currentText() in ("CICA", "XTF") and not any(name == SNC_CATEGORY for name, _ in categories):
             categories.append((SNC_CATEGORY, 0))
         for index, (category_name, count) in enumerate(categories):
             card = QPushButton()
@@ -677,7 +677,6 @@ class ControlCalidadDialog(QDialog):
             optional_snc = category_name == SNC_CATEGORY
             snc_selected = (
                 optional_snc and count > 0 and bool(self.selected_sql_version)
-                and self.environment.currentText() == SNC_ENVIRONMENT
             )
             card.setChecked(not optional_snc or snc_selected)
             card.setEnabled(not optional_snc or count > 0)
@@ -714,7 +713,7 @@ class ControlCalidadDialog(QDialog):
     def update_category_summary(self, *_):
         selected = [name for name, action in self.category_checks.items() if action.isChecked()]
         if self.repository_rules:
-            count = sum(1 for item in self.repository_rules if item["type"] == "CONTROL" and item["component"] in selected)
+            count = sum(1 for item in self.repository_rules if item["type"] == "CONTROL" and item["component"] in selected and item["sql"] and item["sql"].strip())
         else:
             count = sum(len(list((SQL_ROOT / MODELS[self.model.currentText()] / name).glob("*.sql"))) for name in selected)
         self.category_summary.setText(f"{len(selected)} grupos seleccionados · {count} reglas a ejecutar")

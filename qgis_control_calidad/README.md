@@ -54,3 +54,5 @@ Ejecutar controles permanece deshabilitado hasta cargar una versión del reposit
 ## Acceso a sentencias
 
 El repositorio usa la base `sentencias` y el usuario `admin_ant`. Al buscar una versión se solicita la contraseña con entrada enmascarada; se conserva únicamente en memoria durante la sesión del complemento. Cancelar bloquea la consulta y la ejecución. No se incluye una contraseña en el código ni en el ZIP.
+
+Los grupos disponibles y seleccionados se calculan a partir de los controles activos con SQL no vacío de la versión seleccionada. Los grupos ausentes de esa versión no se muestran. Al cambiar de versión se reemplaza la selección completa.

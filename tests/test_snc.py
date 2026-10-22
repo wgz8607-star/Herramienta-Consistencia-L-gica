@@ -50,6 +50,29 @@ class SncTests(unittest.TestCase):
         self.assertFalse(self.widget.run_button.isEnabled())
         self.assertIsNone(self.widget._repository_password)
 
+    def test_categories_follow_selected_version_instead_of_model(self):
+        self.select_model('CICA')
+        self.widget.selected_sql_version = {'codigo': 'v1'}
+        self.widget.repository_rules = [
+            {'type': 'CONTROL', 'component': 'Administrativas', 'sql': 'SELECT 1'},
+            {'type': 'CONTROL', 'component': 'Juridicas', 'sql': 'SELECT 2'},
+            {'type': 'CONTROL', 'component': 'Fisicas', 'sql': '  '},
+            {'type': 'REPORTE_GENERAL', 'component': 'Reportes', 'sql': 'SELECT 3'},
+        ]
+        self.widget.refresh_categories()
+        self.assertEqual(set(self.widget.category_checks), {'Administrativas', 'Juridicas'})
+        self.assertTrue(all(c.isChecked() for c in self.widget.category_checks.values()))
+        self.widget.selected_sql_version = {'codigo': 'v2'}
+        self.widget.repository_rules = [{'type': 'CONTROL', 'component': module.SNC_CATEGORY, 'sql': 'SELECT 1'}]
+        self.widget.refresh_categories()
+        self.assertEqual(list(self.widget.category_checks), [module.SNC_CATEGORY])
+        self.assertTrue(self.widget.category_checks[module.SNC_CATEGORY].isChecked())
+        self.widget.selected_sql_version = {'codigo': 'v3'}
+        self.widget.repository_rules = []
+        self.widget.refresh_categories()
+        self.assertFalse(self.widget.category_checks)
+        self.assertFalse(self.widget.run_button.isEnabled())
+
     def test_initial_state_and_direct_execution_are_blocked(self):
         self.assertFalse(self.widget.run_button.isEnabled())
         self.assertFalse(self.widget.category_checks)

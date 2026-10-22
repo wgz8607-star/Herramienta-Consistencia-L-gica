@@ -11,7 +11,7 @@ from qgis.PyQt.QtCore import QObject, QSize, QThread, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
-    QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
     QMessageBox, QPushButton, QProgressBar, QScrollArea, QSplitter,
     QHeaderView, QMenu, QStackedWidget, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
@@ -53,7 +53,7 @@ REPOSITORY_CONNECTION = {
     "host": "172.19.3.225",
     "port": "5432",
     "dbname": "sentencias",
-    "user": "consulta_sentencias",
+    "user": "admin_ant",
     "password": "",
 }
 
@@ -239,6 +239,7 @@ class ControlCalidadDialog(QDialog):
         self.worker = None
         self.category_checks = {}
         self.controls_running = False
+        self._repository_password = None
         self.references_ready = False
         self._build()
         self.refresh_categories()
@@ -454,7 +455,19 @@ class ControlCalidadDialog(QDialog):
         self.open_sql_version_dialog()
 
     def repository_connection_params(self):
-        return dict(REPOSITORY_CONNECTION)
+        params = dict(REPOSITORY_CONNECTION)
+        if self._repository_password is None:
+            password, accepted = QInputDialog.getText(
+                self, "Acceso al repositorio de sentencias",
+                "Contraseña del repositorio de sentencias (solo para esta sesión):",
+                QLineEdit.Password,
+            )
+            if not accepted or not password:
+                self.status.setText("Ejecución bloqueada: falta autenticar el acceso al repositorio de sentencias.")
+                return None
+            self._repository_password = password
+        params["password"] = self._repository_password
+        return params
 
     def repository_source(self, params):
         if self.environment.currentText() == SNC_ENVIRONMENT:
@@ -517,6 +530,8 @@ class ControlCalidadDialog(QDialog):
                 return
             source = self.repository_source(params)
         except Exception as error:
+            if getattr(error, "pgcode", None) in ("28P01", "28000"):
+                self._repository_password = None
             QMessageBox.information(self, "No fue posible conectar al repositorio", str(error))
             return
         dialog = SqlVersionDialog(self, params, source)

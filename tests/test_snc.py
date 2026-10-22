@@ -17,6 +17,9 @@ app.initQgis()
 
 class SncTests(unittest.TestCase):
     def setUp(self):
+        prompt = patch.object(module.QInputDialog, 'getText', return_value=('test-session-password', True))
+        prompt.start()
+        self.addCleanup(prompt.stop)
         self.widget = module.ControlCalidadDialog()
         self.addCleanup(self.widget.close)
 
@@ -29,6 +32,23 @@ class SncTests(unittest.TestCase):
         cursor = MagicMock()
         connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = cursor
         return cursor
+
+    def test_repository_password_is_masked_and_session_only(self):
+        with patch.object(module.QInputDialog, 'getText', return_value=('test-session-password', True)) as prompt:
+            first = self.widget.repository_connection_params()
+            second = self.widget.repository_connection_params()
+        self.assertEqual(first['user'], 'admin_ant')
+        self.assertEqual(first['password'], second['password'])
+        self.assertEqual(module.REPOSITORY_CONNECTION['password'], '')
+        prompt.assert_called_once()
+        self.assertEqual(prompt.call_args.args[3], module.QLineEdit.Password)
+
+    def test_cancel_password_blocks_database_access(self):
+        with patch.object(module.QInputDialog, 'getText', return_value=('', False)), patch.object(module.psycopg2, 'connect') as connect:
+            self.widget.open_sql_version_dialog()
+        connect.assert_not_called()
+        self.assertFalse(self.widget.run_button.isEnabled())
+        self.assertIsNone(self.widget._repository_password)
 
     def test_initial_state_and_direct_execution_are_blocked(self):
         self.assertFalse(self.widget.run_button.isEnabled())

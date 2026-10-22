@@ -49,3 +49,7 @@ de archivos XTF ni reglas nuevas.
 ## Disponibilidad de ejecución
 
 Ejecutar controles permanece deshabilitado hasta cargar una versión del repositorio con controles activos y seleccionar un grupo. Un fallo o cancelación al recargar la versión elimina la selección anterior. No se usan las reglas SQL locales como alternativa ante fallos de conexión.
+
+## Acceso a sentencias
+
+El repositorio usa la base `sentencias` y el usuario `admin_ant`. Al buscar una versión se solicita la contraseña con entrada enmascarada; se conserva únicamente en memoria durante la sesión del complemento. Cancelar bloquea la consulta y la ejecución. No se incluye una contraseña en el código ni en el ZIP.

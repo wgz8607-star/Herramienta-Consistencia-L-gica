@@ -33,7 +33,10 @@ except ImportError:
 PLUGIN_DIR = Path(__file__).resolve().parent
 SQL_ROOT = PLUGIN_DIR / "resources" / "sql"
 DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
-MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db"}
+MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db", "XTF": "rules_xtf"}
+SNC_CATEGORY = "Cargue SNC"
+SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
+
 SQL_REPOSITORIES = {
     "Modelo Interno de Levantamiento 1.0": ("sql_modelo_interno", "sql_modelo_interno_prueba"),
     "CICA": ("sql_cica", "sql_cica_prueba"),
@@ -254,7 +257,7 @@ class ControlCalidadDialog(QDialog):
         heading = QLabel("Validador Consistencia Lógica Alfanumérica")
         heading.setStyleSheet("font-size: 22px; font-weight: 700; color: #0468A3;")
         layout.addWidget(heading)
-        subtitle = QLabel("Modelos Interno de Levantamiento 1.0 y CICA · Reglas gráficas y alfanuméricas")
+        subtitle = QLabel("Modelo Interno de Levantamiento 1.0, CICA y XTF · Validaciones alfanuméricas")
         subtitle.setStyleSheet("color: #52666a;")
         layout.addWidget(subtitle)
 
@@ -280,10 +283,10 @@ class ControlCalidadDialog(QDialog):
         qgis_layout = QFormLayout(qgis_page)
         qgis_layout.setContentsMargins(0, 0, 0, 0)
         qgis_row = QHBoxLayout()
-        qgis_row.addWidget(self.qgis_connection, 1)
         refresh_qgis = QPushButton("Actualizar")
         refresh_qgis.clicked.connect(self.load_qgis_connections)
         qgis_row.addWidget(refresh_qgis)
+        qgis_row.addWidget(self.qgis_connection, 1)
         qgis_layout.addRow("Conexión de QGIS", qgis_row)
         self.qgis_description = QLabel("Seleccione una conexión guardada en QGIS.")
         self.qgis_description.setWordWrap(True)
@@ -308,6 +311,11 @@ class ControlCalidadDialog(QDialog):
         self.schema = QComboBox()
         self.schema.setEditable(False)
         form.addRow("Modelo", self.model)
+        self.environment = QComboBox()
+        self.environment.addItems(["Validaciones del modelo", SNC_ENVIRONMENT])
+        self.environment_label = QLabel("Ambiente")
+        self.environment.currentTextChanged.connect(self.model_changed)
+        form.addRow(self.environment_label, self.environment)
         self.sql_version_label = QLabel("Seleccione una versión de SQL")
         choose_sql_version = QPushButton("Buscar versión de sentencias…")
         choose_sql_version.clicked.connect(self.open_sql_version_dialog)
@@ -331,7 +339,7 @@ class ControlCalidadDialog(QDialog):
         self.refresh_references.setEnabled(False)
         form.addRow("Forma de conexión", self.connection_mode)
         form.addRow("", self.connection_stack)
-        test = QPushButton("Probar conexión")
+        test = QPushButton("Listar Esquemas")
         test.clicked.connect(self.test_connection)
         form.addRow("", test)
         form.addRow("Esquema a validar", self.schema)
@@ -415,6 +423,13 @@ class ControlCalidadDialog(QDialog):
         self.update_ingestion_button()
 
     def update_ingestion_button(self, *_):
+        supports_snc = self.model.currentText() in ("CICA", "XTF")
+        self.environment.setVisible(supports_snc)
+        self.environment_label.setVisible(supports_snc)
+        if not supports_snc:
+            self.environment.blockSignals(True)
+            self.environment.setCurrentIndex(0)
+            self.environment.blockSignals(False)
         visible = self.model.currentText() == "CICA"
         self.ingestion_label.setVisible(visible)
         self.ingestion_button.setVisible(visible)
@@ -425,12 +440,17 @@ class ControlCalidadDialog(QDialog):
         if hasattr(self, "sql_version_label"):
             self.sql_version_label.setText("Seleccione una versión de SQL")
         self.refresh_categories()
+        if self.model.currentText() == "XTF" or self.environment.currentText() == SNC_ENVIRONMENT:
+            self.status.setText("Pendiente incorporar las reglas SQL de " + self.model.currentText() + " para el ambiente seleccionado.")
+            return
         self.open_sql_version_dialog()
 
     def repository_connection_params(self):
         return dict(REPOSITORY_CONNECTION)
 
     def repository_source(self, params):
+        if self.model.currentText() == "XTF" or self.environment.currentText() == SNC_ENVIRONMENT:
+            raise ValueError("Falta configurar el repositorio de sentencias para " + self.model.currentText() + " · " + self.environment.currentText() + ". No se reutilizarán reglas de otro ambiente.")
         with psycopg2.connect(**params, connect_timeout=8) as connection:
             with connection.cursor() as cursor:
                 tables = []
@@ -524,7 +544,7 @@ class ControlCalidadDialog(QDialog):
     def change_connection_mode(self, index):
         self.connection_stack.setCurrentIndex(index)
         self.schema.clear()
-        self.status.setText("Pruebe la conexión para cargar los esquemas disponibles.")
+        self.status.setText("Pulse Listar Esquemas para cargar los esquemas disponibles.")
 
     def load_qgis_connections(self):
         settings = QgsSettings()
@@ -588,18 +608,25 @@ class ControlCalidadDialog(QDialog):
             self.populate_category_cards(sorted(counts.items()))
             return
         directory = SQL_ROOT / MODELS[self.model.currentText()]
-        if not directory.exists():
-            self.category_summary.setText("No se encontraron reglas SQL para este modelo.")
+        if self.environment.currentText() == SNC_ENVIRONMENT or not directory.exists():
+            self.populate_category_cards([])
             return
         categories = sorted(p for p in directory.iterdir() if p.is_dir() and p.name.lower() != "reportes")
         self.populate_category_cards([(category.name, len(list(category.glob("*.sql")))) for category in categories])
 
     def populate_category_cards(self, categories):
+        categories = list(categories)
+        if self.model.currentText() in ("CICA", "XTF") and not any(name == SNC_CATEGORY for name, _ in categories):
+            categories.append((SNC_CATEGORY, 0))
         for index, (category_name, count) in enumerate(categories):
             card = QPushButton()
             card.setObjectName("categoryCard")
             card.setCheckable(True)
-            card.setChecked(True)
+            optional_snc = category_name == SNC_CATEGORY
+            card.setChecked(not optional_snc)
+            card.setEnabled(not optional_snc or count > 0)
+            if optional_snc and not count:
+                card.setToolTip("Pendiente incorporar las reglas SQL de cargue a SNC para este modelo y ambiente.")
             card.setIconSize(QSize(14, 14))
             card.setLayoutDirection(Qt.RightToLeft)
             card.setMinimumHeight(30)
@@ -609,7 +636,7 @@ class ControlCalidadDialog(QDialog):
                 "QPushButton#categoryCard:hover { background: #E2F7F8; color: #0468A3; border: 2px solid #3FA4F5; } "
                 "QPushButton#categoryCard:checked { background: #0468A3; color: white; border: 2px solid #00C7CB; }"
             )
-            self.update_category_card(card, category_name, count, True)
+            self.update_category_card(card, category_name, count, not optional_snc)
             card.toggled.connect(lambda checked, button=card, name=category_name, rules=count: self.update_category_card(button, name, rules, checked))
             card.toggled.connect(self.update_category_summary)
             self.category_checks[category_name] = card
@@ -620,11 +647,12 @@ class ControlCalidadDialog(QDialog):
     def update_category_card(card, name, rules, checked):
         icon_name = "selected.svg" if checked else "unselected.svg"
         card.setIcon(QIcon(str(PLUGIN_DIR / "resources" / "icons" / icon_name)))
-        card.setText(f"{name} · {rules} reglas")
+        card.setText("+ Cargue SNC" if name == SNC_CATEGORY else f"{name} · {rules} reglas")
 
     def select_all_categories(self):
-        for action in self.category_checks.values():
-            action.setChecked(True)
+        for name, action in self.category_checks.items():
+            if name != SNC_CATEGORY and action.isEnabled():
+                action.setChecked(True)
         self.update_category_summary()
 
     def update_category_summary(self, *_):
@@ -737,7 +765,7 @@ class ControlCalidadDialog(QDialog):
             return
         schema = self.schema.currentText().strip()
         if not schema:
-            QMessageBox.warning(self, "Seleccione un esquema", "Pruebe la conexión y seleccione el esquema que desea validar.")
+            QMessageBox.warning(self, "Seleccione un esquema", "Pulse Listar Esquemas y seleccione el esquema que desea validar.")
             return
         try:
             params = self.connection_params()

@@ -7,7 +7,7 @@ Plugin para QGIS 3.28 o superior. Ejecuta las reglas SQL para **Modelo Interno d
 - **Conexión guardada en QGIS:** reutiliza una conexión PostgreSQL registrada en el perfil actual de QGIS. Soporta las credenciales guardadas o configuradas mediante el gestor de autenticación de QGIS.
 - **Conexión manual a PostgreSQL:** permite ingresar servidor, puerto, base de datos, usuario y contraseña para la sesión actual.
 
-Tras usar **Probar conexión**, el plugin lista los esquemas disponibles y permite seleccionar el que se validará.
+Tras usar **Listar Esquemas**, el plugin lista los esquemas disponibles y permite seleccionar el que se validará.
 
 ## Ingesta CICA
 
@@ -30,3 +30,14 @@ Las reglas SQL se incluyen en `resources/sql`. El complemento no guarda la contr
 ## Base de esta distribución
 
 Versión 1.0.2 basada en el archivo `control_calidad_catastral_qgis.zip` (versión original 0.3.3). Se conserva la lógica y las reglas SQL de esa base; se actualiza la identificación del complemento.
+
+## Ambiente de cargue a SNC
+
+CICA y XTF muestran el ambiente **Validaciones para cargue a SNC** y el control
+opcional **+ Cargue SNC**. Este control comienza sin seleccionar y **Seleccionar
+todos** no lo activa. Mientras no estén conectadas las reglas correspondientes,
+permanece inhabilitado. Las reglas SNC se incorporarán desde dos tablas de
+`public`, una por modelo; sus nombres y estructura están pendientes de confirmar.
+El ambiente SNC no reutiliza las reglas de validación ordinarias de CICA ni de
+otros modelos. La opción XTF prepara la interfaz; no incorpora todavía lectura
+de archivos XTF ni reglas nuevas.

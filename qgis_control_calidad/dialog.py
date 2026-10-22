@@ -33,12 +33,12 @@ except ImportError:
 PLUGIN_DIR = Path(__file__).resolve().parent
 SQL_ROOT = PLUGIN_DIR / "resources" / "sql"
 DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
-MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db", "XTF": "rules_xtf"}
+MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db"}
 SNC_CATEGORY = "Cargue SNC"
 SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
 SNC_REPOSITORY_TABLES = {
     "CICA": "reglas_cargue_snc_cica",
-    "XTF": "reglas_cargue_snc_xtf",
+    "Modelo Interno de Levantamiento 1.0": "reglas_cargue_snc_xtf",
 }
 
 SQL_REPOSITORIES = {
@@ -265,7 +265,7 @@ class ControlCalidadDialog(QDialog):
         heading = QLabel("Validador Consistencia Lógica Alfanumérica")
         heading.setStyleSheet("font-size: 22px; font-weight: 700; color: #0468A3;")
         layout.addWidget(heading)
-        subtitle = QLabel("Modelo Interno de Levantamiento 1.0, CICA y XTF · Validaciones alfanuméricas")
+        subtitle = QLabel("Modelo Interno de Levantamiento 1.0 y CICA · Validaciones alfanuméricas")
         subtitle.setStyleSheet("color: #52666a;")
         layout.addWidget(subtitle)
 
@@ -432,7 +432,7 @@ class ControlCalidadDialog(QDialog):
         self.update_ingestion_button()
 
     def update_ingestion_button(self, *_):
-        supports_snc = self.model.currentText() in ("CICA", "XTF")
+        supports_snc = self.model.currentText() in SNC_REPOSITORY_TABLES
         self.environment.setVisible(supports_snc)
         self.environment_label.setVisible(supports_snc)
         if not supports_snc:
@@ -449,9 +449,6 @@ class ControlCalidadDialog(QDialog):
         if hasattr(self, "sql_version_label"):
             self.sql_version_label.setText("Seleccione una versión de SQL")
         self.refresh_categories()
-        if self.model.currentText() == "XTF" and self.environment.currentText() != SNC_ENVIRONMENT:
-            self.status.setText("Seleccione el ambiente Validaciones para cargue a SNC para consultar las reglas XTF.")
-            return
         self.open_sql_version_dialog()
 
     def repository_connection_params(self):
@@ -481,8 +478,6 @@ class ControlCalidadDialog(QDialog):
                     if not cursor.fetchone()[0]:
                         raise ValueError(f"Se requiere permiso SELECT sobre public.{table}.")
             return {"kind": "tables", "schema": "public", "tables": [table], "label": f"public.{table}", "snc": True}
-        if self.model.currentText() == "XTF":
-            raise ValueError("Seleccione el ambiente Validaciones para cargue a SNC para consultar las reglas XTF.")
         with psycopg2.connect(**params, connect_timeout=8) as connection:
             with connection.cursor() as cursor:
                 tables = []
@@ -668,7 +663,7 @@ class ControlCalidadDialog(QDialog):
 
     def populate_category_cards(self, categories):
         categories = list(categories)
-        if not self.selected_sql_version and self.model.currentText() in ("CICA", "XTF") and not any(name == SNC_CATEGORY for name, _ in categories):
+        if not self.selected_sql_version and self.model.currentText() in SNC_REPOSITORY_TABLES and not any(name == SNC_CATEGORY for name, _ in categories):
             categories.append((SNC_CATEGORY, 0))
         for index, (category_name, count) in enumerate(categories):
             card = QPushButton()

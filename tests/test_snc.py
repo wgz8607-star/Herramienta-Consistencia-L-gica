@@ -73,9 +73,25 @@ class SncTests(unittest.TestCase):
         self.assertFalse(self.widget.category_checks)
         self.assertFalse(self.widget.run_button.isEnabled())
 
+    @patch.object(module.psycopg2, 'connect')
+    def test_unified_model_keeps_regular_and_snc_sources(self, connect):
+        self.assertEqual([self.widget.model.itemText(i) for i in range(self.widget.model.count())],
+                         ['Modelo Interno de Levantamiento 1.0', 'CICA'])
+        cursor = self.database(connect)
+        cursor.fetchone.return_value = ('table', True)
+        source = self.widget.repository_source({})
+        self.assertEqual(source['tables'], list(module.SQL_REPOSITORY_TABLES['Modelo Interno de Levantamiento 1.0']))
+        self.assertFalse(source.get('snc', False))
+        self.select_model('Modelo Interno de Levantamiento 1.0')
+        cursor.fetchone.side_effect = [('table',), (True,)]
+        source = self.widget.repository_source({})
+        self.assertEqual(source['tables'], ['reglas_cargue_snc_xtf'])
+        self.assertTrue(source['snc'])
+
     def test_initial_state_and_direct_execution_are_blocked(self):
         self.assertFalse(self.widget.run_button.isEnabled())
-        self.assertFalse(self.widget.category_checks)
+        self.assertTrue(all(not card.isEnabled() and not card.isChecked()
+                            for card in self.widget.category_checks.values()))
         with patch.object(module.QMessageBox, 'warning'), patch.object(module.psycopg2, 'connect') as connect:
             self.widget.run_rules()
         connect.assert_not_called()
@@ -140,7 +156,7 @@ class SncTests(unittest.TestCase):
 
     @patch.object(module.psycopg2, 'connect')
     def test_loaded_snc_version_selects_only_cargue(self, connect):
-        self.select_model('XTF')
+        self.select_model('Modelo Interno de Levantamiento 1.0')
         source = {'kind': 'tables', 'tables': ['reglas_cargue_snc_xtf'], 'snc': True}
         cursor = self.database(connect)
         cursor.fetchall.return_value = [('Juridicas', 'snc_1', 'CONTROL', 'SELECT 1', 'Control SNC')]
@@ -164,7 +180,7 @@ class SncTests(unittest.TestCase):
         self.assertEqual(params, ('v1',))
 
     def test_snc_selection_requires_loaded_rules_and_resets_on_model_change(self):
-        for model in ('CICA', 'XTF'):
+        for model in ('CICA', 'Modelo Interno de Levantamiento 1.0'):
             self.select_model(model)
             card = self.widget.category_checks[module.SNC_CATEGORY]
             self.assertFalse(card.isEnabled())

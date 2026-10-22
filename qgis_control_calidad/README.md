@@ -33,9 +33,9 @@ Versión 1.0.2 basada en el archivo `control_calidad_catastral_qgis.zip` (versi�
 
 ## Ambiente de cargue a SNC
 
-CICA y XTF muestran el ambiente **Validaciones para cargue a SNC** y el control
+CICA y Modelo Interno de Levantamiento 1.0 muestran el ambiente **Validaciones para cargue a SNC** y el control
 opcional **+ Cargue SNC**. Este control permanece desactivado hasta cargar una versión con reglas SNC.
-Al seleccionar esa versión en el ambiente SNC de CICA o XTF, solo se muestra y
+Al seleccionar esa versión en el ambiente SNC de CICA o Modelo Interno de Levantamiento 1.0, solo se muestra y
 selecciona **+ Cargue SNC**. Mientras no estén conectadas las reglas correspondientes,
 permanece inhabilitado. Las reglas SNC se incorporarán desde dos tablas de
 `public`, una por modelo; se usan `public.reglas_cargue_snc_cica` y `public.reglas_cargue_snc_xtf`,
@@ -44,8 +44,10 @@ con las columnas `version`, `componente`, `codigo_regla`, `tipo`,
 `fecha_actualizacion` para estas tablas. Los controles SNC de la versión
 seleccionada se agrupan bajo **+ Cargue SNC**.
 El ambiente SNC no reutiliza las reglas de validación ordinarias de CICA ni de
-otros modelos. La opción XTF prepara la interfaz; no incorpora todavía lectura
-de archivos XTF ni reglas nuevas.
+otros modelos. XTF corresponde al Modelo Interno de Levantamiento 1.0 y no
+aparece como modelo separado. El ambiente SNC de este modelo usa
+`public.reglas_cargue_snc_xtf`; sus validaciones habituales mantienen sus
+tablas originales. No se incorpora lectura de archivos XTF.
 
 ## Disponibilidad de ejecución
 

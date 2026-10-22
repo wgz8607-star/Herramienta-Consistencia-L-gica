@@ -238,6 +238,7 @@ class ControlCalidadDialog(QDialog):
         self.thread = None
         self.worker = None
         self.category_checks = {}
+        self.controls_running = False
         self.references_ready = False
         self._build()
         self.refresh_categories()
@@ -420,6 +421,7 @@ class ControlCalidadDialog(QDialog):
         self.export_button = QPushButton("Generar reporte detallado")
         self.export_button.clicked.connect(self.export_excel)
         self.run_button = QPushButton("Ejecutar controles")
+        self.run_button.setEnabled(False)
         self.run_button.setStyleSheet("background: #0468A3; color: white; font-weight: 700; padding: 8px 14px;")
         self.run_button.clicked.connect(self.run_rules)
         controls.addWidget(self.export_button)
@@ -487,7 +489,25 @@ class ControlCalidadDialog(QDialog):
                         return {"kind": "schema", "schema": schema, "label": f"{schema}.reglas"}
         raise ValueError("No se encontró el repositorio centralizado de SQL para el modelo seleccionado.")
 
+    def clear_repository_rules(self):
+        self.selected_sql_version = None
+        self.repository_rules = []
+        self.sql_version_label.setText("Seleccione una versión de SQL")
+        self.refresh_categories()
+        self.status.setText("Ejecución bloqueada: seleccione una versión con controles activos del repositorio SQL.")
+
+    def update_run_availability(self):
+        selected = {name for name, card in self.category_checks.items() if card.isChecked()}
+        ready = bool(self.selected_sql_version) and any(
+            item["type"] == "CONTROL" and item["component"] in selected
+            and item["sql"] and item["sql"].strip()
+            for item in self.repository_rules
+        )
+        self.run_button.setEnabled(ready and not self.controls_running)
+        self.run_button.setToolTip("" if ready else "Cargue una versión del repositorio con controles activos y seleccione al menos un grupo.")
+
     def open_sql_version_dialog(self):
+        self.clear_repository_rules()
         if psycopg2 is None:
             QMessageBox.warning(self, "Dependencia faltante", "No se puede consultar el repositorio SQL sin psycopg2.")
             return
@@ -527,8 +547,12 @@ class ControlCalidadDialog(QDialog):
             self.selected_sql_version = version
             self.sql_version_label.setText(f"{version['codigo']} · {len(self.repository_rules)} sentencias")
             self.refresh_categories()
-            self.status.setText(f"Versión SQL seleccionada: {version['codigo']}.")
+            if any(item["type"] == "CONTROL" and item["sql"] and item["sql"].strip() for item in self.repository_rules):
+                self.status.setText(f"Versión SQL seleccionada: {version['codigo']}.")
+            else:
+                self.status.setText("Ejecución bloqueada: la versión seleccionada no contiene controles activos.")
         except Exception as error:
+            self.clear_repository_rules()
             QMessageBox.warning(self, "No fue posible cargar reglas", str(error))
 
     def open_ingestion(self):
@@ -625,12 +649,7 @@ class ControlCalidadDialog(QDialog):
                     counts[item["component"]] += 1
             self.populate_category_cards(sorted(counts.items()))
             return
-        directory = SQL_ROOT / MODELS[self.model.currentText()]
-        if self.environment.currentText() == SNC_ENVIRONMENT or not directory.exists():
-            self.populate_category_cards([])
-            return
-        categories = sorted(p for p in directory.iterdir() if p.is_dir() and p.name.lower() != "reportes")
-        self.populate_category_cards([(category.name, len(list(category.glob("*.sql")))) for category in categories])
+        self.populate_category_cards([])
 
     def populate_category_cards(self, categories):
         categories = list(categories)
@@ -680,6 +699,7 @@ class ControlCalidadDialog(QDialog):
         else:
             count = sum(len(list((SQL_ROOT / MODELS[self.model.currentText()] / name).glob("*.sql"))) for name in selected)
         self.category_summary.setText(f"{len(selected)} grupos seleccionados · {count} reglas a ejecutar")
+        self.update_run_availability()
 
     def connection_params(self):
         if self.connection_mode.currentIndex() == 0:
@@ -754,6 +774,10 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.critical(self, "No fue posible conectar", str(error))
 
     def run_rules(self):
+        self.update_run_availability()
+        if not self.run_button.isEnabled():
+            QMessageBox.warning(self, "Controles no disponibles", "Cargue una versión del repositorio SQL con controles activos y seleccione los grupos a ejecutar.")
+            return
         if psycopg2 is None:
             QMessageBox.critical(self, "Dependencia faltante", "El QGIS instalado no incluye psycopg2.")
             return
@@ -761,23 +785,15 @@ class ControlCalidadDialog(QDialog):
         if not selected:
             QMessageBox.warning(self, "Seleccione controles", "Seleccione al menos una categoría de reglas.")
             return
-        base = SQL_ROOT / MODELS[self.model.currentText()]
-        if self.repository_rules:
-            rules = [
-                (item["component"], item["rule"], item["sql"], item.get("description", ""))
-                for item in self.repository_rules
-                if item["type"] == "CONTROL" and item["component"] in selected
-            ]
-            general_report_path = next(
-                (item["sql"] for item in self.repository_rules if item["type"] == "REPORTE_GENERAL"), None
-            )
-        else:
-            rules = [
-                (category, rule.stem, rule.read_text(encoding="utf-8-sig"), "")
-                for category in selected for rule in sorted((base / category).glob("*.sql"))
-            ]
-            report_file = base / "Reportes" / "reporte_general.sql"
-            general_report_path = report_file.read_text(encoding="utf-8-sig") if report_file.exists() else None
+        rules = [
+            (item["component"], item["rule"], item["sql"], item.get("description", ""))
+            for item in self.repository_rules
+            if item["type"] == "CONTROL" and item["component"] in selected
+            and item["sql"] and item["sql"].strip()
+        ]
+        general_report_path = next(
+            (item["sql"] for item in self.repository_rules if item["type"] == "REPORTE_GENERAL"), None
+        )
         if not rules:
             QMessageBox.critical(self, "Reglas no encontradas", "No hay reglas SQL en la selección actual.")
             return
@@ -800,6 +816,7 @@ class ControlCalidadDialog(QDialog):
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.status.setText(f"Ejecutando {len(rules)} reglas y reporte general…")
+        self.controls_running = True
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
         self.worker = RuleWorker(params, schema, "", self.published_r1.currentText(), rules, general_report_path)
@@ -828,7 +845,8 @@ class ControlCalidadDialog(QDialog):
         self.status.setText(f"Ejecutando regla {current} de {total}…")
 
     def finished(self):
-        self.run_button.setEnabled(True)
+        self.controls_running = False
+        self.update_run_availability()
         errors = sum(r.status == "Error" for r in self.results)
         findings = sum(r.findings for r in self.results if isinstance(r.findings, int))
         grouped = {}

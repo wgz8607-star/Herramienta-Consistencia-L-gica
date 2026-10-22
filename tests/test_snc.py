@@ -30,6 +30,52 @@ class SncTests(unittest.TestCase):
         connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = cursor
         return cursor
 
+    def test_initial_state_and_direct_execution_are_blocked(self):
+        self.assertFalse(self.widget.run_button.isEnabled())
+        self.assertFalse(self.widget.category_checks)
+        with patch.object(module.QMessageBox, 'warning'), patch.object(module.psycopg2, 'connect') as connect:
+            self.widget.run_rules()
+        connect.assert_not_called()
+
+    def test_failed_refresh_clears_previous_rules(self):
+        self.widget.selected_sql_version = {'codigo': 'v1'}
+        self.widget.repository_rules = [{'type': 'CONTROL', 'component': 'Fisicas', 'sql': 'SELECT 1'}]
+        self.widget.refresh_categories()
+        self.assertTrue(self.widget.run_button.isEnabled())
+        with patch.object(self.widget, 'repository_source', side_effect=RuntimeError('Connection failed')), patch.object(module.QMessageBox, 'information'):
+            self.widget.open_sql_version_dialog()
+        self.assertFalse(self.widget.run_button.isEnabled())
+        self.assertEqual(self.widget.repository_rules, [])
+        self.assertIsNone(self.widget.selected_sql_version)
+
+    def test_selection_and_running_state_control_execution(self):
+        self.widget.selected_sql_version = {'codigo': 'v1'}
+        self.widget.repository_rules = [{'type': 'CONTROL', 'component': 'Fisicas', 'sql': 'SELECT 1'}]
+        self.widget.refresh_categories()
+        card = self.widget.category_checks['Fisicas']
+        self.assertTrue(self.widget.run_button.isEnabled())
+        card.setChecked(False)
+        self.assertFalse(self.widget.run_button.isEnabled())
+        card.setChecked(True)
+        self.assertTrue(self.widget.run_button.isEnabled())
+        self.widget.controls_running = True
+        self.widget.update_run_availability()
+        self.assertFalse(self.widget.run_button.isEnabled())
+        self.widget.clear_repository_rules()
+        self.widget.finished()
+        self.assertFalse(self.widget.run_button.isEnabled())
+
+    @patch.object(module.psycopg2, 'connect')
+    def test_empty_version_cannot_enable_execution(self, connect):
+        cursor = self.database(connect)
+        cursor.fetchall.return_value = []
+        source = {'kind': 'tables', 'tables': ['reglas_cargue_snc_cica'], 'snc': True}
+        with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'SqlVersionDialog') as chooser:
+            chooser.return_value.exec.return_value = QDialog.Accepted
+            chooser.return_value.selected_version = {'id': {'table': source['tables'][0], 'version': 'v1'}, 'codigo': 'v1'}
+            self.widget.open_sql_version_dialog()
+        self.assertFalse(self.widget.run_button.isEnabled())
+
     @patch.object(module.psycopg2, 'connect')
     def test_each_model_uses_only_its_snc_table(self, connect):
         cursor = self.database(connect)

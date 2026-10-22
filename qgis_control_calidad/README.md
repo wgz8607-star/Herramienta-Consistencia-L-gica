@@ -45,3 +45,7 @@ seleccionada se agrupan bajo **+ Cargue SNC** y deben activarse expresamente.
 El ambiente SNC no reutiliza las reglas de validación ordinarias de CICA ni de
 otros modelos. La opción XTF prepara la interfaz; no incorpora todavía lectura
 de archivos XTF ni reglas nuevas.
+
+## Disponibilidad de ejecución
+
+Ejecutar controles permanece deshabilitado hasta cargar una versión del repositorio con controles activos y seleccionar un grupo. Un fallo o cancelación al recargar la versión elimina la selección anterior. No se usan las reglas SQL locales como alternativa ante fallos de conexión.

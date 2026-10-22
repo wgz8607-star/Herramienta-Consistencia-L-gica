@@ -1,0 +1,15 @@
+[general]
+name=Prevalidador MAILC v1.0 - Componente gráfico
+description=Prevalida el componente gráfico del Modelo Interno de Levantamiento Catastral MAILC v1.0 sobre PostgreSQL/PostGIS.
+version=1.0
+qgisMinimumVersion=3.28
+author=Equipo Calidad SP
+email=
+about=Complemento para seleccionar, ejecutar, visualizar y exportar controles del componente gráfico MAILC v1.0.
+category=Validación Gráfica
+icon=icon.svg
+tags=MAILC,Componente Gráfico
+hasProcessingProvider=no
+
+[experimental]
+experimental=False

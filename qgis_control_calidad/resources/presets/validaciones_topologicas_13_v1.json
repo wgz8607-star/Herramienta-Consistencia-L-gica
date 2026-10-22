@@ -1,0 +1,43 @@
+{
+  "id": "validaciones_topologicas_13_v1",
+  "nombre": "Validaciones topológicas iniciales (13)",
+  "version": "1.0",
+  "estado": "archivado_para_reutilizacion",
+  "activo": false,
+  "descripcion": "Conjunto inicial conservado para reincorporarlo posteriormente como perfil o módulo opcional.",
+  "secciones": [
+    {
+      "nombre": "Huecos",
+      "validaciones": [
+        {"codigo": "01", "id": "huecos_terreno_formal", "descripcion": "Huecos internos de LC_Terreno formal."},
+        {"codigo": "02", "id": "huecos_terreno_informal", "descripcion": "Huecos internos de LC_Terreno informal."}
+      ]
+    },
+    {
+      "nombre": "Superposición",
+      "validaciones": [
+        {"codigo": "17", "id": "superposicion_terreno_formal", "descripcion": "Superposición entre terrenos formales."},
+        {"codigo": "18", "id": "superposicion_terreno_informal", "descripcion": "Superposición entre terrenos informales."},
+        {"codigo": "69", "id": "atributos_construccion_terreno_no_ph", "descripcion": "NPN de construcción y terreno formal no PH."},
+        {"codigo": "70", "id": "atributos_construccion_terreno_ph", "descripcion": "Primeros 22 dígitos del NPN de construcción y terreno PH."},
+        {"codigo": "71", "id": "atributos_construccion_terreno_informal", "descripcion": "NPN de construcción y terreno informal."}
+      ]
+    },
+    {
+      "nombre": "Contenencia",
+      "validaciones": [
+        {"codigo": "47", "id": "construccion_formal_fuera", "descripcion": "Construcción formal fuera de su terreno formal."},
+        {"codigo": "48", "id": "construccion_informal_fuera", "descripcion": "Construcción informal fuera de su terreno informal."}
+      ]
+    },
+    {
+      "nombre": "Cobertura mutua",
+      "validaciones": [
+        {"codigo": "54", "id": "cobertura_terreno_manzana", "descripcion": "Cobertura mutua entre terreno urbano y manzana."},
+        {"codigo": "55", "id": "cobertura_terreno_vereda", "descripcion": "Cobertura mutua entre terreno rural y vereda."},
+        {"codigo": "58", "id": "cobertura_zhg_zhf_rural", "descripcion": "Cobertura mutua entre zonas geoeconómicas y físicas rurales."},
+        {"codigo": "59", "id": "cobertura_zhg_zhf_urbana", "descripcion": "Cobertura mutua entre zonas geoeconómicas y físicas urbanas."}
+      ]
+    }
+  ]
+}

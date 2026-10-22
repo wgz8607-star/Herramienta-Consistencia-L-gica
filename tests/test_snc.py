@@ -116,7 +116,7 @@ class SncTests(unittest.TestCase):
                 self.widget.repository_source({})
 
     @patch.object(module.psycopg2, 'connect')
-    def test_loaded_controls_require_explicit_opt_in(self, connect):
+    def test_loaded_snc_version_selects_only_cargue(self, connect):
         self.select_model('XTF')
         source = {'kind': 'tables', 'tables': ['reglas_cargue_snc_xtf'], 'snc': True}
         cursor = self.database(connect)
@@ -128,14 +128,34 @@ class SncTests(unittest.TestCase):
         self.assertEqual(self.widget.repository_rules[0]['source_component'], 'Juridicas')
         card = self.widget.category_checks[module.SNC_CATEGORY]
         self.assertTrue(card.isEnabled())
-        self.assertFalse(card.isChecked())
+        self.assertTrue(card.isChecked())
+        self.assertEqual(list(self.widget.category_checks), [module.SNC_CATEGORY])
+        self.assertTrue(self.widget.run_button.isEnabled())
         self.widget.select_all_categories()
-        self.assertFalse(card.isChecked())
-        card.click()
+        self.assertTrue(card.isChecked())
         self.assertIn('1 reglas', self.widget.category_summary.text())
+        card.click()
+        self.assertFalse(self.widget.run_button.isEnabled())
         query, params = cursor.execute.call_args.args
         self.assertIn('public.reglas_cargue_snc_xtf', query)
         self.assertEqual(params, ('v1',))
+
+    def test_snc_selection_requires_loaded_rules_and_resets_on_model_change(self):
+        for model in ('CICA', 'XTF'):
+            self.select_model(model)
+            card = self.widget.category_checks[module.SNC_CATEGORY]
+            self.assertFalse(card.isEnabled())
+            self.assertFalse(card.isChecked())
+            self.widget.selected_sql_version = {'codigo': 'v1'}
+            self.widget.repository_rules = [{'type': 'CONTROL', 'component': module.SNC_CATEGORY, 'sql': 'SELECT 1'}]
+            self.widget.refresh_categories()
+            self.assertEqual(list(self.widget.category_checks), [module.SNC_CATEGORY])
+            self.assertTrue(self.widget.category_checks[module.SNC_CATEGORY].isChecked())
+            self.assertTrue(self.widget.run_button.isEnabled())
+            with patch.object(self.widget, 'open_sql_version_dialog'):
+                self.widget.environment.setCurrentIndex(0)
+            self.assertFalse(self.widget.run_button.isEnabled())
+            self.assertFalse(self.widget.category_checks[module.SNC_CATEGORY].isChecked())
 
     @patch.object(module.psycopg2, 'connect')
     def test_versions_do_not_require_extra_timestamp_column(self, connect):

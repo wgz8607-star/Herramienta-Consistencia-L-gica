@@ -675,7 +675,11 @@ class ControlCalidadDialog(QDialog):
             card.setObjectName("categoryCard")
             card.setCheckable(True)
             optional_snc = category_name == SNC_CATEGORY
-            card.setChecked(not optional_snc)
+            snc_selected = (
+                optional_snc and count > 0 and bool(self.selected_sql_version)
+                and self.environment.currentText() == SNC_ENVIRONMENT
+            )
+            card.setChecked(not optional_snc or snc_selected)
             card.setEnabled(not optional_snc or count > 0)
             if optional_snc and not count:
                 card.setToolTip("Pendiente incorporar las reglas SQL de cargue a SNC para este modelo y ambiente.")
@@ -688,7 +692,7 @@ class ControlCalidadDialog(QDialog):
                 "QPushButton#categoryCard:hover { background: #E2F7F8; color: #0468A3; border: 2px solid #3FA4F5; } "
                 "QPushButton#categoryCard:checked { background: #0468A3; color: white; border: 2px solid #00C7CB; }"
             )
-            self.update_category_card(card, category_name, count, not optional_snc)
+            self.update_category_card(card, category_name, count, card.isChecked())
             card.toggled.connect(lambda checked, button=card, name=category_name, rules=count: self.update_category_card(button, name, rules, checked))
             card.toggled.connect(self.update_category_summary)
             self.category_checks[category_name] = card

@@ -37,7 +37,11 @@ CICA y XTF muestran el ambiente **Validaciones para cargue a SNC** y el control
 opcional **+ Cargue SNC**. Este control comienza sin seleccionar y **Seleccionar
 todos** no lo activa. Mientras no estén conectadas las reglas correspondientes,
 permanece inhabilitado. Las reglas SNC se incorporarán desde dos tablas de
-`public`, una por modelo; sus nombres y estructura están pendientes de confirmar.
+`public`, una por modelo; se usan `public.reglas_cargue_snc_cica` y `public.reglas_cargue_snc_xtf`,
+con las columnas `version`, `componente`, `codigo_regla`, `tipo`,
+`sentencia_sql`, `descripcion_regla`, `activa` y `orden`. No se requiere
+`fecha_actualizacion` para estas tablas. Los controles SNC de la versión
+seleccionada se agrupan bajo **+ Cargue SNC** y deben activarse expresamente.
 El ambiente SNC no reutiliza las reglas de validación ordinarias de CICA ni de
 otros modelos. La opción XTF prepara la interfaz; no incorpora todavía lectura
 de archivos XTF ni reglas nuevas.

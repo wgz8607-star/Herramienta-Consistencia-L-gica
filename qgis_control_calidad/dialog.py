@@ -36,6 +36,10 @@ DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
 MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db", "XTF": "rules_xtf"}
 SNC_CATEGORY = "Cargue SNC"
 SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
+SNC_REPOSITORY_TABLES = {
+    "CICA": "reglas_cargue_snc_cica",
+    "XTF": "reglas_cargue_snc_xtf",
+}
 
 SQL_REPOSITORIES = {
     "Modelo Interno de Levantamiento 1.0": ("sql_modelo_interno", "sql_modelo_interno_prueba"),
@@ -108,9 +112,11 @@ class SqlVersionDialog(QDialog):
                     if self.repository_source["kind"] == "tables":
                         rows = []
                         for table in self.repository_source["tables"]:
+                            published = "NULL" if self.repository_source.get("snc") else "max(fecha_actualizacion)"
+                            order = "version DESC" if self.repository_source.get("snc") else "max(fecha_actualizacion) DESC, version DESC"
                             cursor.execute(
-                                f"SELECT version, max(descripcion_regla), 'PUBLICADA', max(fecha_actualizacion) "
-                                f"FROM public.{table} WHERE activa GROUP BY version ORDER BY max(fecha_actualizacion) DESC, version DESC"
+                                f"SELECT version, max(descripcion_regla), 'PUBLICADA', {published} "
+                                f"FROM public.{table} WHERE activa GROUP BY version ORDER BY {order}"
                             )
                             rows.extend(({"table": table, "version": item[0]}, item[0], item[1], item[2], item[3]) for item in cursor.fetchall())
                     else:
@@ -440,8 +446,8 @@ class ControlCalidadDialog(QDialog):
         if hasattr(self, "sql_version_label"):
             self.sql_version_label.setText("Seleccione una versión de SQL")
         self.refresh_categories()
-        if self.model.currentText() == "XTF" or self.environment.currentText() == SNC_ENVIRONMENT:
-            self.status.setText("Pendiente incorporar las reglas SQL de " + self.model.currentText() + " para el ambiente seleccionado.")
+        if self.model.currentText() == "XTF" and self.environment.currentText() != SNC_ENVIRONMENT:
+            self.status.setText("Seleccione el ambiente Validaciones para cargue a SNC para consultar las reglas XTF.")
             return
         self.open_sql_version_dialog()
 
@@ -449,8 +455,19 @@ class ControlCalidadDialog(QDialog):
         return dict(REPOSITORY_CONNECTION)
 
     def repository_source(self, params):
-        if self.model.currentText() == "XTF" or self.environment.currentText() == SNC_ENVIRONMENT:
-            raise ValueError("Falta configurar el repositorio de sentencias para " + self.model.currentText() + " · " + self.environment.currentText() + ". No se reutilizarán reglas de otro ambiente.")
+        if self.environment.currentText() == SNC_ENVIRONMENT:
+            table = SNC_REPOSITORY_TABLES[self.model.currentText()]
+            with psycopg2.connect(**params, connect_timeout=8) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT to_regclass(%s)", (f"public.{table}",))
+                    if not cursor.fetchone()[0]:
+                        raise ValueError(f"La tabla public.{table} aún no está disponible para el cargue SNC.")
+                    cursor.execute("SELECT has_table_privilege(current_user, %s, 'SELECT')", (f"public.{table}",))
+                    if not cursor.fetchone()[0]:
+                        raise ValueError(f"Se requiere permiso SELECT sobre public.{table}.")
+            return {"kind": "tables", "schema": "public", "tables": [table], "label": f"public.{table}", "snc": True}
+        if self.model.currentText() == "XTF":
+            raise ValueError("Seleccione el ambiente Validaciones para cargue a SNC para consultar las reglas XTF.")
         with psycopg2.connect(**params, connect_timeout=8) as connection:
             with connection.cursor() as cursor:
                 tables = []
@@ -503,7 +520,8 @@ class ControlCalidadDialog(QDialog):
                             (version["id"],),
                         )
                     self.repository_rules = [
-                        {"component": row[0], "rule": row[1], "type": row[2], "sql": row[3], "description": row[4]}
+                        {"component": SNC_CATEGORY if source.get("snc") and row[2] == "CONTROL" else row[0],
+                         "source_component": row[0], "rule": row[1], "type": row[2], "sql": row[3], "description": row[4]}
                         for row in cursor.fetchall()
                     ]
             self.selected_sql_version = version

@@ -76,3 +76,95 @@ no revoca consultas o controles que ya estén cargados en otra sesión.
 Si cambia la primera fila por reordenamiento o eliminación de reglas, transferir
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
+
+## Revisión humana por registro (1.1.0)
+
+La sección de resultados conserva el resumen automático por componente. El botón
+**Revisar hallazgos** abre las filas devueltas por las reglas SQL, sus datos y su
+resultado automático. La revisión humana es independiente y tiene tres campos:
+
+- `estado_revision_usuario`: **Revisión pendiente** (inicial), **Excepción** o
+  **Solicitar ajuste**.
+- `observacion_usuario`, rotulada **Observación** en pantalla.
+- `fecha_revision_usuario`: fecha y hora de la última modificación, con zona
+  horaria de Colombia (`America/Bogota`).
+
+Los cambios se aplican al cambiar de fila, filtrar, guardar o cerrar; también se
+pueden aplicar expresamente con **Aplicar seguimiento**. Una excepción exige
+texto visible en Observación: se rechazan campos vacíos, espacios y caracteres
+invisibles. Cerrar o iniciar otra ejecución con cambios sin guardar ofrece
+Guardar, Descartar o Cancelar.
+
+**Guardar revisión en Excel** guarda todos los hallazgos de la ejecución, sin
+aplicar los filtros del visor, y una hoja con la ejecución automática completa
+(incluidas reglas sin hallazgos y errores técnicos). Incluye el reporte general
+cuando existe. Los identificadores y demás datos se escriben como texto para
+conservar ceros iniciales y evitar interpretar los valores como fórmulas. La
+escritura es atómica: un fallo no reemplaza el último archivo guardado. Si un dato
+supera el límite de Excel se informa, sin truncarlo silenciosamente.
+
+Después de otra ejecución, **Recuperar revisión** carga un Excel creado por este
+botón. No es posible recuperar con seguridad los antiguos reportes, que no
+contenían claves de casos. Los reportes detallados existentes también muestran
+los tres campos de seguimiento, pero para recuperar debe usarse el archivo de
+**Guardar revisión en Excel**. La hoja oculta `_Identidades` forma parte del
+formato y debe conservarse. Las columnas `dato:*` no son campos de revisión:
+si se editan, el registro se rechaza al recuperar.
+
+### Clave estable y política de coincidencia
+
+La clave es SHA-256 de una representación canónica con tipos que contiene:
+
+1. Origen de ejecución: modelo, ambiente, servidor, puerto, base, esquema,
+   referencia R1 y origen de sentencias. Así no se mezclan municipios, bases,
+   modelos ni ambientes.
+2. Componente y código de la validación. Un mismo predio puede incumplir reglas
+   distintas y cada incumplimiento requiere su propio seguimiento.
+3. Huella del SQL efectivamente ejecutado, después de sustituir esquema y R1.
+   Cualquier cambio del SQL, incluso de formato, invalida la recuperación de
+   forma conservadora; no se reutilizan excepciones de un criterio diferente.
+4. Todos los campos devueltos para el hallazgo, incluidos sus identificadores
+   (por ejemplo `numero_predial`, `numero_predial_nacional`, `npn`, `t_id`,
+   `t_ili_tid`, documento o código) y sus valores evaluados y condiciones
+   `cond_*`. Incluir todo el contenido evita trasladar una revisión si cambió
+   un valor relevante. Se preservan los tipos, los textos y los ceros iniciales.
+
+No intervienen la fila del Excel, el orden del resultado ni el nombre del archivo.
+Los nombres de columnas se ordenan antes de calcular la clave. Campos
+explícitamente posicionales como `row_number`, `row_num`, `rownum`, `numero_fila`,
+`nro_fila` y `fila_reporte` quedan fuera de ella. Cambiar de versión sin cambiar
+el SQL, su origen ni los datos permite conservar el seguimiento.
+
+Se exige un identificador reconocible del objeto. Si falta, si el SQL devuelve
+columnas duplicadas, si la consulta genera ordinales con `row_number`, `rank` o
+`dense_rank` (política conservadora), si hay tipos no compatibles o si una misma clave aparece
+más de una vez en cualquiera de las ejecuciones, no se recupera automáticamente.
+El visor indica identidad insuficiente o caso duplicado. No se intentan
+coincidencias aproximadas por predio, por orden ni por descripción.
+
+La identidad protege los datos expuestos por la regla: para recuperar con
+seguridad, cada SQL debe devolver los identificadores y atributos que determinan
+su inconsistencia. Cambios en datos auxiliares que el SQL no devuelve ni
+versiona no pueden detectarse desde el reporte. No se cambian las reglas SQL
+existentes durante esta implementación.
+
+La recuperación preserva estados, observaciones y fechas solo en coincidencias
+únicas. Nunca sobrescribe seguimiento ya editado en la ejecución actual. Una
+excepción importada sin observación se convierte a **Revisión pendiente** y se
+informa. El resumen muestra incorporadas, sin correspondencia, ambiguas,
+conflictos y datos inválidos. Las revisiones recuperadas deben guardarse en el
+nuevo Excel.
+
+### Comprobación
+
+Con el Python de QGIS y openpyxl:
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1 \
+/workspace/.venvs/calidad-qgis/bin/python -m unittest discover -s tests -v
+```
+
+La selección o reselección de modelo restablece **Seleccione un ambiente…**,
+borra la versión SQL y bloquea la ejecución hasta elegir reglas válidas. Los
+resultados ya ejecutados mantienen su contexto original para revisarlos y
+exportarlos aunque se preparen otras opciones de ejecución.

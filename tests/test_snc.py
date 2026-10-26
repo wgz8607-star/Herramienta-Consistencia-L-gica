@@ -21,6 +21,9 @@ class SncTests(unittest.TestCase):
         prompt.start()
         self.addCleanup(prompt.stop)
         self.widget = module.ControlCalidadDialog()
+        self.widget.environment.blockSignals(True)
+        self.widget.environment.setCurrentIndex(1)
+        self.widget.environment.blockSignals(False)
         self.addCleanup(self.widget.close)
 
     def select_model(self, model):

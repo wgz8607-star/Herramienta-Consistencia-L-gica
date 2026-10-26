@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 import hashlib
@@ -15,8 +15,7 @@ import unicodedata
 from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.comments import Comment
-from openpyxl.worksheet.datavalidation import DataValidation
+from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, yes, validate, add_controls
 
 PENDING = "Revisión pendiente"
 EXCEPTION = "Excepción"
@@ -91,12 +90,19 @@ class ReviewCase:
     estado_revision_usuario: str = PENDING
     observacion_usuario: str = ""
     fecha_revision_usuario: str = ""
+    excepcion_dt: str = "No"
+    observacion_dt: str = ""
+    excepcion_operador: str = "No"
+    observacion_operador: str = ""
+
+    def exception_tracking(self):
+        return tuple(getattr(self, name) for name in EXCEPTION_FIELDS)
 
     def tracking(self):
         return tuple(getattr(self, name) for name in REVIEW_FIELDS)
 
     def has_tracking(self):
-        return self.tracking() != (PENDING, "", "")
+        return self.tracking() != (PENDING, "", "") or self.exception_tracking() != EXCEPTION_DEFAULTS
 
     def set_review(self, state, observation, timestamp=None):
         if state not in STATES:
@@ -148,37 +154,32 @@ def _text(cell, value):
     cell.number_format = "@"
 
 
-def save_review(path, cases, results=(), general_rows=()):
+def save_review(path, cases, results=(), general_rows=(), workbook=None):
     for case in cases:
+        validate(case.exception_tracking(), valid_observation)
         if case.estado_revision_usuario not in STATES:
             raise ValueError("Estado de revisión no válido.")
         if case.estado_revision_usuario == EXCEPTION and not valid_observation(case.observacion_usuario):
             raise ValueError("No se puede guardar una Excepción sin Observación válida.")
-    book = Workbook()
-    sheet = book.active
+    book = workbook if workbook is not None else Workbook()
+    sheet = book.create_sheet("Revisión") if workbook is not None else book.active
     sheet.title = "Revisión"
     fields = sorted({str(k) for case in cases for k in case.data})
     headers = ["clave_caso", "componente", "validacion", "resultado_automatico", *REVIEW_FIELDS,
-               "recuperable", *["dato:" + name for name in fields]]
+               "recuperable", *EXCEPTION_HEADERS, *["dato:" + name for name in fields]]
     sheet.append(headers)
     for index, case in enumerate(cases, 2):
         values = [case.key, case.component, case.rule, case.automatic, *case.tracking(),
-                  "Sí" if case.recoverable else "No", *[case.data.get(name) for name in fields]]
+                  "Sí" if case.recoverable else "No", *case.exception_tracking(), *[case.data.get(name) for name in fields]]
         for column, value in enumerate(values, 1):
             _text(sheet.cell(index, column), value)
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
     for column in sheet.columns:
         sheet.column_dimensions[column[0].column_letter].width = 28
-    sheet.cell(1, 6).comment = Comment("Observación del usuario; obligatoria para Excepción.", "Validador")
-    if cases:
-        validation = DataValidation(type="list", formula1='"' + ','.join(STATES) + '"', allow_blank=False)
-        validation.errorTitle = "Estado no válido"
-        validation.error = "Seleccione un estado de revisión de la lista."
-        validation.showErrorMessage = True
-        validation.errorStyle = "stop"
-        sheet.add_data_validation(validation)
-        validation.add(f"E2:E{len(cases)+1}")
+    for column in ('E', 'F', 'G'):
+        sheet.column_dimensions[column].hidden = True  # Legacy format compatibility.
+    add_controls(sheet, 2, len(cases) + 1, 9)
     meta = book.create_sheet("_Identidades")
     meta.append([FORMAT, "fragmento", "contenido"])
     identities = {case.key: case.identity for case in cases}
@@ -209,6 +210,8 @@ def save_review(path, cases, results=(), general_rows=()):
             for col, name in enumerate(columns, 1):
                 _text(general.cell(row_index, col), row.get(name))
     # Write atomically: a failed save must not replace the last saved review.
+    if path is None:
+        return book
     path = Path(path)
     handle, temporary = tempfile.mkstemp(suffix=".xlsx", dir=path.parent)
     os.close(handle)
@@ -229,6 +232,7 @@ class ImportedReview:
     timestamp: str
     recoverable: bool
     valid: bool = True
+    exception_values: tuple = EXCEPTION_DEFAULTS
 
 
 def load_review(path):
@@ -276,7 +280,8 @@ def load_review(path):
                 valid = valid and [row['componente'], row['validacion']] == payload['validation'] and row['resultado_automatico'] == payload['automatic']
             records.append(ImportedReview(key, str(row[REVIEW_FIELDS[0]] or PENDING),
                                           str(row[REVIEW_FIELDS[1]] or ''), str(row[REVIEW_FIELDS[2]] or ''),
-                                          row.get('recuperable') == 'Sí', valid))
+                                          row.get('recuperable') == 'Sí', valid,
+                                          tuple(str(row.get(name) or default) for name, default in zip(EXCEPTION_HEADERS, EXCEPTION_DEFAULTS))))
         return records
     finally:
         book.close()
@@ -298,7 +303,7 @@ def restore_review(cases, records):
     old_counts = Counter(record.key for record in records)
     current = {case.key: case for case in cases}
     counts = dict(incorporadas=0, sin_correspondencia=0, ambiguas=0, conflictos=0,
-                  excepciones_invalidas=0, estados_invalidos=0, datos_invalidos=0, sin_seguimiento=0)
+                  excepciones_invalidas=0, estados_invalidos=0, datos_invalidos=0, sin_seguimiento=0, operador_bloqueado=0)
     for record in records:
         if not record.valid or not record.recoverable:
             counts['datos_invalidos'] += 1
@@ -317,15 +322,33 @@ def restore_review(cases, records):
         if state == EXCEPTION and not valid_observation(record.observation):
             state = PENDING
             counts['excepciones_invalidas'] += 1
+        dt, note_dt, operator, note_operator = record.exception_values
+        if any(str(value).strip().casefold() not in ('sí', 'si', 'no', '') for value in (dt, operator)):
+            counts['estados_invalidos'] += 1
+        dt = 'Sí' if yes(dt) else 'No'
+        operator = 'Sí' if yes(operator) else 'No'
+        if dt == 'Sí' and not valid_observation(note_dt):
+            dt = 'No'
+            counts['excepciones_invalidas'] += 1
+        if dt == 'Sí':
+            if operator == 'Sí' or note_operator:
+                counts['operador_bloqueado'] += 1
+            operator, note_operator = 'No', ''
+        elif operator == 'Sí' and not valid_observation(note_operator):
+            operator = 'No'
+            counts['excepciones_invalidas'] += 1
+        exception_values = (dt, note_dt, operator, note_operator)
         tracking = (state, record.observation, record.timestamp)
         if case.has_tracking():
-            if case.tracking() != tracking:
+            if case.tracking() != tracking or case.exception_tracking() != exception_values:
                 counts['conflictos'] += 1
             continue
-        if tracking == (PENDING, '', ''):
+        if tracking == (PENDING, '', '') and exception_values == EXCEPTION_DEFAULTS:
             counts['sin_seguimiento'] += 1
             continue
         for name, value in zip(REVIEW_FIELDS, tracking):
+            setattr(case, name, value)
+        for name, value in zip(EXCEPTION_FIELDS, exception_values):
             setattr(case, name, value)
         counts['incorporadas'] += 1
     return counts

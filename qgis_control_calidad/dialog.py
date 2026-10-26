@@ -18,13 +18,11 @@ from qgis.PyQt.QtWidgets import (
 from qgis.core import QgsApplication, QgsAuthMethodConfig, QgsSettings
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.formatting.rule import FormulaRule
-from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
-from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, STATES, PENDING
-from .review_dialog import ReviewDialog
+from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS
+from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls
 
 try:
     import psycopg2
@@ -256,7 +254,6 @@ class ControlCalidadDialog(QDialog):
         self.review_cases = []
         self.review_dirty = False
         self.review_snapshot = []
-        self.review_viewer = None
         self.review_context = {}
         self.general_report_rows = []
         self.general_report_error = ""
@@ -438,13 +435,11 @@ class ControlCalidadDialog(QDialog):
         self.table.setMinimumHeight(160)
         result_layout.addWidget(self.table)
         review_actions = QHBoxLayout()
-        self.review_open_button = QPushButton("Revisar hallazgos")
-        self.review_open_button.clicked.connect(self.open_review_viewer)
         self.review_save_button = QPushButton("Guardar revisión en Excel")
         self.review_save_button.clicked.connect(self.save_review_excel)
         self.review_recover_button = QPushButton("Recuperar revisión")
         self.review_recover_button.clicked.connect(self.recover_review)
-        for button in (self.review_open_button, self.review_save_button, self.review_recover_button):
+        for button in (self.review_save_button, self.review_recover_button):
             button.setEnabled(False)
             review_actions.addWidget(button)
         result_layout.addLayout(review_actions)
@@ -876,8 +871,6 @@ class ControlCalidadDialog(QDialog):
             return
         if not self.commit_review_editor() or not self.confirm_review_changes():
             return
-        if self.review_viewer is not None:
-            self.review_viewer.hide()
         self.results.clear()
         self.review_cases = []
         self.review_snapshot = []
@@ -889,7 +882,7 @@ class ControlCalidadDialog(QDialog):
             "reference_r1": self.published_r1.currentText(),
             "repository": self.selected_sql_version.get("source", {}).get("label", ""),
         }
-        for button in (self.review_open_button, self.review_save_button, self.review_recover_button):
+        for button in (self.review_save_button, self.review_recover_button):
             button.setEnabled(False)
         self.table.setRowCount(0)
         self.general_report_rows = []
@@ -948,25 +941,14 @@ class ControlCalidadDialog(QDialog):
                 self.table.setItem(row, column, QTableWidgetItem(str(value)))
         self.progress.setValue(self.progress.maximum())
         self.status.setText("Ejecución terminada.")
-        self.review_snapshot = [case.tracking() for case in self.review_cases]
+        self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.review_save_button.setEnabled(bool(self.results))
-        self.review_open_button.setEnabled(bool(self.review_cases))
         self.review_recover_button.setEnabled(bool(self.review_cases))
-        if self.review_viewer is not None:
-            self.review_viewer.refresh()
         self.summary.setText(f"{len(self.results)} reglas ejecutadas · {findings} hallazgos · {errors} errores técnicos")
 
-    def open_review_viewer(self):
-        if self.controls_running or not self.review_cases:
-            return
-        if self.review_viewer is None:
-            self.review_viewer = ReviewDialog(self)
-        self.review_viewer.show()
-        self.review_viewer.raise_()
-        self.review_viewer.activateWindow()
-
     def commit_review_editor(self):
-        return self.review_viewer is None or self.review_viewer.commit_editor()
+        # Reviews are edited in Excel; no record-review window is created.
+        return True
 
     def save_review_excel(self):
         if self.controls_running or not self.results or not self.commit_review_editor():
@@ -982,7 +964,7 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.warning(self, "No se guardó la revisión", str(error))
             return False
         self.review_dirty = False
-        self.review_snapshot = [case.tracking() for case in self.review_cases]
+        self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.status.setText("Revisión completa guardada; los filtros no excluyen registros.")
         return True
 
@@ -1000,15 +982,14 @@ class ControlCalidadDialog(QDialog):
             return
         if counts['incorporadas']:
             self.review_dirty = True
-        if self.review_viewer is not None:
-            self.review_viewer.refresh()
         QMessageBox.information(self, "Recuperación de revisión", (
             f"Revisiones incorporadas: {counts['incorporadas']}\n"
             f"Sin correspondencia: {counts['sin_correspondencia']}\n"
             f"Correspondencias ambiguas: {counts['ambiguas']}\n"
             f"Seguimientos actuales conservados por conflicto: {counts['conflictos']}\n"
-            f"Excepciones sin observación convertidas a Revisión pendiente: {counts['excepciones_invalidas']}\n"
+            f"Excepciones sin observación descartadas: {counts['excepciones_invalidas']}\n"
             f"Estados inválidos convertidos a Revisión pendiente: {counts['estados_invalidos']}\n"
+            f"Campos de operador descartados por Excepción DT: {counts['operador_bloqueado']}\n"
             f"Datos alterados o no recuperables: {counts['datos_invalidos']}"
         ))
 
@@ -1023,11 +1004,9 @@ class ControlCalidadDialog(QDialog):
             return self.save_review_excel()
         if choice == QMessageBox.Discard:
             for case, tracking in zip(self.review_cases, self.review_snapshot):
-                for name, value in zip(REVIEW_FIELDS, tracking):
+                for name, value in zip(REVIEW_FIELDS + EXCEPTION_FIELDS, tracking):
                     setattr(case, name, value)
             self.review_dirty = False
-            if self.review_viewer is not None:
-                self.review_viewer.refresh()
             return True
         return False
 
@@ -1165,7 +1144,7 @@ class ControlCalidadDialog(QDialog):
             condition_fields = [key for key in fields if str(key).lower().startswith("cond_")]
             fields = [key for key in fields if key not in condition_fields] + condition_fields
             rule_headers = [
-                "Predio", *fields, "estado_revision_usuario", "Observación", "fecha_revision_usuario",
+                "Predio", *fields, *EXCEPTION_HEADERS,
             ]
             last_column = len(rule_headers)
             rule_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
@@ -1181,7 +1160,7 @@ class ControlCalidadDialog(QDialog):
             for index, (predio, row) in enumerate(rows_by_rule[(category, rule)], start=5):
                 for column, value in enumerate([
                     predio or "Sin identificador", *[row.get(key, "") for key in fields],
-                    *(review_by_row[id(row)].tracking() if id(row) in review_by_row else (PENDING, "", "")),
+                    *(review_by_row[id(row)].exception_tracking() if id(row) in review_by_row else EXCEPTION_DEFAULTS),
                 ], start=1):
                     rule_sheet.cell(index, column, value)
             for cell in rule_sheet[1]:
@@ -1203,12 +1182,7 @@ class ControlCalidadDialog(QDialog):
                 if row_index % 2 == 0:
                     for cell in rule_sheet[row_index]:
                         cell.fill = soft_gray
-            if rule_sheet.max_row > 1:
-                exception_validation = DataValidation(type="list", formula1='"' + ','.join(STATES) + '"', allow_blank=False)
-                rule_sheet.add_data_validation(exception_validation)
-                exception_column = rule_sheet.cell(4, rule_sheet.max_column - 2).column_letter
-                exception_validation.add(f"{exception_column}5:{exception_column}{rule_sheet.max_row}")
-                rule_sheet.conditional_formatting.add(f"{exception_column}5:{exception_column}{rule_sheet.max_row}", FormulaRule(formula=[f'{exception_column}5="Excepción"'], fill=exception))
+            add_controls(rule_sheet, 5, rule_sheet.max_row, rule_sheet.max_column - 3)
             advance_report(f"Generando detalle de {rule}…")
         by_predio = book.create_sheet("Hallazgos por predio")
         by_predio.append(["Número predial", "Componentes", "Reglas incumplidas", "Total hallazgos", "Observación"])
@@ -1298,21 +1272,29 @@ class ControlCalidadDialog(QDialog):
                 for column_index, column in enumerate(target.iter_cols(), start=1):
                     target.column_dimensions[get_column_letter(column_index)].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 42)
                 target.freeze_panes = "A5"; target.auto_filter.ref = f"A4:{target.cell(4, target.max_column).coordinate[:-1]}{target.max_row}"
-                if target.max_row > 1:
-                    exception_validation = DataValidation(type="list", formula1='"' + ','.join(STATES) + '"', allow_blank=False)
-                    target.add_data_validation(exception_validation)
-                    exception_column = target.cell(4, target.max_column - 2).column_letter
-                    exception_validation.add(f"{exception_column}5:{exception_column}{target.max_row}")
-                    target.conditional_formatting.add(f"{exception_column}5:{exception_column}{target.max_row}", FormulaRule(formula=[f'{exception_column}5="Excepción"'], fill=exception))
+                # The editable source is the Revisión sheet; detail sheets mirror it.
+                component_cases = [case for case in self.review_cases if case.component == category]
+                component_positions = {id(case): position for position, case in enumerate(component_cases, 2)}
+                for detail_row, (_predio, original_row) in enumerate(rows_by_rule[(category, rule)], 5):
+                    case = review_by_row.get(id(original_row))
+                    if case is not None:
+                        for offset in range(4):
+                            target.cell(detail_row, target.max_column - 3 + offset,
+                                        f"='Revisión'!{get_column_letter(9 + offset)}{component_positions[id(case)]}")
+                target.protection.sheet = True
+                target.protection.autoFilter = False
             package_index.freeze_panes = "A2"; package_index.auto_filter.ref = package_index.dimensions
             for column in package_index.columns:
                 package_index.column_dimensions[column[0].column_letter].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 36)
             safe_category = re.sub(r"[^A-Za-z0-9_-]+", "_", category).strip("_") or "paquete"
+            save_review(None, [case for case in self.review_cases if case.component == category],
+                        [result for result in self.results if result.category == category], workbook=package)
             package.save(str(Path(directory) / f"detalle_{safe_category}_{stamp}.xlsx"))
             advance_report(f"Guardando paquete {category}…")
         for sheet in [detail, *[book[name] for name in rule_sheet_names.values()]]:
             book.remove(sheet)
         advance_report("Guardando reporte Excel…")
+        save_review(None, self.review_cases, self.results, workbook=book)
         book.save(path)
         self.progress.setValue(report_total)
         self.export_button.setEnabled(True)

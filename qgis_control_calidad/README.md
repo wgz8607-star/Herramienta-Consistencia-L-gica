@@ -77,39 +77,51 @@ Si cambia la primera fila por reordenamiento o eliminación de reglas, transferi
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
 
-## Revisión humana por registro (1.1.0)
+## Excepciones DT y operador (1.2.0)
 
-La sección de resultados conserva el resumen automático por componente. El botón
-**Revisar hallazgos** abre las filas devueltas por las reglas SQL, sus datos y su
-resultado automático. La revisión humana es independiente y tiene tres campos:
+La revisión se diligencia en Excel. No se genera la ventana «Revisión de hallazgos
+por registro» ni se muestra el botón «Revisar hallazgos». Se conservan **Guardar
+revisión en Excel** y **Recuperar revisión**.
 
-- `estado_revision_usuario`: **Revisión pendiente** (inicial), **Excepción** o
-  **Solicitar ajuste**.
-- `observacion_usuario`, rotulada **Observación** en pantalla.
-- `fecha_revision_usuario`: fecha y hora de la última modificación, con zona
-  horaria de Colombia (`America/Bogota`).
+Todos los reportes incluyen una hoja **Revisión** con cada hallazgo y estos campos:
 
-Los cambios se aplican al cambiar de fila, filtrar, guardar o cerrar; también se
-pueden aplicar expresamente con **Aplicar seguimiento**. Una excepción exige
-texto visible en Observación: se rechazan campos vacíos, espacios y caracteres
-invisibles. Cerrar o iniciar otra ejecución con cambios sin guardar ofrece
-Guardar, Descartar o Cancelar.
+| Campo | Valor inicial | Condición |
+|---|---|---|
+| Excepción DT | No | Sí exige Observación DT válida. |
+| Observación DT | Vacío | Escribir antes de marcar Sí. |
+| Excepción operador | No | Sí exige Observación operador; no se permite cuando DT es Sí. |
+| Observación operador | Vacío | No se permite diligenciar cuando DT es Sí. |
 
-**Guardar revisión en Excel** guarda todos los hallazgos de la ejecución, sin
-aplicar los filtros del visor, y una hoja con la ejecución automática completa
-(incluidas reglas sin hallazgos y errores técnicos). Incluye el reporte general
-cuando existe. Los identificadores y demás datos se escriben como texto para
-conservar ceros iniciales y evitar interpretar los valores como fórmulas. La
-escritura es atómica: un fallo no reemplaza el último archivo guardado. Si un dato
-supera el límite de Excel se informa, sin truncarlo silenciosamente.
+La hoja Revisión es el único lugar editable del seguimiento dentro de cada
+reporte. Los cuatro campos de las hojas de detalle por regla reflejan sus valores
+mediante referencias a Revisión y están protegidos para evitar decisiones
+contradictorias en hojas distintas. El archivo ejecutivo y los paquetes por
+componente también incluyen sus filas y claves para recuperar la revisión.
 
-Después de otra ejecución, **Recuperar revisión** carga un Excel creado por este
-botón. No es posible recuperar con seguridad los antiguos reportes, que no
-contenían claves de casos. Los reportes detallados existentes también muestran
-los tres campos de seguimiento, pero para recuperar debe usarse el archivo de
-**Guardar revisión en Excel**. La hoja oculta `_Identidades` forma parte del
-formato y debe conservarse. Las columnas `dato:*` no son campos de revisión:
-si se editan, el registro se rechaza al recuperar.
+Escriba primero la observación y luego «Sí» o «No» en la excepción. Si hay
+seguimiento del operador, límpielo antes de marcar DT en Sí. Las validaciones de
+Excel son de tipo personalizado, con error Stop. Si DT es Sí, los campos del
+operador aparecen en gris y se rechazan entradas en ellos. Un XLSX sin macros no
+puede cambiar dinámicamente la propiedad de bloqueo de las celdas: este control
+usa validación, sombreado y comprobación adicional al importar. La protección
+estática evita modificar claves y datos originales; no es un mecanismo de
+seguridad. Pegar datos o desproteger una hoja puede saltarse la validación de
+Excel, por lo que el plugin verifica siempre lo recuperado.
+
+**Recuperar revisión** solo reutiliza coincidencias únicas con los mismos datos
+y criterio. Si una excepción carece de su observación, la convierte a No e
+informa. Si DT es Sí, descarta cualquier excepción u observación del operador y
+lo informa. El seguimiento existente en la ejecución actual nunca se sobrescribe
+silenciosamente. Los campos de revisión de la versión 1.1 se conservan ocultos
+por compatibilidad; una antigua revisión genérica no se atribuye automáticamente
+a DT ni al operador.
+
+**Guardar revisión en Excel** incluye todas las filas de la ejecución y el
+resultado automático de cada regla, sin aplicar filtros del archivo. Conserva los
+identificadores como texto y la hoja oculta de identidades para cruzar futuras
+ejecuciones. Las revisiones recuperadas se pueden volver a guardar o incorporar
+a los reportes detallados. Los cambios sin guardar se advierten al cerrar o al
+iniciar otra ejecución.
 
 ### Clave estable y política de coincidencia
 
@@ -139,7 +151,7 @@ Se exige un identificador reconocible del objeto. Si falta, si el SQL devuelve
 columnas duplicadas, si la consulta genera ordinales con `row_number`, `rank` o
 `dense_rank` (política conservadora), si hay tipos no compatibles o si una misma clave aparece
 más de una vez en cualquiera de las ejecuciones, no se recupera automáticamente.
-El visor indica identidad insuficiente o caso duplicado. No se intentan
+La columna `recuperable` y el resumen de importación informan sobre los casos que no se pueden cruzar. No se intentan
 coincidencias aproximadas por predio, por orden ni por descripción.
 
 La identidad protege los datos expuestos por la regla: para recuperar con
@@ -148,9 +160,8 @@ su inconsistencia. Cambios en datos auxiliares que el SQL no devuelve ni
 versiona no pueden detectarse desde el reporte. No se cambian las reglas SQL
 existentes durante esta implementación.
 
-La recuperación preserva estados, observaciones y fechas solo en coincidencias
-únicas. Nunca sobrescribe seguimiento ya editado en la ejecución actual. Una
-excepción importada sin observación se convierte a **Revisión pendiente** y se
+La recuperación preserva el seguimiento solo en coincidencias únicas. Nunca sobrescribe seguimiento ya editado en la ejecución actual. Una
+excepción DT u operador importada sin observación se convierte a **No** y se
 informa. El resumen muestra incorporadas, sin correspondencia, ambiguas,
 conflictos y datos inválidos. Las revisiones recuperadas deben guardarse en el
 nuevo Excel.

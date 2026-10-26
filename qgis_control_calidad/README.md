@@ -331,3 +331,7 @@ El panel izquierdo contiene las pestañas **Conexión** y **Referencias R1/R2**.
 La segunda reúne la carga temporal, la selección del R1 de public y la futura
 consulta municipal. Ya no se coloca al pie de la ventana, para que siga
 accesible en pantallas pequeñas sin ocultarse debajo de los resultados.
+
+El botón **Ejecutar validación** se encuentra debajo de las pestañas del panel
+izquierdo, fuera de su área desplazable, y permanece visible en ambas. Conserva
+las condiciones de habilitación según las reglas cargadas y seleccionadas.

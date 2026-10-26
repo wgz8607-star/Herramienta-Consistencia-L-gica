@@ -199,6 +199,37 @@ class ReviewUiTests(unittest.TestCase):
         self.assertIn('Error de carga', self.owner.detail_review_rows['Administrativas'][2].text())
         self.assertEqual(self.owner.review_cases[0].observacion_dt, 'DT válida')
 
+    def test_statistics_refresh_on_load_reload_release_and_discard(self):
+        from qgis_control_calidad.review import save_review
+        path = str(Path(self.directory.name) / 'admin.xlsx')
+        cases = build_cases(self.owner.results, self.owner.review_context)
+        cases[0].excepcion_dt = 'Sí'; cases[0].observacion_dt = 'DT válida'
+        save_review(path, cases)
+        self.assertEqual(self.owner.table.item(0, 4).text(), '2')
+        def load():
+            with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information'):
+                self.owner.recover_detail('Administrativas')
+        load()
+        self.assertEqual(self.owner.table.item(0, 2).text(), '2')
+        self.assertEqual(self.owner.table.item(0, 4).text(), '1')
+        self.assertEqual(self.owner.table.item(0, 3).text(), '1')
+        self.assertIn('1 errores', self.owner.summary.text())
+        cases[1].excepcion_operador = 'Sí'; cases[1].observacion_operador = 'Operador válida'
+        save_review(path, cases)
+        load()
+        self.assertEqual(self.owner.table.item(0, 4).text(), '0')
+        self.assertEqual(self.owner.table.item(0, 3).text(), '2')
+        with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Yes):
+            self.owner.release_detail('Administrativas')
+        self.assertEqual(self.owner.table.item(0, 4).text(), '2')
+        self.assertEqual(self.owner.table.item(0, 3).text(), '0')
+        load()
+        with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Discard):
+            self.owner.confirm_review_changes()
+        self.assertEqual(self.owner.table.item(0, 4).text(), '2')
+        self.assertEqual(self.owner.table.item(0, 3).text(), '0')
+        self.assertEqual(self.owner.table.item(0, 5).text(), '0')
+
     def test_direct_save_has_all_cases(self):
         path = str(Path(self.directory.name) / 'revision.xlsx')
         with patch.object(module.QFileDialog, 'getSaveFileName', return_value=(path, 'Excel')):

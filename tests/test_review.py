@@ -9,7 +9,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from openpyxl import load_workbook
 from qgis_control_calidad.review import (
-    ADJUST, EXCEPTION, PENDING, build_cases, digest, load_review, restore_review, save_review,
+    ADJUST, EXCEPTION, PENDING, build_cases, digest, load_review, restore_review, save_review, review_statistics,
 )
 
 CONTEXT = {'model': 'CICA', 'environment': 'Validaciones del modelo', 'database': 'test', 'schema': 'municipio'}
@@ -74,6 +74,33 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(current[0].excepcion_dt, 'Sí')
         changed = cases([{'matricula': '00104749', 'conteo': 3, 'cond_1_12': 'Fail'}], rule='regla_1_12')
         self.assertEqual(restore_review(changed, load_review(self.path))['incorporadas'], 0)
+
+    def test_statistics_deduct_valid_exceptions_without_changing_automatic_errors(self):
+        rows = self.rows + [dict(self.rows[0], id=4, numero_predial='000003')]
+        automatic = result(rows)
+        error = result([], rule='error_tecnico'); error.status = 'Error'; error.findings = '—'
+        current = cases(rows)
+        current[0].excepcion_dt = 'Sí'; current[0].observacion_dt = 'DT verificada'
+        current[1].excepcion_operador = 'Sí'; current[1].observacion_operador = 'Operador verificado'
+        groups, totals = review_statistics([automatic, error], current)
+        self.assertEqual(totals, dict(rules=2, findings=3, pending=1, dt=1, operator=1, errors=1))
+        self.assertEqual(automatic.findings, 3)
+        self.assertEqual(error.status, 'Error')
+        save_review(self.path, current, [automatic, error])
+        book = load_workbook(self.path)
+        stats = book['Estadística de revisión']
+        self.assertEqual(list(stats.values)[-1], ('TOTAL', 2, 3, 2, 1, 1))
+        book.close()
+
+    def test_statistics_ignore_unjustified_exceptions_and_do_not_count_twice(self):
+        current = cases(self.rows)
+        current[0].excepcion_dt = 'Sí'; current[0].observacion_dt = 'Justificada DT'
+        current[0].excepcion_operador = 'Sí'; current[0].observacion_operador = 'También operador'
+        current[1].excepcion_dt = 'Sí'; current[1].observacion_dt = '  '
+        _, totals = review_statistics([result(self.rows)], current)
+        self.assertEqual(totals['dt'], 1)
+        self.assertEqual(totals['operator'], 0)
+        self.assertEqual(totals['pending'], 1)
 
     def test_relevant_value_sql_rule_category_or_context_change_invalidates(self):
         old = cases(self.rows[:1])

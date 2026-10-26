@@ -209,6 +209,14 @@ def save_review(path, cases, results=(), general_rows=(), workbook=None):
         for row_index, row in enumerate(general_rows, 2):
             for col, name in enumerate(columns, 1):
                 _text(general.cell(row_index, col), row.get(name))
+    statistics = book.create_sheet("Estadística de revisión")
+    statistics.append(STAT_HEADERS)
+    groups, totals = review_statistics(results, cases)
+    for component, values in sorted(groups.items()):
+        statistics.append(statistics_row(component, values))
+    statistics.append(statistics_row('TOTAL', totals))
+    statistics.freeze_panes = 'A2'
+    statistics.auto_filter.ref = statistics.dimensions
     # Write atomically: a failed save must not replace the last saved review.
     if path is None:
         return book
@@ -405,3 +413,41 @@ def restore_review(cases, records):
             setattr(case, name, value)
         counts['incorporadas'] += 1
     return counts
+
+
+STAT_HEADERS = ('Componente', 'Reglas ejecutadas', 'Hallazgos',
+                'Excepciones', 'Errores', 'Errores técnicos')
+
+
+def review_statistics(results, cases):
+    """Review changes outstanding findings, never the automatic SQL outcome."""
+    grouped = {}
+    for result in results:
+        values = grouped.setdefault(result.category, dict(rules=0, findings=0, pending=0, dt=0, operator=0, errors=0))
+        values['rules'] += 1
+        values['findings'] += result.findings if isinstance(result.findings, int) else 0
+        values['errors'] += result.status == 'Error'
+    if not results:
+        for case in cases:
+            values = grouped.setdefault(case.component, dict(rules=0, findings=0, pending=0, dt=0, operator=0, errors=0))
+            values['findings'] += 1
+        for component, values in grouped.items():
+            values['rules'] = len({case.rule for case in cases if case.component == component})
+    for case in cases:
+        if case.component not in grouped:
+            continue
+        values = grouped[case.component]
+        if yes(case.excepcion_dt) and valid_observation(case.observacion_dt):
+            values['dt'] += 1
+        elif yes(case.excepcion_operador) and valid_observation(case.observacion_operador):
+            values['operator'] += 1
+    for values in grouped.values():
+        values['pending'] = max(0, values['findings'] - values['dt'] - values['operator'])
+    totals = {field: sum(values[field] for values in grouped.values())
+              for field in ('rules', 'findings', 'pending', 'dt', 'operator', 'errors')}
+    return grouped, totals
+
+
+def statistics_row(component, values):
+    return (component, values['rules'], values['findings'], values['dt'] + values['operator'],
+            values['pending'], values['errors'])

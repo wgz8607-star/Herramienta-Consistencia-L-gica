@@ -245,3 +245,19 @@ siempre que la ejecución actual confirme una coincidencia única e idéntica.
 La lectura del consolidado no depende de cómo Excel reescriba sus fórmulas:
 se leen las celdas de la regla por clave, sin ejecutar las fórmulas. El resumen
 distingue identidad insuficiente de datos/identidad alterados.
+
+## Estadística actualizada al recuperar detalles (1.3.1)
+
+La tabla y el resumen se recalculan al cargar una revisión consolidada, cargar,
+recargar o liberar un detalle, y al descartar cambios. Muestran por componente:
+**Componente · Reglas ejecutadas · Hallazgos · Excepciones · Errores · Errores técnicos**.
+Excepciones suma las reconocidas de DT y operador con observación válida.
+Errores es Hallazgos menos Excepciones; los errores técnicos se muestran aparte. DT tiene prioridad y un hallazgo
+no se descuenta dos veces. Las observaciones sin una marca Sí no descuentan
+hallazgos, ni lo hacen las excepciones sin justificación.
+
+Los resultados automáticos y errores técnicos no se alteran ni se borran por la
+revisión humana. Liberar un detalle devuelve a Errores los casos que dejan de
+estar exceptuados. Los reportes detallados y Guardar revisión en Excel incluyen
+una hoja Estadística de revisión con los mismos conteos; el resumen ejecutivo
+usa estas mismas columnas, incluyendo un total general.

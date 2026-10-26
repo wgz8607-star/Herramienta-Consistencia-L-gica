@@ -22,7 +22,7 @@ from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
 from .review_imports import ReviewImports
-from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, display
+from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS
 from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews
 
 try:
@@ -424,13 +424,14 @@ class ControlCalidadDialog(QDialog):
         style_section(result_box, "#3FA4F5")
         result_layout = QVBoxLayout(result_box)
         self.summary = QLabel("Aún no se han ejecutado controles.")
+        self.summary.setWordWrap(True)
         result_layout.addWidget(self.summary)
         self.location_summary = QLabel("Ubicación territorial: se identificará al ejecutar los controles.")
         self.location_summary.setWordWrap(True)
         self.location_summary.setStyleSheet("color: #0468A3; font-weight: 600; background: #E2F7F8; border-radius: 4px; padding: 5px;")
         result_layout.addWidget(self.location_summary)
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Componente", "Reglas ejecutadas", "Hallazgos", "Errores técnicos"])
+        self.table = QTableWidget(0, len(STAT_HEADERS))
+        self.table.setHorizontalHeaderLabels(STAT_HEADERS)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -947,20 +948,6 @@ class ControlCalidadDialog(QDialog):
     def finished(self):
         self.controls_running = False
         self.update_run_availability()
-        errors = sum(r.status == "Error" for r in self.results)
-        findings = sum(r.findings for r in self.results if isinstance(r.findings, int))
-        grouped = {}
-        for result in self.results:
-            group = grouped.setdefault(result.category, {"rules": 0, "findings": 0, "errors": 0})
-            group["rules"] += 1
-            group["findings"] += result.findings if isinstance(result.findings, int) else 0
-            group["errors"] += result.status == "Error"
-        self.table.setRowCount(0)
-        for category, values in sorted(grouped.items()):
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            for column, value in enumerate((category, values["rules"], values["findings"], values["errors"])):
-                self.table.setItem(row, column, QTableWidgetItem(str(value)))
         self.progress.setValue(self.progress.maximum())
         self.status.setText("Ejecución terminada.")
         self.review_imports = ReviewImports(self.review_cases)
@@ -970,7 +957,7 @@ class ControlCalidadDialog(QDialog):
         self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.review_save_button.setEnabled(bool(self.results))
         self.review_recover_button.setEnabled(bool(self.review_cases))
-        self.summary.setText(f"{len(self.results)} reglas ejecutadas · {findings} hallazgos · {errors} errores técnicos")
+
 
     def commit_review_editor(self):
         # Reviews are edited in Excel; no record-review window is created.
@@ -995,7 +982,22 @@ class ControlCalidadDialog(QDialog):
         self.status.setText("Revisión completa guardada; los filtros no excluyen registros.")
         return True
 
+    def refresh_review_statistics(self):
+        groups, totals = review_statistics(self.results, self.review_cases)
+        self.table.setRowCount(0)
+        for component, values in sorted(groups.items()):
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            for column, value in enumerate(statistics_row(component, values)):
+                self.table.setItem(row, column, QTableWidgetItem(str(value)))
+        self.summary.setText(
+            f"{totals['rules']} reglas ejecutadas · {totals['findings']} hallazgos · "
+            f"{totals['dt'] + totals['operator']} excepciones · "
+            f"{totals['pending']} errores · {totals['errors']} errores técnicos"
+        )
+
     def refresh_detail_review_controls(self):
+        self.refresh_review_statistics()
         components = sorted({case.component for case in self.review_cases})
         if set(components) != set(self.detail_review_rows):
             while self.detail_review_layout.count():
@@ -1178,15 +1180,13 @@ class ControlCalidadDialog(QDialog):
         context = book.create_sheet("Contexto de validación", 0)
         context.append(["Ubicación territorial validada"])
         context.append([self.validation_context])
-        summary.append(["Componente", "Reglas ejecutadas", "Hallazgos", "Errores técnicos"])
-        grouped = defaultdict(lambda: {"rules": 0, "findings": 0, "errors": 0})
+        summary.append(STAT_HEADERS)
+        groups, totals = review_statistics(self.results, self.review_cases)
         for result in self.results:
-            row = grouped[result.category]
-            row["rules"] += 1
-            row["findings"] += result.findings if isinstance(result.findings, int) else 0; row["errors"] += result.status == "Error"
             advance_report("Organizando resumen ejecutivo…")
-        for category, values in sorted(grouped.items()):
-            summary.append([category, values["rules"], values["findings"], values["errors"]])
+        for category, values in sorted(groups.items()):
+            summary.append(statistics_row(category, values))
+        summary.append(statistics_row('TOTAL', totals))
         general = book.create_sheet("Reporte general")
         general.append(["ID", "Ítem evaluado", "Cantidad", "Reglas asociadas"])
         if self.general_report_rows:

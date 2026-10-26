@@ -55,6 +55,14 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(self.viewer.observation.toPlainText(), 'Excepción documentada')
         self.assertTrue(self.owner.review_dirty)
 
+    def test_refresh_allows_selecting_the_previously_selected_row(self):
+        self.viewer.table.setCurrentCell(0, 0)
+        self.viewer.refresh()
+        self.assertEqual(self.viewer.table.currentRow(), -1)
+        self.viewer.table.setCurrentCell(0, 0)
+        self.assertEqual(self.viewer.current_case, 0)
+        self.assertTrue(self.viewer.observation.isEnabled())
+
     def test_unjustified_exception_prevents_switch_save_and_close(self):
         self.viewer.table.setCurrentCell(0, 0)
         self.viewer.state.setCurrentText(EXCEPTION)

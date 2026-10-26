@@ -79,6 +79,8 @@ class ReviewDialog(QDialog):
                       *[display(case.data.get(k)) for k in self.fields]]
             for column, value in enumerate(values):
                 self.table.setItem(index, column, QTableWidgetItem(str(value)))
+        self.table.setCurrentCell(-1, -1)
+        self.table.clearSelection()
         self.state.setCurrentText(PENDING)
         self.observation.clear()
         self.date.clear()

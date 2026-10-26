@@ -123,7 +123,7 @@ def build_cases(results, context):
         for row in result.rows or []:
             fields = {k: v for k, v in row.items() if str(k).lower() not in POSITION_FIELDS}
             has_identifier = any(
-                re.search(r"(^|_)(id|tid|uuid|guid|fid|npn|nit|documento|cedula|identificacion|predio|predial|codigo)(_|$)", str(k).lower())
+                re.search(r"(^|_)(id|tid|uuid|guid|fid|npn|nit|documento|cedula|identificacion|predio|predial|codigo|matricula|fmi)(_|$)", str(k).lower())
                 and str(k).lower() not in {'codigo_regla', 'id_regla', 'codigo_validacion', 'id_validacion'}
                 and v is not None and display(v).strip() for k, v in fields.items()
             )
@@ -233,6 +233,7 @@ class ImportedReview:
     recoverable: bool
     valid: bool = True
     exception_values: tuple = EXCEPTION_DEFAULTS
+    component: str = ""
 
 
 def load_review(path):
@@ -296,13 +297,10 @@ def load_review(path):
                     link_valid = False
                 else:
                     name, key_col, first, last, role_col, role_values, source_data, link_valid = links[0]
-                    for offset, header in enumerate(EXCEPTION_HEADERS):
-                        expected_formula = '=' + link_formula(name, key_col, first, last, role_col+offset, sheet_row)
-                        actual_formula = row.get(header)
-                        if isinstance(actual_formula, str) and re.sub(r'\$A\d+', f'$A{sheet_row}', actual_formula) == expected_formula:
-                            formula_headers.add(header)
-                        else:
-                            link_valid = False
+                    # Consolidation formulas are presentation only. Excel rewrites
+                    # quoting/function prefixes on save; never evaluate them or use
+                    # their cached values. Read the unique keyed source row instead.
+                    formula_headers.update(EXCEPTION_HEADERS)
             valid = payload is not None and link_valid and not any(
                 cell.data_type == 'f' and header not in formula_headers for header, cell in zip(headers, cells)
             )
@@ -320,11 +318,25 @@ def load_review(path):
                         valid = valid and ('' if actual_value is None else str(actual_value)) == expected_value
             records.append(ImportedReview(key, str(row[REVIEW_FIELDS[0]] or PENDING),
                                           str(row[REVIEW_FIELDS[1]] or ''), str(row[REVIEW_FIELDS[2]] or ''),
-                                          row.get('recuperable') == 'Sí', valid,
-                                          role_values))
+                                          (row.get('recuperable') == 'Sí' or _legacy_matricula_identity(payload)), valid,
+                                          role_values, payload.get('validation', [''])[0] if payload else ''))
         return records
     finally:
         book.close()
+
+
+def _legacy_matricula_identity(payload):
+    """Old reports marked matrícula-only groups unsupported; retain their keys.
+
+    The current case must independently pass recoverability checks; this does
+    not promote duplicate or unsupported current query outputs.
+    """
+    if not payload or payload.get('unsupported') or not payload.get('criterion'):
+        return False
+    for name, value in payload.get('data', ['', []])[1]:
+        if re.search(r'(^|_)(matricula|fmi)(_|$)', name.lower()) and _display_canonical(value).strip():
+            return True
+    return False
 
 
 def _display_canonical(value):
@@ -343,10 +355,11 @@ def restore_review(cases, records):
     old_counts = Counter(record.key for record in records)
     current = {case.key: case for case in cases}
     counts = dict(incorporadas=0, sin_correspondencia=0, ambiguas=0, conflictos=0,
-                  excepciones_invalidas=0, estados_invalidos=0, datos_invalidos=0, sin_seguimiento=0, operador_bloqueado=0)
+                  excepciones_invalidas=0, estados_invalidos=0, datos_invalidos=0, sin_seguimiento=0, operador_bloqueado=0, identidad_insuficiente=0, identidad_alterada=0)
     for record in records:
         if not record.valid or not record.recoverable:
             counts['datos_invalidos'] += 1
+            counts['identidad_alterada' if not record.valid else 'identidad_insuficiente'] += 1
             continue
         if record.key not in current:
             counts['sin_correspondencia'] += 1

@@ -133,6 +133,72 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(counts['datos_invalidos'], 1)
         self.assertEqual(counts['incorporadas'], 0)
 
+    def test_excel_normalized_consolidation_formulas_do_not_block_source_review(self):
+        from qgis_control_calidad.review import load_review, restore_review
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
+        book = load_workbook(path); sheet = book['regla_1']
+        columns = {cell.value: cell.column for cell in sheet[4]}
+        sheet.cell(5, columns['Excepción DT'], 'Sí')
+        sheet.cell(5, columns['Observación DT'], 'Justificación DT')
+        for col in range(9, 13):
+            cell = book['Revisión'].cell(2, col)
+            cell.value = cell.value.replace("'regla_1'!", 'regla_1!')
+        book.save(path); book.close()
+        current = build_cases(self.owner.results, self.owner.review_context)
+        counts = restore_review(current, load_review(path))
+        self.assertEqual(counts['incorporadas'], 1)
+        self.assertEqual(current[0].excepcion_dt, 'Sí')
+
+    def test_five_detail_buttons_load_release_and_reload_independently(self):
+        from qgis_control_calidad.review import save_review
+        components = ('Administrativas', 'Economicas', 'Estructura', 'Fisicas', 'Juridicas')
+        self.owner.results = [module.RuleResult('r1', c, 'Correcta', 1,
+            rows=[{'numero_predial': '00001', 'dato': c}], criterion_hash=digest(c)) for c in components]
+        self.owner.review_cases = build_cases(self.owner.results, self.owner.review_context)
+        self.owner.finished()
+        self.assertEqual(set(self.owner.detail_review_rows), set(components))
+        paths = {}
+        for index, component in enumerate(components):
+            path = str(Path(self.directory.name) / (component + '.xlsx'))
+            cases = build_cases([self.owner.results[index]], self.owner.review_context)
+            cases[0].excepcion_dt = 'Sí'; cases[0].observacion_dt = 'DT: ' + component
+            save_review(path, cases)
+            paths[component] = path
+            load, release, state = self.owner.detail_review_rows[component]
+            self.assertIn('No cargado', state.text())
+            with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information'):
+                load.click()
+            self.assertIn('Cargado', state.text())
+            self.assertTrue(release.isEnabled())
+        self.assertTrue(all(case.excepcion_dt == 'Sí' for case in self.owner.review_cases))
+        component = 'Administrativas'
+        with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Yes):
+            self.owner.detail_review_rows[component][1].click()
+        self.assertEqual(self.owner.review_cases[0].excepcion_dt, 'No')
+        self.assertTrue(all(case.excepcion_dt == 'Sí' for case in self.owner.review_cases[1:]))
+        self.assertIn('No cargado', self.owner.detail_review_rows[component][2].text())
+        # The file is not held open and can be edited and saved in place.
+        book = load_workbook(paths[component]); book['Revisión']['J2'] = 'DT corregida'
+        book.save(paths[component]); book.close()
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(paths[component], 'Excel')), patch.object(module.QMessageBox, 'information'):
+            self.owner.detail_review_rows[component][0].click()
+        self.assertEqual(self.owner.review_cases[0].observacion_dt, 'DT corregida')
+
+    def test_failed_detail_load_is_visible_without_losing_loaded_review(self):
+        from qgis_control_calidad.review import save_review
+        path = str(Path(self.directory.name) / 'admin.xlsx')
+        cases = build_cases(self.owner.results, self.owner.review_context)
+        cases[0].excepcion_dt = 'Sí'; cases[0].observacion_dt = 'DT válida'
+        save_review(path, cases)
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information'):
+            self.owner.recover_detail('Administrativas')
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path + '.missing', 'Excel')), patch.object(module.QMessageBox, 'warning'):
+            self.owner.recover_detail('Administrativas')
+        self.assertIn('Error de carga', self.owner.detail_review_rows['Administrativas'][2].text())
+        self.assertEqual(self.owner.review_cases[0].observacion_dt, 'DT válida')
+
     def test_direct_save_has_all_cases(self):
         path = str(Path(self.directory.name) / 'revision.xlsx')
         with patch.object(module.QFileDialog, 'getSaveFileName', return_value=(path, 'Excel')):

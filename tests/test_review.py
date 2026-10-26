@@ -59,6 +59,22 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(counts['incorporadas'], 1)
         self.assertEqual(new[0].observacion_usuario, 'Identidad completa')
 
+    def test_legacy_matricula_group_can_recover_without_npn(self):
+        old = cases([{'matricula': '00104749', 'conteo': 2, 'cond_1_12': 'Fail'}], rule='regla_1_12')
+        self.assertTrue(old[0].recoverable)
+        old[0].excepcion_dt = 'Sí'
+        old[0].observacion_dt = 'Matrícula verificada por DT'
+        save_review(self.path, old)
+        book = load_workbook(self.path)
+        book['Revisión']['H2'] = 'No'  # Previous versions did not recognize matrícula.
+        book.save(self.path); book.close()
+        current = cases([{'matricula': '00104749', 'conteo': 2, 'cond_1_12': 'Fail'}], rule='regla_1_12')
+        counts = restore_review(current, load_review(self.path))
+        self.assertEqual(counts['incorporadas'], 1)
+        self.assertEqual(current[0].excepcion_dt, 'Sí')
+        changed = cases([{'matricula': '00104749', 'conteo': 3, 'cond_1_12': 'Fail'}], rule='regla_1_12')
+        self.assertEqual(restore_review(changed, load_review(self.path))['incorporadas'], 0)
+
     def test_relevant_value_sql_rule_category_or_context_change_invalidates(self):
         old = cases(self.rows[:1])
         old[0].set_review(EXCEPTION, 'Justificada')

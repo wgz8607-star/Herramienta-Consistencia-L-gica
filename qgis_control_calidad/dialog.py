@@ -21,6 +21,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
+from .review_imports import ReviewImports
 from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, display
 from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews
 
@@ -252,6 +253,10 @@ class ControlCalidadDialog(QDialog):
         self.resize(1040, 700)
         self.results: list[RuleResult] = []
         self.review_cases = []
+        self.review_imports = ReviewImports(self.review_cases)
+        self.review_import_snapshot = {}
+        self.detail_review_rows = {}
+        self.detail_import_errors = {}
         self.review_dirty = False
         self.review_snapshot = []
         self.review_context = {}
@@ -437,12 +442,25 @@ class ControlCalidadDialog(QDialog):
         review_actions = QHBoxLayout()
         self.review_save_button = QPushButton("Guardar revisión en Excel")
         self.review_save_button.clicked.connect(self.save_review_excel)
-        self.review_recover_button = QPushButton("Recuperar revisión")
+        self.review_recover_button = QPushButton("Cargar revisión consolidada")
         self.review_recover_button.clicked.connect(self.recover_review)
         for button in (self.review_save_button, self.review_recover_button):
             button.setEnabled(False)
             review_actions.addWidget(button)
         result_layout.addLayout(review_actions)
+        detail_group = QGroupBox("Detalles de revisión — cargar o liberar por componente")
+        detail_group_layout = QVBoxLayout(detail_group)
+        detail_note = QLabel("Los archivos no quedan abiertos. Liberar retira su revisión importada; después puede editar el Excel y volver a cargarlo.")
+        detail_note.setWordWrap(True)
+        detail_group_layout.addWidget(detail_note)
+        detail_scroll = QScrollArea()
+        detail_scroll.setWidgetResizable(True)
+        detail_scroll.setMaximumHeight(160)
+        detail_content = QWidget()
+        self.detail_review_layout = QGridLayout(detail_content)
+        detail_scroll.setWidget(detail_content)
+        detail_group_layout.addWidget(detail_scroll)
+        result_layout.addWidget(detail_group)
         right_layout.addWidget(result_box, 1)
         splitter.addWidget(right)
         splitter.setSizes([450, 550])
@@ -873,6 +891,10 @@ class ControlCalidadDialog(QDialog):
             return
         self.results.clear()
         self.review_cases = []
+        self.review_imports = ReviewImports(self.review_cases)
+        self.review_import_snapshot = {}
+        self.detail_import_errors = {}
+        self.refresh_detail_review_controls()
         self.review_snapshot = []
         self.review_dirty = False
         self.review_context = {
@@ -941,6 +963,10 @@ class ControlCalidadDialog(QDialog):
                 self.table.setItem(row, column, QTableWidgetItem(str(value)))
         self.progress.setValue(self.progress.maximum())
         self.status.setText("Ejecución terminada.")
+        self.review_imports = ReviewImports(self.review_cases)
+        self.detail_import_errors = {}
+        self.review_import_snapshot = self.review_imports.snapshot()
+        self.refresh_detail_review_controls()
         self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.review_save_button.setEnabled(bool(self.results))
         self.review_recover_button.setEnabled(bool(self.review_cases))
@@ -965,33 +991,126 @@ class ControlCalidadDialog(QDialog):
             return False
         self.review_dirty = False
         self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
+        self.review_import_snapshot = self.review_imports.snapshot()
         self.status.setText("Revisión completa guardada; los filtros no excluyen registros.")
         return True
 
-    def recover_review(self):
-        if self.controls_running or not self.review_cases or not self.commit_review_editor():
-            return
-        path, _ = QFileDialog.getOpenFileName(self, "Recuperar revisión", "", "Excel de revisión (*.xlsx)")
-        if not path:
-            return
-        try:
-            records = load_review(path)
-            counts = restore_review(self.review_cases, records)
-        except Exception as error:
-            QMessageBox.warning(self, "No se recuperó la revisión", str(error))
-            return
-        if counts['incorporadas']:
-            self.review_dirty = True
-        QMessageBox.information(self, "Recuperación de revisión", (
+    def refresh_detail_review_controls(self):
+        components = sorted({case.component for case in self.review_cases})
+        if set(components) != set(self.detail_review_rows):
+            while self.detail_review_layout.count():
+                item = self.detail_review_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            self.detail_review_rows = {}
+            for row, component in enumerate(components):
+                name = QLabel(component)
+                load = QPushButton("Cargar detalle")
+                release = QPushButton("Liberar")
+                state = QLabel("No cargado")
+                state.setWordWrap(True)
+                load.clicked.connect(lambda checked=False, c=component: self.recover_detail(c))
+                release.clicked.connect(lambda checked=False, c=component: self.release_detail(c))
+                for column, widget in enumerate((name, load, release, state)):
+                    self.detail_review_layout.addWidget(widget, row, column)
+                self.detail_review_rows[component] = (load, release, state)
+        for component, (load, release, state) in self.detail_review_rows.items():
+            source = self.review_imports.sources.get(component)
+            load.setEnabled(not self.controls_running)
+            release.setEnabled(bool(source) and not self.controls_running)
+            load.setText("Recargar detalle" if source else "Cargar detalle")
+            if source:
+                counts = source['counts']
+                warnings = sum(counts[name] for name in ('sin_correspondencia', 'ambiguas', 'conflictos', 'excepciones_invalidas', 'estados_invalidos', 'datos_invalidos', 'operador_bloqueado'))
+                label = ('Cargado con observaciones' if warnings else 'Cargado') if counts['coincidencias'] else 'Sin coincidencias'
+                state.setText(f"{label}: {Path(source['path']).name} · {counts['incorporadas']} incorporadas · {counts['conflictos']} conflictos")
+                state.setToolTip(source['path'])
+                color = '#087F23' if counts['coincidencias'] and not warnings else '#A05A00'
+                state.setStyleSheet(f'color: {color}; font-weight: 600;')
+            else:
+                state.setText('No cargado')
+                state.setToolTip('')
+                state.setStyleSheet('color: #575756;')
+            if component in self.detail_import_errors:
+                state.setText('Error de carga — ' + state.text())
+                state.setStyleSheet('color: #B00020; font-weight: 600;')
+                state.setToolTip(self.detail_import_errors[component])
+
+    def recovery_message(self, counts):
+        return (
             f"Revisiones incorporadas: {counts['incorporadas']}\n"
             f"Sin correspondencia: {counts['sin_correspondencia']}\n"
             f"Correspondencias ambiguas: {counts['ambiguas']}\n"
             f"Seguimientos actuales conservados por conflicto: {counts['conflictos']}\n"
             f"Excepciones sin observación descartadas: {counts['excepciones_invalidas']}\n"
-            f"Estados inválidos convertidos a Revisión pendiente: {counts['estados_invalidos']}\n"
             f"Campos de operador descartados por Excepción DT: {counts['operador_bloqueado']}\n"
-            f"Datos alterados o no recuperables: {counts['datos_invalidos']}"
-        ))
+            f"Datos alterados o no recuperables: {counts['datos_invalidos']}\n"
+            f"Identidad insuficiente: {counts['identidad_insuficiente']}\n"
+            f"Datos o identidad alterados: {counts['identidad_alterada']}"
+        )
+
+    def recover_detail(self, component):
+        if self.controls_running or not self.review_cases:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, f"Cargar detalle: {component}", "", "Excel de revisión (*.xlsx)")
+        if not path:
+            return
+        try:
+            records = load_review(path)
+            previous = [case.tracking() + case.exception_tracking() for case in self.review_cases]
+            counts = self.review_imports.load(component, path, records)
+        except Exception as error:
+            self.detail_import_errors[component] = str(error)
+            self.refresh_detail_review_controls()
+            QMessageBox.warning(self, "No se cargó el detalle", str(error))
+            return
+        self.review_dirty = self.review_dirty or previous != [case.tracking() + case.exception_tracking() for case in self.review_cases]
+        self.detail_import_errors.pop(component, None)
+        self.refresh_detail_review_controls()
+        QMessageBox.information(self, f"Detalle {component}", self.recovery_message(counts))
+
+    def release_detail(self, component):
+        if self.controls_running or component not in self.review_imports.sources:
+            return
+        answer = QMessageBox.question(self, "Liberar detalle", f"Se retirará de la ejecución actual la revisión importada de {component}. El Excel no se modifica. ¿Continuar?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer != QMessageBox.Yes:
+            return
+        counts = self.review_imports.release(component)
+        self.detail_import_errors.pop(component, None)
+        self.review_dirty = self.review_dirty or bool(counts['retiradas'])
+        self.refresh_detail_review_controls()
+        self.status.setText(f"Detalle {component} liberado. Puede editar el archivo y volver a cargarlo. {counts['conservadas']} ediciones posteriores conservadas.")
+
+    def recover_review(self):
+        if self.controls_running or not self.review_cases:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Cargar revisión consolidada", "", "Excel de revisión (*.xlsx)")
+        if not path:
+            return
+        try:
+            records = load_review(path)
+            groups = sorted({record.component for record in records if record.component})
+            existing = [component for component in groups if component in self.review_imports.sources]
+            if existing:
+                raise ValueError('Ya hay detalles cargados: ' + ', '.join(existing) + '. Use Recargar detalle o Liberar para reemplazarlos explícitamente.')
+            supported = {case.component for case in self.review_cases}
+            messages = []
+            for component in groups:
+                if component not in supported:
+                    messages.append(component + ': sin resultados en la ejecución actual.')
+                    continue
+                subset = [record for record in records if record.component == component]
+                counts = self.review_imports.load(component, path, subset)
+                self.review_dirty = self.review_dirty or bool(counts['incorporadas'])
+                self.detail_import_errors.pop(component, None)
+                messages.append(component + ':\n' + self.recovery_message(counts))
+            if not groups:
+                raise ValueError('El archivo no identifica los componentes de revisión.')
+        except Exception as error:
+            QMessageBox.warning(self, "No se recuperó la revisión", str(error))
+            return
+        self.refresh_detail_review_controls()
+        QMessageBox.information(self, "Recuperación de revisión", '\n\n'.join(messages))
 
     def confirm_review_changes(self):
         if not self.review_dirty:
@@ -1006,6 +1125,8 @@ class ControlCalidadDialog(QDialog):
             for case, tracking in zip(self.review_cases, self.review_snapshot):
                 for name, value in zip(REVIEW_FIELDS + EXCEPTION_FIELDS, tracking):
                     setattr(case, name, value)
+            self.review_imports.restore_snapshot(self.review_import_snapshot)
+            self.refresh_detail_review_controls()
             self.review_dirty = False
             return True
         return False

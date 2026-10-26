@@ -210,3 +210,38 @@ muestra al seleccionar una celda de excepción en la hoja de la regla. En los
 paquetes, Revisión es el consolidado de fórmulas y no se edita allí. Los archivos
 Excel creados con versiones anteriores deben regenerarse para incorporar el
 nuevo dominio.
+
+## Carga visible e independiente de detalles (1.3.0)
+
+Después de ejecutar las reglas, cada componente con hallazgos muestra su propio
+botón **Cargar detalle**, el estado **No cargado**, y **Liberar**. Al cargar,
+se muestra el nombre del archivo y el resultado: **Cargado**, **Cargado con
+observaciones**, **Sin coincidencias** o **Error de carga**. Los cinco detalles,
+si existen, se cargan independientemente y sus revisiones se acumulan.
+
+**Liberar** pide confirmación y retira exclusivamente lo aportado por ese archivo
+a la ejecución actual; no modifica el Excel ni elimina revisiones de otros
+detalles. Si el seguimiento cambió posteriormente, lo conserva en lugar de
+borrarlo. El archivo no queda abierto después de importarlo y puede editarse
+en Excel; tras guardarlo, use **Recargar detalle** o vuelva a cargarlo después
+de Liberar. La recarga reemplaza explícitamente la revisión anterior de ese
+mismo detalle, incluso cuando se quitó una marca; un archivo ilegible o de otro
+componente no destruye una carga anterior válida.
+
+**Cargar revisión consolidada** distribuye los componentes entre esas mismas
+filas. Si un componente ya está cargado, solicita reemplazarlo mediante su
+control individual. No se permiten sustituciones silenciosas entre archivos.
+Los estados, rutas y la procedencia de cada detalle viven en memoria durante
+la ejecución. **Guardar revisión en Excel** conserva el seguimiento consolidado
+en la carpeta elegida; no se escribe en PostgreSQL ni se mantienen conexiones
+a los archivos. Iniciar otra ejecución restablece los estados de carga.
+
+La regla 1.12 del modelo interno devuelve grupos por matrícula, no predios
+individuales. La identificación reconoce ahora matrícula/FMI además de NPN,
+documentos y los demás identificadores: la clave incluye la matrícula, el conteo,
+los datos retornados, el SQL y el contexto. Se admiten reportes anteriores que
+marcaron estos grupos como no recuperables por no reconocer la matrícula,
+siempre que la ejecución actual confirme una coincidencia única e idéntica.
+La lectura del consolidado no depende de cómo Excel reescriba sus fórmulas:
+se leen las celdas de la regla por clave, sin ejecutar las fórmulas. El resumen
+distingue identidad insuficiente de datos/identidad alterados.

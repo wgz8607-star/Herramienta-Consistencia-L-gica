@@ -77,7 +77,7 @@ Si cambia la primera fila por reordenamiento o eliminación de reglas, transferi
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
 
-## Excepciones DT y operador (1.2.0)
+## Excepciones DT y operador (1.2.1)
 
 La revisión se diligencia en Excel. No se genera la ventana «Revisión de hallazgos
 por registro» ni se muestra el botón «Revisar hallazgos». Se conservan **Guardar
@@ -92,11 +92,25 @@ Todos los reportes incluyen una hoja **Revisión** con cada hallazgo y estos cam
 | Excepción operador | No | Sí exige Observación operador; no se permite cuando DT es Sí. |
 | Observación operador | Vacío | No se permite diligenciar cuando DT es Sí. |
 
-La hoja Revisión es el único lugar editable del seguimiento dentro de cada
-reporte. Los cuatro campos de las hojas de detalle por regla reflejan sus valores
-mediante referencias a Revisión y están protegidos para evitar decisiones
-contradictorias en hojas distintas. El archivo ejecutivo y los paquetes por
-componente también incluyen sus filas y claves para recuperar la revisión.
+En los paquetes por componente, diligencie los cuatro campos en la hoja de
+cada regla, por hallazgo. La hoja **Revisión** consolida automáticamente esas
+marcas y observaciones mediante búsquedas por `clave_caso`; sus campos están
+protegidos para evitar dos fuentes de edición. La clave se conserva oculta en
+las hojas de detalle. Cambiar el orden de las filas no altera el cruce.
+
+Las columnas de excepción se muestran en verde para **Sí** y rojo para **No**.
+Cuando DT es Sí, el gris de los campos del operador tiene prioridad sobre esos
+colores. En reportes sin hojas de regla (archivo ejecutivo o Guardar revisión en
+Excel), el seguimiento se diligencia directamente en **Revisión**.
+
+Al recuperar un paquete, el plugin obtiene las marcas desde las hojas de regla
+por su clave, sin depender de los valores de fórmula almacenados por Excel.
+También verifica que los datos originales de la hoja no se hayan alterado. Las
+fórmulas se usan solo para mostrar el consolidado en Excel, no para ejecutar
+código ni decidir coincidencias. El consolidado de un paquete corresponde a ese
+mismo archivo; no modifica otros archivos Excel externos abiertos o guardados.
+Para actualizar un archivo de revisión separado, recupere el paquete en QGIS y
+use **Guardar revisión en Excel**.
 
 Escriba primero la observación y luego «Sí» o «No» en la excepción. Si hay
 seguimiento del operador, límpielo antes de marcar DT en Sí. Las validaciones de

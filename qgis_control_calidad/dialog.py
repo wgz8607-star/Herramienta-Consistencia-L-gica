@@ -21,8 +21,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
-from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS
-from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls
+from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, display
+from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews
 
 try:
     import psycopg2
@@ -1139,12 +1139,11 @@ class ControlCalidadDialog(QDialog):
             rule_sheet = book.create_sheet(sheet_name)
             fields = sorted({
                 key for _predio, row in rows_by_rule[(category, rule)] for key in row
-                if re.sub(r"[^a-z0-9]", "", str(key).lower()) != "numeropredialnacional"
             })
             condition_fields = [key for key in fields if str(key).lower().startswith("cond_")]
             fields = [key for key in fields if key not in condition_fields] + condition_fields
             rule_headers = [
-                "Predio", *fields, *EXCEPTION_HEADERS,
+                "Predio", *fields, "clave_caso", *EXCEPTION_HEADERS,
             ]
             last_column = len(rule_headers)
             rule_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
@@ -1160,9 +1159,12 @@ class ControlCalidadDialog(QDialog):
             for index, (predio, row) in enumerate(rows_by_rule[(category, rule)], start=5):
                 for column, value in enumerate([
                     predio or "Sin identificador", *[row.get(key, "") for key in fields],
+                    review_by_row[id(row)].key if id(row) in review_by_row else "",
                     *(review_by_row[id(row)].exception_tracking() if id(row) in review_by_row else EXCEPTION_DEFAULTS),
                 ], start=1):
-                    rule_sheet.cell(index, column, value)
+                    cell = rule_sheet.cell(index, column, display(value))
+                    cell.data_type = 's'
+                    cell.number_format = '@'
             for cell in rule_sheet[1]:
                 cell.fill = PatternFill("solid", fgColor="0468A3"); cell.font = Font(color="FFFFFF", bold=True, size=11)
                 cell.alignment = Alignment(wrap_text=True, vertical="center")
@@ -1272,23 +1274,13 @@ class ControlCalidadDialog(QDialog):
                 for column_index, column in enumerate(target.iter_cols(), start=1):
                     target.column_dimensions[get_column_letter(column_index)].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 42)
                 target.freeze_panes = "A5"; target.auto_filter.ref = f"A4:{target.cell(4, target.max_column).coordinate[:-1]}{target.max_row}"
-                # The editable source is the Revisión sheet; detail sheets mirror it.
-                component_cases = [case for case in self.review_cases if case.component == category]
-                component_positions = {id(case): position for position, case in enumerate(component_cases, 2)}
-                for detail_row, (_predio, original_row) in enumerate(rows_by_rule[(category, rule)], 5):
-                    case = review_by_row.get(id(original_row))
-                    if case is not None:
-                        for offset in range(4):
-                            target.cell(detail_row, target.max_column - 3 + offset,
-                                        f"='Revisión'!{get_column_letter(9 + offset)}{component_positions[id(case)]}")
-                target.protection.sheet = True
-                target.protection.autoFilter = False
             package_index.freeze_panes = "A2"; package_index.auto_filter.ref = package_index.dimensions
             for column in package_index.columns:
                 package_index.column_dimensions[column[0].column_letter].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 36)
             safe_category = re.sub(r"[^A-Za-z0-9_-]+", "_", category).strip("_") or "paquete"
             save_review(None, [case for case in self.review_cases if case.component == category],
                         [result for result in self.results if result.category == category], workbook=package)
+            link_rule_reviews(package)
             package.save(str(Path(directory) / f"detalle_{safe_category}_{stamp}.xlsx"))
             advance_report(f"Guardando paquete {category}…")
         for sheet in [detail, *[book[name] for name in rule_sheet_names.values()]]:

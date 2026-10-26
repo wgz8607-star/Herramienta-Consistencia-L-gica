@@ -15,7 +15,7 @@ import unicodedata
 from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook, load_workbook
-from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, yes, validate, add_controls
+from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, yes, validate, add_controls, link_formula
 
 PENDING = "Revisión pendiente"
 EXCEPTION = "Excepción"
@@ -263,14 +263,49 @@ def load_review(path):
         required = ["clave_caso", "componente", "validacion", "resultado_automatico", *REVIEW_FIELDS, "recuperable"]
         if any(headers.count(name) != 1 for name in required) or len(headers) != len(set(headers)):
             raise ValueError("Faltan columnas obligatorias o hay columnas duplicadas.")
+        linked = defaultdict(list)
+        if '_OrigenRevision' in book:
+            for name, key_col, first, last, role_col in book['_OrigenRevision'].iter_rows(min_row=2, max_col=5, values_only=True):
+                if name not in book or not all(isinstance(v, int) and v > 0 for v in (key_col, first, last, role_col)):
+                    raise ValueError('Referencias de hojas de regla inválidas.')
+                source = book[name]
+                source_headers = {cell.value: cell.column for cell in next(source.iter_rows(min_row=4, max_row=4)) if cell.value is not None}
+                if source_headers.get('clave_caso') != key_col or any(source_headers.get(header) != role_col+i for i, header in enumerate(EXCEPTION_HEADERS)):
+                    raise ValueError('Columnas de revisión alteradas en una hoja de regla.')
+                for source_cells in source.iter_rows(min_row=first, max_row=last):
+                    values = [cell.value for cell in source_cells]
+                    key = values[key_col-1]
+                    role_values = tuple(str(values[role_col+i-1] or default) for i, default in enumerate(EXCEPTION_DEFAULTS))
+                    data = {header: values[col-1] for header, col in source_headers.items()}
+                    safe = not any(cell.data_type == 'f' for cell in source_cells)
+                    linked[key].append((name, key_col, first, last, role_col, role_values, data, safe))
         records = []
-        for cells in sheet.iter_rows(min_row=2):
+        for sheet_row, cells in enumerate(sheet.iter_rows(min_row=2), 2):
             row = dict(zip(headers, [c.value for c in cells]))
             if not any(value is not None for value in row.values()):
                 continue
             key = row.get("clave_caso")
             payload = identities.get(key)
-            valid = payload is not None and not any(c.data_type == "f" for c in cells)
+            links = linked.get(key, [])
+            role_values = tuple(str(row.get(name) or default) for name, default in zip(EXCEPTION_HEADERS, EXCEPTION_DEFAULTS))
+            formula_headers = set()
+            source_data = None
+            link_valid = True
+            if links:
+                if len(links) != 1:
+                    link_valid = False
+                else:
+                    name, key_col, first, last, role_col, role_values, source_data, link_valid = links[0]
+                    for offset, header in enumerate(EXCEPTION_HEADERS):
+                        expected_formula = '=' + link_formula(name, key_col, first, last, role_col+offset, sheet_row)
+                        actual_formula = row.get(header)
+                        if isinstance(actual_formula, str) and re.sub(r'\$A\d+', f'$A{sheet_row}', actual_formula) == expected_formula:
+                            formula_headers.add(header)
+                        else:
+                            link_valid = False
+            valid = payload is not None and link_valid and not any(
+                cell.data_type == 'f' and header not in formula_headers for header, cell in zip(headers, cells)
+            )
             if valid and not payload.get("unsupported"):
                 original = dict(payload["data"][1])
                 actual = {h[5:]: '' if row[h] is None else str(row[h]) for h in headers if str(h).startswith('dato:') and h[5:].lower() not in POSITION_FIELDS}
@@ -278,10 +313,15 @@ def load_review(path):
                 # Blank columns from other rules are harmless; changed data is not.
                 valid = all(actual.get(k) == v for k, v in expected.items()) and not any(v for k, v in actual.items() if k not in expected)
                 valid = valid and [row['componente'], row['validacion']] == payload['validation'] and row['resultado_automatico'] == payload['automatic']
+                if source_data is not None:
+                    for field, expected_value in expected.items():
+                        source_field = field if field in source_data else ('Predio' if re.sub(r'[^a-z0-9]', '', field.lower()) == 'numeropredialnacional' else field)
+                        actual_value = source_data.get(source_field)
+                        valid = valid and ('' if actual_value is None else str(actual_value)) == expected_value
             records.append(ImportedReview(key, str(row[REVIEW_FIELDS[0]] or PENDING),
                                           str(row[REVIEW_FIELDS[1]] or ''), str(row[REVIEW_FIELDS[2]] or ''),
                                           row.get('recuperable') == 'Sí', valid,
-                                          tuple(str(row.get(name) or default) for name, default in zip(EXCEPTION_HEADERS, EXCEPTION_DEFAULTS))))
+                                          role_values))
         return records
     finally:
         book.close()

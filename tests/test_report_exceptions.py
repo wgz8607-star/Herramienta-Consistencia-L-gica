@@ -62,6 +62,20 @@ class ReportExceptionTests(unittest.TestCase):
         self.assertGreater(len(sheet.conditional_formatting), 0)
         book.close()
 
+    def test_yes_green_no_red_and_dt_operator_gray_has_priority(self):
+        save_review(self.path, cases())
+        book = load_workbook(self.path); sheet = book['Revisión']
+        rules = [(str(area.sqref), rule) for area in sheet.conditional_formatting
+                 for rule in sheet.conditional_formatting[area]]
+        flags = [rule for area, rule in rules if area == 'I2']
+        self.assertEqual({tuple(rule.formula): rule.dxf.fill.fgColor.rgb for rule in flags},
+                         {('$I2="Sí"',): '00C6EFCE', ('$I2="No"',): '00FFC7CE'})
+        gray = next(rule for area, rule in rules if area == 'K2:L2')
+        self.assertTrue(gray.stopIfTrue)
+        self.assertEqual(gray.dxf.fill.fgColor.rgb, '00D9D9D9')
+        self.assertLess(gray.priority, min(rule.priority for area, rule in rules if area == 'K2'))
+        book.close()
+
     def test_recovery_preserves_dt_or_operator_only_when_case_unchanged(self):
         for flag, note in (('excepcion_dt', 'observacion_dt'), ('excepcion_operador', 'observacion_operador')):
             old = cases(); setattr(old[0], flag, 'Sí'); setattr(old[0], note, 'Texto de justificación')

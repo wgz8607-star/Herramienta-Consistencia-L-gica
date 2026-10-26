@@ -13,7 +13,7 @@ from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
     QMessageBox, QPushButton, QProgressBar, QScrollArea, QSplitter,
-    QHeaderView, QMenu, QStackedWidget, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
+    QHeaderView, QMenu, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
 from qgis.core import QgsApplication, QgsAuthMethodConfig, QgsSettings
 from openpyxl import Workbook, load_workbook
@@ -300,12 +300,23 @@ class ControlCalidadDialog(QDialog):
         layout.addWidget(subtitle)
 
         splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = splitter
+        splitter.setChildrenCollapsible(False)
         layout.addWidget(splitter, 1)
         left = QWidget()
         left_layout = QVBoxLayout(left)
-        connection = QGroupBox("1. Conexión a PostgreSQL / PostGIS")
+        left_layout.setContentsMargins(0, 0, 4, 0)
+        left_layout.setSpacing(6)
+        connection = QGroupBox("1. Conexión PostgreSQL / PostGIS")
         style_section(connection, "#575756")
+        connection.setStyleSheet(connection.styleSheet() +
+            " QWidget { font-size: 12px; } QGroupBox { padding: 6px; } QLineEdit, QComboBox { padding: 3px; } "
+            "QPushButton { padding: 4px 6px; }")
         form = QFormLayout(connection)
+        form.setContentsMargins(6, 16, 6, 6)
+        form.setSpacing(5)
+        form.setRowWrapPolicy(QFormLayout.WrapAllRows)
+        form.setFormAlignment(Qt.AlignTop)
         self.model = QComboBox()
         self.model.addItems(MODELS)
         self.model.currentTextChanged.connect(self.reset_model_selection)
@@ -314,11 +325,13 @@ class ControlCalidadDialog(QDialog):
         self.connection_mode.addItems(["Conexión guardada en QGIS", "Conexión manual a PostgreSQL"])
         self.connection_mode.currentIndexChanged.connect(self.change_connection_mode)
         self.connection_stack = QStackedWidget()
+        self.connection_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.qgis_connection = QComboBox()
         self.qgis_connection.currentTextChanged.connect(self.describe_qgis_connection)
         qgis_page = QWidget()
         qgis_layout = QFormLayout(qgis_page)
         qgis_layout.setContentsMargins(0, 0, 0, 0)
+        qgis_layout.setRowWrapPolicy(QFormLayout.WrapAllRows)
         qgis_row = QHBoxLayout()
         refresh_qgis = QPushButton("Actualizar")
         refresh_qgis.clicked.connect(self.load_qgis_connections)
@@ -358,7 +371,8 @@ class ControlCalidadDialog(QDialog):
         self.choose_sql_version = choose_sql_version
         choose_sql_version.setEnabled(False)
         choose_sql_version.clicked.connect(self.open_sql_version_dialog)
-        version_row = QHBoxLayout()
+        version_row = QVBoxLayout()
+        version_row.setSpacing(4)
         version_row.addWidget(self.sql_version_label, 1)
         version_row.addWidget(choose_sql_version)
         form.addRow("Versión de SQL", version_row)
@@ -391,7 +405,19 @@ class ControlCalidadDialog(QDialog):
         info.setStyleSheet("color: #52666a;")
         left_layout.addWidget(info)
         left_layout.addStretch()
-        splitter.addWidget(left)
+        for combo in left.findChildren(QComboBox):
+            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(10)
+            combo.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            combo.setMinimumWidth(100)
+        for label in left.findChildren(QLabel):
+            label.setWordWrap(True)
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setMinimumWidth(250)
+        left_scroll.setWidget(left)
+        splitter.addWidget(left_scroll)
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
@@ -431,12 +457,15 @@ class ControlCalidadDialog(QDialog):
         self.location_summary.setStyleSheet("color: #0468A3; font-weight: 600; background: #E2F7F8; border-radius: 4px; padding: 5px;")
         result_layout.addWidget(self.location_summary)
         self.table = QTableWidget(0, len(STAT_HEADERS))
-        self.table.setHorizontalHeaderLabels(STAT_HEADERS)
+        self.table.setHorizontalHeaderLabels([
+            header.replace('Reglas ejecutadas', 'Reglas\nejecutadas').replace('Errores técnicos', 'Errores\ntécnicos')
+            for header in STAT_HEADERS
+        ])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setStyleSheet("QTableWidget { background: white; gridline-color: #D7EAF7; border: 1px solid #3FA4F5; } "
-                                 "QHeaderView::section { background: #068CBB; color: white; border: none; padding: 6px; font-weight: 700; } "
+                                 "QHeaderView::section { background: #068CBB; color: white; border: none; padding: 4px; font-size: 12px; font-weight: 700; } "
                                  "QTableWidget::item:selected { background: #BFEAF0; color: #575756; }")
         self.table.setMinimumHeight(160)
         result_layout.addWidget(self.table)
@@ -464,7 +493,9 @@ class ControlCalidadDialog(QDialog):
         result_layout.addWidget(detail_group)
         right_layout.addWidget(result_box, 1)
         splitter.addWidget(right)
-        splitter.setSizes([450, 550])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([300, 740])
 
         controls = QHBoxLayout()
         self.progress = QProgressBar(self)
@@ -484,6 +515,13 @@ class ControlCalidadDialog(QDialog):
         layout.addLayout(controls)
         self.load_qgis_connections()
         self.update_ingestion_button()
+        self.resize_connection_stack()
+
+    def resize_connection_stack(self):
+        page = self.connection_stack.currentWidget()
+        if page is not None:
+            page.layout().activate()
+            self.connection_stack.setFixedHeight(page.sizeHint().height() + 4)
 
     def update_ingestion_button(self, *_):
         supports_snc = self.model.currentText() in SNC_REPOSITORY_TABLES
@@ -664,6 +702,7 @@ class ControlCalidadDialog(QDialog):
 
     def change_connection_mode(self, index):
         self.connection_stack.setCurrentIndex(index)
+        self.resize_connection_stack()
         self.schema.clear()
         self.status.setText("Pulse Listar Esquemas para cargar los esquemas disponibles.")
 

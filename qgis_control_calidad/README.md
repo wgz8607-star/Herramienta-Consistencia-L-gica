@@ -261,3 +261,11 @@ revisión humana. Liberar un detalle devuelve a Errores los casos que dejan de
 estar exceptuados. Los reportes detallados y Guardar revisión en Excel incluyen
 una hoja Estadística de revisión con los mismos conteos; el resumen ejecutivo
 usa estas mismas columnas, incluyendo un total general.
+
+## Distribución compacta (1.3.2)
+
+La conexión ocupa inicialmente unos 300 px (30 % del área) y los resultados el
+70 % restante. El separador permite cambiar esa proporción. Los controles de
+conexión se apilan con menor espaciado y desplazamiento vertical cuando hace
+falta. El modo de conexión guardada ya no reserva la altura de los campos
+manuales ocultos, eliminando el hueco antes de Listar Esquemas.

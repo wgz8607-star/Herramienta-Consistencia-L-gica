@@ -77,7 +77,7 @@ Si cambia la primera fila por reordenamiento o eliminación de reglas, transferi
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
 
-## Excepciones DT y operador (1.2.1)
+## Excepciones DT y operador (1.2.2)
 
 La revisión se diligencia en Excel. No se genera la ventana «Revisión de hallazgos
 por registro» ni se muestra el botón «Revisar hallazgos». Se conservan **Guardar
@@ -112,9 +112,11 @@ mismo archivo; no modifica otros archivos Excel externos abiertos o guardados.
 Para actualizar un archivo de revisión separado, recupere el paquete en QGIS y
 use **Guardar revisión en Excel**.
 
-Escriba primero la observación y luego «Sí» o «No» en la excepción. Si hay
-seguimiento del operador, límpielo antes de marcar DT en Sí. Las validaciones de
-Excel son de tipo personalizado, con error Stop. Si DT es Sí, los campos del
+Los campos de excepción tienen dominio **Sí / No**, mediante listas desplegables.
+Diligencie primero la observación: hasta que tenga texto válido, la lista solo
+ofrece **No**. Después ofrece **No** y **Sí**. Si hay
+seguimiento del operador, límpielo antes de marcar DT en Sí. Las excepciones usan validación de lista con dominios nombrados y las observaciones
+validación personalizada, ambas con error Stop. Si DT es Sí, los campos del
 operador aparecen en gris y se rechazan entradas en ellos. Un XLSX sin macros no
 puede cambiar dinámicamente la propiedad de bloqueo de las celdas: este control
 usa validación, sombreado y comprobación adicional al importar. La protección

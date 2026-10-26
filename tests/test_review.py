@@ -83,14 +83,22 @@ class ReviewTests(unittest.TestCase):
         current[0].excepcion_dt = 'Sí'; current[0].observacion_dt = 'DT verificada'
         current[1].excepcion_operador = 'Sí'; current[1].observacion_operador = 'Operador verificado'
         groups, totals = review_statistics([automatic, error], current)
-        self.assertEqual(totals, dict(rules=2, findings=3, pending=1, dt=1, operator=1, errors=1))
+        self.assertEqual(totals, dict(rules=2, findings=3, pending=2, dt=1, operator=1, errors=1))
         self.assertEqual(automatic.findings, 3)
         self.assertEqual(error.status, 'Error')
         save_review(self.path, current, [automatic, error])
         book = load_workbook(self.path)
         stats = book['Estadística de revisión']
-        self.assertEqual(list(stats.values)[-1], ('TOTAL', 2, 3, 2, 1, 1))
+        self.assertEqual(list(stats.values)[-1], ('TOTAL', 2, 3, 1, 1, 2, 1))
         book.close()
+
+    def test_operator_exceptions_are_visible_but_do_not_discount_errors(self):
+        current = cases(self.rows)
+        current[0].excepcion_operador = 'Sí'; current[0].observacion_operador = 'Propuesta'
+        _, totals = review_statistics([result(self.rows)], current)
+        self.assertEqual(totals['operator'], 1)
+        self.assertEqual(totals['dt'], 0)
+        self.assertEqual(totals['pending'], 2)
 
     def test_statistics_ignore_unjustified_exceptions_and_do_not_count_twice(self):
         current = cases(self.rows)

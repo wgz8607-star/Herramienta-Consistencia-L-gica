@@ -416,7 +416,7 @@ def restore_review(cases, records):
 
 
 STAT_HEADERS = ('Componente', 'Reglas ejecutadas', 'Hallazgos',
-                'Excepciones', 'Errores', 'Errores técnicos')
+                'Excepciones DT', 'Excepciones operador', 'Errores', 'Errores técnicos')
 
 
 def review_statistics(results, cases):
@@ -442,12 +442,12 @@ def review_statistics(results, cases):
         elif yes(case.excepcion_operador) and valid_observation(case.observacion_operador):
             values['operator'] += 1
     for values in grouped.values():
-        values['pending'] = max(0, values['findings'] - values['dt'] - values['operator'])
+        values['pending'] = max(0, values['findings'] - values['dt'])
     totals = {field: sum(values[field] for values in grouped.values())
               for field in ('rules', 'findings', 'pending', 'dt', 'operator', 'errors')}
     return grouped, totals
 
 
 def statistics_row(component, values):
-    return (component, values['rules'], values['findings'], values['dt'] + values['operator'],
+    return (component, values['rules'], values['findings'], values['dt'], values['operator'],
             values['pending'], values['errors'])

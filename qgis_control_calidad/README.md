@@ -15,7 +15,7 @@ Al seleccionar CICA aparece el botón **Cargar insumos CICA**. Solicita individu
 
 ## Referencias R1 y R2
 
-Para ambos modelos, el botón **Cargar referencia R1 y R2** valida los archivos Excel del catastro vigente y sus columnas requeridas. La lectura de los TXT de ancho fijo queda pendiente hasta disponer de su diccionario de posiciones.
+Para ambos modelos, la sección inferior **Referencias R1 y R2** valida los archivos Excel del catastro vigente y sus columnas requeridas. La lectura de los TXT de ancho fijo queda pendiente hasta disponer de su diccionario de posiciones.
 
 
 ## Instalación para pruebas
@@ -250,9 +250,10 @@ distingue identidad insuficiente de datos/identidad alterados.
 
 La tabla y el resumen se recalculan al cargar una revisión consolidada, cargar,
 recargar o liberar un detalle, y al descartar cambios. Muestran por componente:
-**Componente · Reglas ejecutadas · Hallazgos · Excepciones · Errores · Errores técnicos**.
-Excepciones suma las reconocidas de DT y operador con observación válida.
-Errores es Hallazgos menos Excepciones; los errores técnicos se muestran aparte. DT tiene prioridad y un hallazgo
+**Componente · Reglas ejecutadas · Hallazgos · Excepciones DT · Excepciones operador · Errores · Errores técnicos**.
+Las excepciones DT y operador se muestran por separado, con observación válida.
+**Errores = Hallazgos − Excepciones DT**. Las marcas del operador no descuentan
+errores; los errores técnicos se muestran aparte. DT tiene prioridad y un hallazgo
 no se descuenta dos veces. Las observaciones sin una marca Sí no descuentan
 hallazgos, ni lo hacen las excepciones sin justificación.
 
@@ -274,3 +275,52 @@ En la conexión manual, el servidor preestablecido es `172.19.3.225`. El campo
 Servidor es de solo lectura y la conexión usa esa misma constante, incluso si
 el texto se altera por código. Puerto, base de datos y credenciales de la
 conexión manual conservan sus campos de configuración.
+
+## Referencias R1/R2 y modos de consulta (1.4.0)
+
+Una minisección **Referencias R1 y R2**, al pie de la ventana, reemplaza los
+controles de referencias del panel de conexión. Dispone de tres opciones:
+
+1. **Archivos R1 y R2 temporales**: seleccione un Excel R1 y, si se necesita,
+   un Excel R2 opcional. **Preparar referencias temporales** valida encabezados
+   y crea una copia local de trabajo. No requiere conectarse a PostgreSQL para
+   preparar los archivos ni escribe tablas en `public`. Tras Aceptar se muestran
+   nombres y cantidades de registros. **Liberar** elimina las copias locales.
+2. **R1 existente en public**: **Actualizar listado** enumera los R1 accesibles
+   en la conexión de datos actual. Seleccione uno; el plugin solo lo consulta.
+   No crea, elimina ni sobrescribe esa tabla. R2 temporal no se usa en este modo.
+3. **Consulta de R1 por municipio (próximamente)**: visible pero deshabilitada;
+   no contiene todavía un catálogo ni consultas a municipios.
+
+En el modo temporal, al iniciar la validación, el worker crea `reference_r1` y
+`reference_r2` como **TEMP TABLE** y carga sus datos con COPY en la misma conexión
+PostgreSQL que ejecuta las reglas y el reporte general. Usa el esquema especial
+`pg_temp`, no un esquema de resultados permanente. El usuario de base requiere
+permiso TEMP. Se confirma la preparación una vez para que el rollback de una
+regla fallida no elimine las tablas necesarias para las siguientes.
+
+La conexión se cierra explícitamente al finalizar, tanto si termina correctamente
+como si falla; PostgreSQL elimina sus tablas temporales. Las copias locales se
+conservan para repetir una ejecución con los mismos archivos y se eliminan al
+liberarlas, reemplazarlas o cerrar el diálogo principal. No se borran las tablas
+R1/R2 de `public` que existían de versiones anteriores. Los archivos originales
+no se modifican. Los datos temporales sí se envían al servidor al validar; este
+modo evita persistirlos, no implica procesarlos exclusivamente en el equipo.
+
+Se admiten los marcadores `{esquema_r1}.{tabla_r1}`,
+`{esquema_r1}{punto}{tabla_r1}`, `{esquema_r1}{tabla_r1}` y sus equivalentes R2.
+Se resuelven antes de los marcadores del esquema de datos. Una regla que solicite
+una referencia no cargada informa un error; no recurre silenciosamente a otra
+tabla permanente. Las sentencias SQL con nombres de referencias escritos
+literalmente deben adaptarse en el repositorio para utilizar estos marcadores.
+
+La identidad de revisión incorpora la huella del contenido de las referencias
+temporales, sin depender del nombre del archivo ni del directorio temporal.
+Cambiar los datos de la referencia invalida conservadoramente la recuperación
+automática de revisiones de aquella ejecución. La opción de R1 público conserva
+el identificador de referencia anterior para no invalidar por este cambio de UI
+las revisiones existentes.
+
+Desde 1.4.0 la estadística descuenta exclusivamente las excepciones DT. Las
+excepciones del operador siguen visibles como seguimiento separado, pero no
+cierran hallazgos ni se restan del total de errores.

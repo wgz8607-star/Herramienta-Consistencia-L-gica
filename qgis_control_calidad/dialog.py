@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from contextlib import closing
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
+from .reference_data import TEMP_TABLES, install_reference
 from .review_imports import ReviewImports
 from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS
 from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews
@@ -173,35 +175,52 @@ class RuleWorker(QObject):
     progress = pyqtSignal(int, int)
     fatal_error = pyqtSignal(str)
     finished = pyqtSignal()
+    message = pyqtSignal(str)
 
-    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None):
+    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None):
         super().__init__()
         self.params = params
         self.schema = schema
         self.prefix = prefix
         self.r1_table = r1_table
+        self.references = dict(references or {})
         self.rules = rules
         self.general_report_path = general_report_path
 
     def resolve_sql(self, sql):
-        schema_prefix = self.schema.rstrip(".") + "."
-        sql = sql.replace("{esquema}.{punto}", schema_prefix)
-        sql = sql.replace("{esquema}{punto}.", schema_prefix)
-        sql = sql.replace("{esquema}{punto}", schema_prefix)
-        sql = sql.replace("{esquema}", schema_prefix).replace("{punto}", self.prefix)
-        r1_markers = ("{esquema_r1}.{tabla_r1}", "{esquema_r1}{tabla_r1}")
-        if any(marker in sql for marker in r1_markers):
-            if not self.r1_table:
-                raise ValueError("Esta regla requiere seleccionar una tabla R1 existente en public.")
-            if not re.fullmatch(r"[A-Za-z0-9_]+", self.r1_table):
-                raise ValueError("El nombre de la tabla R1 seleccionada no es válido.")
-            for marker in r1_markers:
-                sql = sql.replace(marker, f"public.{self.r1_table}")
-        return sql
+        for kind in ('R1', 'R2'):
+            suffix = kind.lower()
+            markers = (f'{{esquema_{suffix}}}.{{tabla_{suffix}}}',
+                       f'{{esquema_{suffix}}}{{punto}}{{tabla_{suffix}}}',
+                       f'{{esquema_{suffix}}}{{tabla_{suffix}}}')
+            if any(marker in sql for marker in (f'{{esquema_{suffix}}}', f'{{tabla_{suffix}}}')):
+                if kind in self.references:
+                    source = f'pg_temp.{TEMP_TABLES[kind]}'
+                elif kind == 'R1' and self.r1_table:
+                    if not re.fullmatch(r'[A-Za-z0-9_]+', self.r1_table):
+                        raise ValueError('El nombre del R1 de public no es válido.')
+                    source = 'public.' + self.r1_table
+                else:
+                    raise ValueError(f'Esta regla requiere {kind}: cargue la referencia temporal' + (' o seleccione un R1 de public.' if kind == 'R1' else '.'))
+                for marker in markers:
+                    sql = sql.replace(marker, source)
+                sql = sql.replace(f'{{esquema_{suffix}}}', source.rsplit('.', 1)[0])
+                sql = sql.replace(f'{{tabla_{suffix}}}', source.rsplit('.', 1)[1])
+        schema_prefix = self.schema.rstrip('.') + '.'
+        sql = sql.replace('{esquema}.{punto}', schema_prefix)
+        sql = sql.replace('{esquema}{punto}.', schema_prefix)
+        sql = sql.replace('{esquema}{punto}', schema_prefix)
+        return sql.replace('{esquema}', schema_prefix).replace('{punto}', self.prefix)
 
     def run(self):
         try:
-            with psycopg2.connect(**self.params) as connection:
+            with closing(psycopg2.connect(**self.params)) as raw_connection, raw_connection as connection:
+                for kind, reference in sorted(self.references.items()):
+                    self.message.emit(f'Cargando {kind} en tabla temporal de la sesión…')
+                    install_reference(connection, reference)
+                if self.references:
+                    # Commit setup once so a failing rule cannot roll back the tables.
+                    connection.commit()
                 for index, (category, rule_name, raw_sql, description) in enumerate(self.rules, 1):
                     try:
                         sql = self.resolve_sql(raw_sql)
@@ -272,6 +291,7 @@ class ControlCalidadDialog(QDialog):
         self.controls_running = False
         self._repository_password = None
         self.references_ready = False
+        self.temporary_references = {}
         self._build()
         self.refresh_categories()
 
@@ -383,16 +403,6 @@ class ControlCalidadDialog(QDialog):
         self.ingestion_button = QPushButton("Cargar insumos CICA…")
         self.ingestion_button.clicked.connect(self.open_ingestion)
         form.addRow(self.ingestion_label, self.ingestion_button)
-        reference_button = QPushButton("Cargar en public R1 y R2…")
-        reference_button.clicked.connect(self.open_references)
-        form.addRow("Carga opcional", reference_button)
-        self.published_r1 = QComboBox()
-        self.published_r2 = QComboBox()
-        self.refresh_references = QPushButton("Actualizar referencias publicadas")
-        self.refresh_references.clicked.connect(self.load_public_references)
-        self.published_r1.setEnabled(False)
-        self.published_r2.setEnabled(False)
-        self.refresh_references.setEnabled(False)
         form.addRow("Forma de conexión", self.connection_mode)
         form.addRow("", self.connection_stack)
         test = QPushButton("Listar Esquemas")
@@ -405,9 +415,6 @@ class ControlCalidadDialog(QDialog):
         schema_form.addRow(test)
         schema_form.addRow("Esquema a validar", self.schema)
         qgis_layout.addRow(self.schema_controls)
-        form.addRow("R1 existente en public", self.published_r1)
-        form.addRow("R2 existente en public", self.published_r2)
-        form.addRow("", self.refresh_references)
         left_layout.addWidget(connection)
         info = QLabel("La contraseña se usa durante esta sesión y no se guarda. Las reglas se ejecutan en modo consulta y no alteran datos.")
         info.setWordWrap(True)
@@ -467,7 +474,7 @@ class ControlCalidadDialog(QDialog):
         result_layout.addWidget(self.location_summary)
         self.table = QTableWidget(0, len(STAT_HEADERS))
         self.table.setHorizontalHeaderLabels([
-            header.replace('Reglas ejecutadas', 'Reglas\nejecutadas').replace('Errores técnicos', 'Errores\ntécnicos')
+            header.replace('Reglas ejecutadas', 'Reglas\nejecutadas').replace('Errores técnicos', 'Errores\ntécnicos').replace('Excepciones ', 'Excepciones\n')
             for header in STAT_HEADERS
         ])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -522,6 +529,44 @@ class ControlCalidadDialog(QDialog):
         controls.addWidget(self.export_button)
         controls.addWidget(self.run_button)
         layout.addLayout(controls)
+        references = QGroupBox("Referencias R1 y R2")
+        reference_layout = QHBoxLayout(references)
+        reference_layout.setContentsMargins(8, 14, 8, 6)
+        self.reference_mode = QComboBox()
+        self.reference_mode.addItems(["Archivos R1 y R2 temporales", "R1 existente en public", "Consulta de R1 por municipio (próximamente)"])
+        self.reference_mode.model().item(2).setEnabled(False)
+        self.reference_mode.currentIndexChanged.connect(self.reference_mode_changed)
+        self.reference_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.reference_mode.setMinimumContentsLength(22)
+        reference_layout.addWidget(self.reference_mode, 1)
+        self.reference_pages = QStackedWidget()
+        temporary_page = QWidget()
+        temporary_layout = QHBoxLayout(temporary_page)
+        temporary_layout.setContentsMargins(0, 0, 0, 0)
+        self.load_reference_button = QPushButton("Cargar R1 / R2…")
+        self.load_reference_button.clicked.connect(self.open_references)
+        self.reference_status = QLabel("Sin referencias temporales")
+        self.reference_status.setWordWrap(True)
+        self.release_reference_button = QPushButton("Liberar")
+        self.release_reference_button.clicked.connect(self.release_references)
+        temporary_layout.addWidget(self.load_reference_button)
+        temporary_layout.addWidget(self.reference_status, 1)
+        temporary_layout.addWidget(self.release_reference_button)
+        self.reference_pages.addWidget(temporary_page)
+        public_page = QWidget()
+        public_layout = QHBoxLayout(public_page)
+        public_layout.setContentsMargins(0, 0, 0, 0)
+        public_layout.addWidget(QLabel("R1 en public"))
+        self.published_r1 = QComboBox()
+        public_layout.addWidget(self.published_r1, 1)
+        self.refresh_references = QPushButton("Actualizar listado")
+        self.refresh_references.clicked.connect(self.load_public_references)
+        public_layout.addWidget(self.refresh_references)
+        self.reference_pages.addWidget(public_page)
+        upcoming = QLabel("Consulta centralizada de R1 por municipio: pendiente de desarrollo.")
+        self.reference_pages.addWidget(upcoming)
+        reference_layout.addWidget(self.reference_pages, 2)
+        layout.addWidget(references)
         self.load_qgis_connections()
         self.update_ingestion_button()
         self.resize_connection_stack()
@@ -685,29 +730,47 @@ class ControlCalidadDialog(QDialog):
         dialog = CicaIngestionDialog(self)
         dialog.exec()
 
+    def reference_mode_changed(self, index):
+        if index == 2:
+            self.reference_mode.setCurrentIndex(0)
+            return
+        self.reference_pages.setCurrentIndex(index)
+
     def open_references(self):
-        dialog = ReferenceDialog(self, self.connection_params)
-        dialog.exec()
-        self.load_public_references()
+        if self.controls_running:
+            return
+        dialog = ReferenceDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            prepared = dialog.take_references()
+            if prepared:
+                self.release_references()
+                self.temporary_references = prepared
+                self.reference_status.setText(' · '.join(f'{kind}: {ref.filename} ({ref.row_count} registros)' for kind, ref in prepared.items()))
+        dialog.clear_prepared()
+
+    def release_references(self):
+        if self.controls_running:
+            return
+        for reference in self.temporary_references.values():
+            reference.close()
+        self.temporary_references = {}
+        self.reference_status.setText('Sin referencias temporales')
 
     def load_public_references(self):
-        if not self.references_ready:
-            return
-        if psycopg2 is None:
+        if self.controls_running or psycopg2 is None:
             return
         try:
-            with psycopg2.connect(**self.connection_params(), connect_timeout=8) as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND lower(table_name) LIKE 'r1%' ORDER BY table_name")
-                    r1 = [item[0] for item in cursor.fetchall()]
-                    cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND lower(table_name) LIKE 'r2%' ORDER BY table_name")
-                    r2 = [item[0] for item in cursor.fetchall()]
-            self.published_r1.clear(); self.published_r1.addItems(r1)
-            self.published_r2.clear(); self.published_r2.addItems(r2)
-            self.status.setText(f"Referencias disponibles en public: {len(r1)} R1 y {len(r2)} R2.")
+            with closing(psycopg2.connect(**self.connection_params(), connect_timeout=8)) as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (lower(table_name) LIKE 'r1%' OR lower(table_name) LIKE '%_r1%') ORDER BY table_name")
+                names = [row[0] for row in cursor.fetchall()]
+            current = self.published_r1.currentText()
+            self.published_r1.clear()
+            self.published_r1.addItems(names)
+            if current in names:
+                self.published_r1.setCurrentText(current)
+            self.status.setText(f'{len(names)} referencias R1 disponibles en public; no se modifican.')
         except Exception as error:
-            QMessageBox.warning(self, "No fue posible consultar public", str(error))
-
+            QMessageBox.warning(self, 'No fue posible listar R1 de public', str(error))
 
     def change_connection_mode(self, index):
         self.connection_stack.setCurrentIndex(index)
@@ -719,6 +782,7 @@ class ControlCalidadDialog(QDialog):
             destination.layout().addRow(self.schema_controls)
         self.resize_connection_stack()
         self.schema.clear()
+        self.published_r1.clear()
         self.status.setText("Pulse Listar Esquemas para cargar los esquemas disponibles.")
 
     def load_qgis_connections(self):
@@ -902,10 +966,8 @@ class ControlCalidadDialog(QDialog):
                 self.schema.setCurrentText("public")
             self.status.setText("Conexión exitosa: " + version.split(",")[0])
             self.references_ready = True
-            self.published_r1.setEnabled(True)
-            self.published_r2.setEnabled(True)
-            self.refresh_references.setEnabled(True)
-            self.load_public_references()
+            if self.reference_mode.currentIndex() == 1:
+                self.load_public_references()
         except Exception as error:
             QMessageBox.critical(self, "No fue posible conectar", str(error))
 
@@ -956,9 +1018,12 @@ class ControlCalidadDialog(QDialog):
             "model": self.model.currentText(), "environment": self.environment.currentText(),
             "host": params.get("host", ""), "port": str(params.get("port", "5432")),
             "database": params.get("dbname", ""), "schema": schema,
-            "reference_r1": self.published_r1.currentText(),
+            "reference_r1": (self.temporary_references['R1'].fingerprint if 'R1' in self.temporary_references else '') if self.reference_mode.currentIndex() == 0 else self.published_r1.currentText(),
+
             "repository": self.selected_sql_version.get("source", {}).get("label", ""),
         }
+        if self.reference_mode.currentIndex() == 0 and 'R2' in self.temporary_references:
+            self.review_context['reference_r2'] = self.temporary_references['R2'].fingerprint
         for button in (self.review_save_button, self.review_recover_button):
             button.setEnabled(False)
         self.table.setRowCount(0)
@@ -973,7 +1038,15 @@ class ControlCalidadDialog(QDialog):
         self.controls_running = True
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
-        self.worker = RuleWorker(params, schema, "", self.published_r1.currentText(), rules, general_report_path)
+        temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
+        public_r1 = self.published_r1.currentText() if self.reference_mode.currentIndex() == 1 else ''
+        self.worker = RuleWorker(params, schema, "", public_r1, rules, general_report_path, references=temporary)
+        self.worker.message.connect(self.status.setText)
+        self.reference_mode.setEnabled(False)
+        self.load_reference_button.setEnabled(False)
+        self.release_reference_button.setEnabled(False)
+        self.refresh_references.setEnabled(False)
+        self.published_r1.setEnabled(False)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
         self.worker.result.connect(self.add_result)
@@ -1001,6 +1074,8 @@ class ControlCalidadDialog(QDialog):
 
     def finished(self):
         self.controls_running = False
+        for control in (self.reference_mode, self.load_reference_button, self.release_reference_button, self.refresh_references, self.published_r1):
+            control.setEnabled(True)
         self.update_run_availability()
         self.progress.setValue(self.progress.maximum())
         self.status.setText("Ejecución terminada.")
@@ -1046,7 +1121,7 @@ class ControlCalidadDialog(QDialog):
                 self.table.setItem(row, column, QTableWidgetItem(str(value)))
         self.summary.setText(
             f"{totals['rules']} reglas ejecutadas · {totals['findings']} hallazgos · "
-            f"{totals['dt'] + totals['operator']} excepciones · "
+            f"{totals['dt']} excepciones DT · {totals['operator']} excepciones operador · "
             f"{totals['pending']} errores · {totals['errors']} errores técnicos"
         )
 
@@ -1192,6 +1267,7 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.information(self, "Validación en curso", "Espere a que termine la ejecución antes de cerrar.")
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():
+            self.release_references()
             event.accept()
         else:
             event.ignore()

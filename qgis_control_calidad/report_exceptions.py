@@ -1,5 +1,5 @@
 """DT/operator exception controls shared by every record-level Excel report."""
-from openpyxl.styles import PatternFill, Protection
+from openpyxl.styles import PatternFill, Protection, Font
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -43,39 +43,31 @@ def ensure_domains(book):
 
 
 def add_controls(sheet, first_row, last_row, first_column, protect=True):
-    """Require observation before Sí; grey and reject operator inputs when DT=Sí.
-
-    XLSX cannot dynamically lock cells without macros. Stop validations enforce
-    normal edits; import validates again because Excel paste can bypass them.
-    """
+    """Sí/No dropdowns and unrestricted notes; DT=Sí visually excludes a row."""
     if last_row < first_row:
         return
     ensure_domains(sheet.parent)
     dt, note_dt, operator, note_operator = [get_column_letter(first_column + i) for i in range(4)]
     for offset, header in enumerate(HEADERS):
         sheet.cell(first_row - 1, first_column + offset).comment = Comment(
-            'Complete primero la observación y luego seleccione Sí en la lista. DT en Sí impide diligenciar los campos del operador. Los datos originales no se editan.', 'Validador')
-    r = first_row
-    visible = lambda cell: f'LEN(TRIM(CLEAN(SUBSTITUTE({cell},CHAR(160)," "))))>0'
-    dt_rule = f'IF(AND({visible(f"${note_dt}{r}")},${operator}{r}="No",${note_operator}{r}=""),_ExcepcionSiNo,_ExcepcionSoloNo)'
-    op_rule = f'IF(AND(${dt}{r}<>"Sí",{visible(f"${note_operator}{r}")}),_ExcepcionSiNo,_ExcepcionSoloNo)'
-    note_dt_rule = f'OR(${dt}{r}<>"Sí",{visible(f"${note_dt}{r}")})'
-    note_op_rule = f'IF(${dt}{r}="Sí",${note_operator}{r}="",OR(${operator}{r}<>"Sí",{visible(f"${note_operator}{r}")}))'
-    for column, formula in zip((dt, note_dt, operator, note_operator), (dt_rule, note_dt_rule, op_rule, note_op_rule)):
-        validation = DataValidation(type='list' if column in (dt, operator) else 'custom', formula1=formula, allow_blank=False)
+            'Seleccione Sí o No. Las observaciones se pueden diligenciar antes o después. DT en Sí oscurece toda la fila para excluirla de la revisión del operador.', 'Validador')
+    for column in (dt, operator):
+        validation = DataValidation(type='list', formula1='_ExcepcionSiNo', allow_blank=False)
         validation.showDropDown = False
         validation.showErrorMessage = True
         validation.errorStyle = 'stop'
-        validation.errorTitle = 'Excepción no válida'
-        validation.error = 'Diligencie la observación antes de marcar Sí. Si DT es Sí, el operador no puede registrar excepción ni observación.'
+        validation.errorTitle = 'Valor fuera del dominio'
+        validation.error = 'Seleccione Sí o No.'
         validation.showInputMessage = True
-        validation.promptTitle = 'Revisión de excepción'
-        validation.prompt = 'Seleccione Sí o No. Complete primero la observación. DT en Sí bloquea los campos del operador.'
+        validation.promptTitle = 'Excepción'
+        validation.prompt = 'Seleccione Sí o No; la observación se diligencia libremente.'
         sheet.add_data_validation(validation)
         validation.add(f'{column}{first_row}:{column}{last_row}')
     sheet.conditional_formatting.add(
-        f'{operator}{first_row}:{note_operator}{last_row}',
-        FormulaRule(formula=[f'${dt}{first_row}="Sí"'], fill=PatternFill('solid', fgColor='D9D9D9'), stopIfTrue=True),
+        f'A{first_row}:{get_column_letter(sheet.max_column)}{last_row}',
+        FormulaRule(formula=[f'${dt}{first_row}="Sí"'],
+                    fill=PatternFill('solid', fgColor='404040'),
+                    font=Font(color='FFFFFF'), stopIfTrue=True),
     )
     for column in (dt, operator):
         for value, color in (('Sí', 'C6EFCE'), ('No', 'FFC7CE')):

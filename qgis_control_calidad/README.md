@@ -77,7 +77,7 @@ Si cambia la primera fila por reordenamiento o eliminación de reglas, transferi
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
 
-## Excepciones DT y operador (1.2.2)
+## Excepciones DT y operador (1.2.3)
 
 La revisión se diligencia en Excel. No se genera la ventana «Revisión de hallazgos
 por registro» ni se muestra el botón «Revisar hallazgos». Se conservan **Guardar
@@ -88,9 +88,9 @@ Todos los reportes incluyen una hoja **Revisión** con cada hallazgo y estos cam
 | Campo | Valor inicial | Condición |
 |---|---|---|
 | Excepción DT | No | Sí exige Observación DT válida. |
-| Observación DT | Vacío | Escribir antes de marcar Sí. |
-| Excepción operador | No | Sí exige Observación operador; no se permite cuando DT es Sí. |
-| Observación operador | Vacío | No se permite diligenciar cuando DT es Sí. |
+| Observación DT | Vacío | Edición libre, antes o después de la marca. |
+| Excepción operador | No | Dominio Sí/No; no corresponde revisar si DT es Sí. |
+| Observación operador | Vacío | Edición libre; la fila oscura indica exclusión por DT. |
 
 En los paquetes por componente, diligencie los cuatro campos en la hoja de
 cada regla, por hallazgo. La hoja **Revisión** consolida automáticamente esas
@@ -99,7 +99,7 @@ protegidos para evitar dos fuentes de edición. La clave se conserva oculta en
 las hojas de detalle. Cambiar el orden de las filas no altera el cruce.
 
 Las columnas de excepción se muestran en verde para **Sí** y rojo para **No**.
-Cuando DT es Sí, el gris de los campos del operador tiene prioridad sobre esos
+Cuando DT es Sí, el gris oscuro de toda la fila tiene prioridad sobre esos
 colores. En reportes sin hojas de regla (archivo ejecutivo o Guardar revisión en
 Excel), el seguimiento se diligencia directamente en **Revisión**.
 
@@ -112,17 +112,22 @@ mismo archivo; no modifica otros archivos Excel externos abiertos o guardados.
 Para actualizar un archivo de revisión separado, recupere el paquete en QGIS y
 use **Guardar revisión en Excel**.
 
-Los campos de excepción tienen dominio **Sí / No**, mediante listas desplegables.
-Diligencie primero la observación: hasta que tenga texto válido, la lista solo
-ofrece **No**. Después ofrece **No** y **Sí**. Si hay
-seguimiento del operador, límpielo antes de marcar DT en Sí. Las excepciones usan validación de lista con dominios nombrados y las observaciones
-validación personalizada, ambas con error Stop. Si DT es Sí, los campos del
-operador aparecen en gris y se rechazan entradas en ellos. Un XLSX sin macros no
-puede cambiar dinámicamente la propiedad de bloqueo de las celdas: este control
-usa validación, sombreado y comprobación adicional al importar. La protección
-estática evita modificar claves y datos originales; no es un mecanismo de
-seguridad. Pegar datos o desproteger una hoja puede saltarse la validación de
-Excel, por lo que el plugin verifica siempre lo recuperado.
+Los campos de excepción tienen dominio **Sí / No**, mediante listas desplegables
+siempre disponibles. Las observaciones no tienen validaciones de entrada ni
+exigen un orden de diligenciamiento: se puede seleccionar Sí y luego escribir
+la nota. En las hojas de regla, las cuatro celdas del seguimiento están
+desbloqueadas; los datos originales siguen protegidos.
+
+Cuando **Excepción DT = Sí**, toda la fila se muestra en gris oscuro (`404040`)
+con texto blanco, con prioridad sobre los colores Sí/No. Es una indicación visual
+para que el operador no revise ese caso; no impide escribir observaciones.
+Cuando DT es No, se conservan el verde para Sí y el rojo para No en las columnas
+de excepción. No se añaden macros ni ventanas de edición.
+
+La recuperación sigue verificando la justificación y la prioridad de DT:
+flexibilizar la edición no convierte una marca incompleta en una excepción
+validada. Si DT es Sí con justificación, el seguimiento del operador no se
+incorpora para ese caso.
 
 **Recuperar revisión** solo reutiliza coincidencias únicas con los mismos datos
 y criterio. Si una excepción carece de su observación, la convierte a No e

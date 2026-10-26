@@ -52,14 +52,14 @@ class ReportExceptionTests(unittest.TestCase):
         for col in ('I', 'J', 'K', 'L'):
             self.assertFalse(sheet[f'{col}2'].protection.locked)
         validations = list(sheet.data_validations.dataValidation)
-        self.assertEqual(len(validations), 4)
+        self.assertEqual(len(validations), 2)
         for rule in validations:
             self.assertEqual(rule.errorStyle, 'stop')
             self.assertTrue(rule.showErrorMessage)
             self.assertLessEqual(len(rule.formula1), 255)
-        self.assertEqual([rule.type for rule in validations], ['list', 'custom', 'list', 'custom'])
-        self.assertIn('$I2<>"Sí"', validations[2].formula1)
-        self.assertIn('_ExcepcionSoloNo', validations[2].formula1)
+        self.assertEqual([rule.type for rule in validations], ['list', 'list'])
+        self.assertEqual([str(rule.sqref) for rule in validations], ['I2', 'K2'])
+        self.assertTrue(all(rule.formula1 == '_ExcepcionSiNo' for rule in validations))
         self.assertGreater(len(sheet.conditional_formatting), 0)
         book.close()
 
@@ -74,8 +74,6 @@ class ReportExceptionTests(unittest.TestCase):
             if validation.type == 'list':
                 self.assertFalse(validation.showDropDown)
                 self.assertIn('_ExcepcionSiNo', validation.formula1)
-                self.assertIn('_ExcepcionSoloNo', validation.formula1)
-                self.assertIn('LEN(TRIM', validation.formula1)
         book.close()
 
     def test_yes_green_no_red_and_dt_operator_gray_has_priority(self):
@@ -86,9 +84,10 @@ class ReportExceptionTests(unittest.TestCase):
         flags = [rule for area, rule in rules if area == 'I2']
         self.assertEqual({tuple(rule.formula): rule.dxf.fill.fgColor.rgb for rule in flags},
                          {('$I2="Sí"',): '00C6EFCE', ('$I2="No"',): '00FFC7CE'})
-        gray = next(rule for area, rule in rules if area == 'K2:L2')
+        gray = next(rule for area, rule in rules if area.startswith('A2:'))
         self.assertTrue(gray.stopIfTrue)
-        self.assertEqual(gray.dxf.fill.fgColor.rgb, '00D9D9D9')
+        self.assertEqual(gray.dxf.fill.fgColor.rgb, '00404040')
+        self.assertEqual(gray.dxf.font.color.rgb, '00FFFFFF')
         self.assertLess(gray.priority, min(rule.priority for area, rule in rules if area == 'K2'))
         book.close()
 

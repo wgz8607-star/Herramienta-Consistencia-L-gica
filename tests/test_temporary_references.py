@@ -178,9 +178,13 @@ class TemporaryReferenceTests(unittest.TestCase):
         self.assertEqual(results, [])
         self.assertEqual(errors, ['TEMP denied'])
 
-    def test_bottom_section_has_three_modes_and_future_mode_is_disabled(self):
+    def test_reference_tab_has_three_modes_and_future_mode_is_disabled(self):
         widget = ControlCalidadDialog()
         self.addCleanup(widget.close)
+        self.assertEqual(widget.left_tabs.count(), 2)
+        self.assertEqual([widget.left_tabs.tabText(i) for i in range(2)], ['Conexión', 'Referencias R1/R2'])
+        widget.left_tabs.setCurrentIndex(1)
+        self.assertTrue(widget.left_tabs.currentWidget().isAncestorOf(widget.reference_mode))
         self.assertEqual(widget.reference_mode.count(), 3)
         self.assertFalse(widget.reference_mode.model().item(2).isEnabled())
         widget.reference_mode.setCurrentIndex(1)

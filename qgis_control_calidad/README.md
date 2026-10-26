@@ -324,3 +324,10 @@ las revisiones existentes.
 Desde 1.4.0 la estadística descuenta exclusivamente las excepciones DT. Las
 excepciones del operador siguen visibles como seguimiento separado, pero no
 cierran hallazgos ni se restan del total de errores.
+
+## Pestaña de referencias (1.4.1)
+
+El panel izquierdo contiene las pestañas **Conexión** y **Referencias R1/R2**.
+La segunda reúne la carga temporal, la selección del R1 de public y la futura
+consulta municipal. Ya no se coloca al pie de la ventana, para que siga
+accesible en pantallas pequeñas sin ocultarse debajo de los resultados.

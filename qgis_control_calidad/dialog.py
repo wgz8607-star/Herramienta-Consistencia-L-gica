@@ -50,8 +50,9 @@ SQL_REPOSITORY_TABLES = {
     "Modelo Interno de Levantamiento 1.0": ("reglas_interno_v3_07_09_2026", "reglas_interno_v2_29_07_2024"),
     "CICA": ("reglas_cica_v3_07_09_2026", "reglas_cica_v2_29_07_2024"),
 }
+POSTGRES_HOST = "172.19.3.225"
 REPOSITORY_CONNECTION = {
-    "host": "172.19.3.225",
+    "host": POSTGRES_HOST,
     "port": "5432",
     "dbname": "sentencias",
     "user": "admin_ant",
@@ -346,7 +347,9 @@ class ControlCalidadDialog(QDialog):
         manual_page = QWidget()
         manual_form = QFormLayout(manual_page)
         manual_form.setContentsMargins(0, 0, 0, 0)
-        self.host = QLineEdit("localhost")
+        self.host = QLineEdit(POSTGRES_HOST)
+        self.host.setReadOnly(True)
+        self.host.setToolTip("Dirección de PostgreSQL preestablecida; no se puede modificar.")
         self.port = QLineEdit("5432")
         self.database = QLineEdit()
         self.user = QLineEdit()
@@ -837,7 +840,7 @@ class ControlCalidadDialog(QDialog):
     def connection_params(self):
         if self.connection_mode.currentIndex() == 0:
             return self.qgis_connection_params()
-        return {"host": self.host.text().strip(), "port": self.port.text().strip(), "dbname": self.database.text().strip(), "user": self.user.text().strip(), "password": self.password.text()}
+        return {"host": POSTGRES_HOST, "port": self.port.text().strip(), "dbname": self.database.text().strip(), "user": self.user.text().strip(), "password": self.password.text()}
 
     def resolve_validation_context(self, params, schema):
         """Relaciona los cinco primeros dígitos de ILC_Predio con el DIVIPOLA interno."""

@@ -101,6 +101,16 @@ class SncTests(unittest.TestCase):
         self.assertEqual(source['tables'], ['reglas_cargue_snc_xtf'])
         self.assertTrue(source['snc'])
 
+    def test_manual_postgres_host_is_fixed_in_ui_and_connection(self):
+        self.widget.connection_mode.setCurrentIndex(1)
+        self.assertEqual(self.widget.host.text(), '172.19.3.225')
+        self.assertTrue(self.widget.host.isReadOnly())
+        self.widget.database.setText('base_validar')
+        self.widget.host.setText('other-host')  # Programmatic edits cannot change the target either.
+        params = self.widget.connection_params()
+        self.assertEqual(params['host'], '172.19.3.225')
+        self.assertEqual(params['dbname'], 'base_validar')
+
     def test_initial_state_and_direct_execution_are_blocked(self):
         self.assertFalse(self.widget.run_button.isEnabled())
         self.assertTrue(all(not card.isEnabled() and not card.isChecked()

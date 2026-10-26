@@ -269,3 +269,8 @@ La conexión ocupa inicialmente unos 300 px (30 % del área) y los resultados el
 conexión se apilan con menor espaciado y desplazamiento vertical cuando hace
 falta. El modo de conexión guardada ya no reserva la altura de los campos
 manuales ocultos, eliminando el hueco antes de Listar Esquemas.
+
+En la conexión manual, el servidor preestablecido es `172.19.3.225`. El campo
+Servidor es de solo lectura y la conexión usa esa misma constante, incluso si
+el texto se altera por código. Puerto, base de datos y credenciales de la
+conexión manual conservan sus campos de configuración.

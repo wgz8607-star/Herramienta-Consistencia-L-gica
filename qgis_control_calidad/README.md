@@ -77,7 +77,7 @@ Si cambia la primera fila por reordenamiento o eliminación de reglas, transferi
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
 
-## Excepciones DT y operador (1.2.4)
+## Excepciones DT y operador (1.2.5)
 
 La revisión se diligencia en Excel. No se genera la ventana «Revisión de hallazgos
 por registro» ni se muestra el botón «Revisar hallazgos». Se conservan **Guardar
@@ -99,8 +99,8 @@ protegidos para evitar dos fuentes de edición. La clave se conserva oculta en
 las hojas de detalle. Cambiar el orden de las filas no altera el cruce.
 
 Las columnas de excepción se muestran en verde para **Sí** y rojo para **No**.
-Cuando DT es Sí, el gris oscuro de toda la fila tiene prioridad sobre esos
-colores. En reportes sin hojas de regla (archivo ejecutivo o Guardar revisión en
+Cuando DT es Sí, solo los valores de los dos campos del operador quedan
+visualmente ocultos; las columnas de DT y los datos conservan sus colores. En reportes sin hojas de regla (archivo ejecutivo o Guardar revisión en
 Excel), el seguimiento se diligencia directamente en **Revisión**.
 
 Al recuperar un paquete, el plugin obtiene las marcas desde las hojas de regla
@@ -118,11 +118,14 @@ exigen un orden de diligenciamiento: se puede seleccionar Sí y luego escribir
 la nota. En las hojas de regla, las cuatro celdas del seguimiento están
 desbloqueadas; los datos originales siguen protegidos.
 
-Cuando **Excepción DT = Sí**, toda la fila se muestra en gris oscuro (`404040`)
-con texto blanco, con prioridad sobre los colores Sí/No. Es una indicación visual
-para que el operador no revise ese caso; no impide escribir observaciones.
-Cuando DT es No, se conservan el verde para Sí y el rojo para No en las columnas
-de excepción. No se añaden macros ni ventanas de edición.
+Cuando **Excepción DT = Sí**, se ocultan visualmente solo los valores de
+**Excepción operador** y **Observación operador** de esa fila, usando texto y
+fondo blancos. El resto de la fila permanece visible; la marca DT conserva su
+verde y las otras marcas su rojo/verde. Al cambiar DT a No, los valores del
+operador vuelven a verse. Este efecto no borra datos ni oculta físicamente las
+columnas: en Excel una columna oculta afecta a toda la hoja, no a un solo caso.
+El contenido sigue existiendo y puede verse en la barra de fórmulas; no es una
+medida de seguridad. No se añaden macros ni ventanas de edición.
 
 La recuperación sigue verificando la justificación y la prioridad de DT:
 flexibilizar la edición no convierte una marca incompleta en una excepción

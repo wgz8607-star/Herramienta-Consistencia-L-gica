@@ -27,13 +27,13 @@ def validate(values, valid_observation):
 
 
 def add_controls(sheet, first_row, last_row, first_column, protect=True):
-    """Sí/No dropdowns and unrestricted notes; DT=Sí visually excludes a row."""
+    """Sí/No dropdowns; DT=Sí visually hides only the operator cells."""
     if last_row < first_row:
         return
     dt, note_dt, operator, note_operator = [get_column_letter(first_column + i) for i in range(4)]
     for offset, header in enumerate(HEADERS):
         sheet.cell(first_row - 1, first_column + offset).comment = Comment(
-            'Seleccione Sí o No. Las observaciones se pueden diligenciar antes o después. DT en Sí oscurece toda la fila para excluirla de la revisión del operador.', 'Validador')
+            'Seleccione Sí o No. Las observaciones se pueden diligenciar antes o después. DT en Sí oculta visualmente solo los valores de las dos celdas del operador.', 'Validador')
     for column in (dt, operator):
         validation = DataValidation(type='list', formula1='"Sí,No"', allow_blank=False)
         validation.showDropDown = False
@@ -47,9 +47,9 @@ def add_controls(sheet, first_row, last_row, first_column, protect=True):
         sheet.add_data_validation(validation)
         validation.add(f'{column}{first_row}:{column}{last_row}')
     sheet.conditional_formatting.add(
-        f'A{first_row}:{get_column_letter(sheet.max_column)}{last_row}',
+        f'{operator}{first_row}:{note_operator}{last_row}',
         FormulaRule(formula=[f'${dt}{first_row}="Sí"'],
-                    fill=PatternFill('solid', fgColor='404040'),
+                    fill=PatternFill('solid', fgColor='FFFFFF'),
                     font=Font(color='FFFFFF'), stopIfTrue=True),
     )
     for column in (dt, operator):

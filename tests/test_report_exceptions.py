@@ -73,7 +73,7 @@ class ReportExceptionTests(unittest.TestCase):
             self.assertEqual(validation.formula1, '"Sí,No"')
         book.close()
 
-    def test_yes_green_no_red_and_dt_operator_gray_has_priority(self):
+    def test_dt_hides_only_operator_cells_and_preserves_flag_colors(self):
         save_review(self.path, cases())
         book = load_workbook(self.path); sheet = book['Revisión']
         rules = [(str(area.sqref), rule) for area in sheet.conditional_formatting
@@ -81,11 +81,12 @@ class ReportExceptionTests(unittest.TestCase):
         flags = [rule for area, rule in rules if area == 'I2']
         self.assertEqual({tuple(rule.formula): rule.dxf.fill.fgColor.rgb for rule in flags},
                          {('$I2="Sí"',): '00C6EFCE', ('$I2="No"',): '00FFC7CE'})
-        gray = next(rule for area, rule in rules if area.startswith('A2:'))
+        gray = next(rule for area, rule in rules if area == 'K2:L2')
         self.assertTrue(gray.stopIfTrue)
-        self.assertEqual(gray.dxf.fill.fgColor.rgb, '00404040')
+        self.assertEqual(gray.dxf.fill.fgColor.rgb, '00FFFFFF')
         self.assertEqual(gray.dxf.font.color.rgb, '00FFFFFF')
         self.assertLess(gray.priority, min(rule.priority for area, rule in rules if area == 'K2'))
+        self.assertFalse(any(area.startswith('A2:') for area, _rule in rules))
         book.close()
 
     def test_recovery_preserves_dt_or_operator_only_when_case_unchanged(self):

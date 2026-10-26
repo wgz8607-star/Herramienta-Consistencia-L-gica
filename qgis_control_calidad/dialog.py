@@ -62,6 +62,35 @@ REPOSITORY_CONNECTION = {
 }
 
 
+def published_versions(params, source):
+    with closing(psycopg2.connect(**params, connect_timeout=8)) as raw, raw as connection:
+        with connection.cursor() as cursor:
+            if source["kind"] == "tables":
+                rows = []
+                for table in source["tables"]:
+                    published = "NULL" if source.get("snc") else "max(fecha_actualizacion) OVER (PARTITION BY version)"
+                    cursor.execute(
+                        f"WITH cabeceras AS ("
+                        f"SELECT DISTINCT ON (version) version, descripcion_version, version_publicada, "
+                        f"{published} AS publicada FROM public.{table} "
+                        "ORDER BY version, orden NULLS LAST, componente, codigo_regla"
+                        ") SELECT cabecera.version, COALESCE(cabecera.descripcion_version, ''), "
+                        "'PUBLICADA', cabecera.publicada FROM cabeceras AS cabecera "
+                        "WHERE cabecera.version_publicada IS TRUE AND EXISTS ("
+                        f"SELECT 1 FROM public.{table} AS regla "
+                        "WHERE regla.version = cabecera.version AND regla.activa) "
+                        "ORDER BY cabecera.publicada DESC NULLS LAST, cabecera.version DESC"
+                    )
+                    rows.extend(({"table": table, "version": item[0]}, item[0], item[1], item[2], item[3]) for item in cursor.fetchall())
+            else:
+                cursor.execute(
+                    f"SELECT id, codigo, COALESCE(descripcion, ''), estado, fecha_publicacion "
+                    f"FROM {source['schema']}.versiones WHERE estado = 'PUBLICADA' ORDER BY fecha_publicacion DESC, codigo DESC"
+                )
+                rows = cursor.fetchall()
+    return rows
+
+
 @dataclass
 class RuleResult:
     rule: str
@@ -113,31 +142,7 @@ class SqlVersionDialog(QDialog):
     def load_versions(self):
         self.table.setRowCount(0)
         try:
-            with psycopg2.connect(**self.params, connect_timeout=8) as connection:
-                with connection.cursor() as cursor:
-                    if self.repository_source["kind"] == "tables":
-                        rows = []
-                        for table in self.repository_source["tables"]:
-                            published = "NULL" if self.repository_source.get("snc") else "max(fecha_actualizacion) OVER (PARTITION BY version)"
-                            cursor.execute(
-                                f"WITH cabeceras AS ("
-                                f"SELECT DISTINCT ON (version) version, descripcion_version, version_publicada, "
-                                f"{published} AS publicada FROM public.{table} "
-                                "ORDER BY version, orden NULLS LAST, componente, codigo_regla"
-                                ") SELECT cabecera.version, COALESCE(cabecera.descripcion_version, ''), "
-                                "'PUBLICADA', cabecera.publicada FROM cabeceras AS cabecera "
-                                "WHERE cabecera.version_publicada IS TRUE AND EXISTS ("
-                                f"SELECT 1 FROM public.{table} AS regla "
-                                "WHERE regla.version = cabecera.version AND regla.activa) "
-                                "ORDER BY cabecera.publicada DESC NULLS LAST, cabecera.version DESC"
-                            )
-                            rows.extend(({"table": table, "version": item[0]}, item[0], item[1], item[2], item[3]) for item in cursor.fetchall())
-                    else:
-                        cursor.execute(
-                            f"SELECT id, codigo, COALESCE(descripcion, ''), estado, fecha_publicacion "
-                            f"FROM {self.repository_source['schema']}.versiones WHERE estado = 'PUBLICADA' ORDER BY fecha_publicacion DESC, codigo DESC"
-                        )
-                        rows = cursor.fetchall()
+            rows = published_versions(self.params, self.repository_source)
             for item in rows:
                 row = self.table.rowCount()
                 self.table.insertRow(row)
@@ -621,7 +626,9 @@ class ControlCalidadDialog(QDialog):
 
     def model_changed(self, *_):
         self.clear_repository_rules()
-        self.choose_sql_version.setEnabled(self.environment.currentIndex() > 0)
+        snc = self.environment.currentText() == SNC_ENVIRONMENT
+        self.choose_sql_version.setEnabled(self.environment.currentIndex() > 0 and not snc)
+        self.choose_sql_version.setToolTip('Cargue SNC usa automáticamente su única versión publicada.' if snc else '')
         if self.environment.currentIndex() > 0:
             self.open_sql_version_dialog()
 
@@ -708,10 +715,25 @@ class ControlCalidadDialog(QDialog):
                 self._repository_password = None
             QMessageBox.information(self, "No fue posible conectar al repositorio", str(error))
             return
-        dialog = SqlVersionDialog(self, params, source)
-        if dialog.exec() != QDialog.Accepted or not dialog.selected_version:
-            return
-        version = dialog.selected_version
+        if source.get('snc'):
+            self.choose_sql_version.setEnabled(False)
+            try:
+                versions = published_versions(params, source)
+                if len(versions) != 1:
+                    message = ('No hay una versión publicada con reglas activas para Cargue SNC.' if not versions else
+                               'Cargue SNC debe tener una sola versión publicada. Despublique las versiones adicionales.')
+                    raise ValueError(message)
+                item = versions[0]
+                version = {'id': item[0], 'codigo': item[1], 'source': source}
+            except Exception as error:
+                self.sql_version_label.setText('Cargue SNC: versión no disponible')
+                QMessageBox.warning(self, 'No se cargaron las sentencias SNC', str(error))
+                return
+        else:
+            dialog = SqlVersionDialog(self, params, source)
+            if dialog.exec() != QDialog.Accepted or not dialog.selected_version:
+                return
+            version = dialog.selected_version
         try:
             with psycopg2.connect(**params, connect_timeout=8) as connection:
                 with connection.cursor() as cursor:

@@ -335,3 +335,13 @@ accesible en pantallas pequeñas sin ocultarse debajo de los resultados.
 El botón **Ejecutar validación** se encuentra debajo de las pestañas del panel
 izquierdo, fuera de su área desplazable, y permanece visible en ambas. Conserva
 las condiciones de habilitación según las reglas cargadas y seleccionadas.
+
+## Versión única para cargue SNC (1.4.3)
+
+Al seleccionar **Validaciones para cargue a SNC**, el selector manual de
+versiones queda deshabilitado. El plugin consulta y carga automáticamente la
+única versión publicada con reglas activas de la tabla SNC del modelo elegido,
+sin abrir la ventana de versiones. Se mantiene visible la versión cargada.
+Si no existe ninguna, hay más de una o falla la consulta, no se habilita la
+ejecución ni se elige una versión arbitrariamente. Para las validaciones
+habituales del modelo se conserva la selección manual de versiones.

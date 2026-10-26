@@ -111,6 +111,42 @@ class SncTests(unittest.TestCase):
         self.assertEqual(params['host'], '172.19.3.225')
         self.assertEqual(params['dbname'], 'base_validar')
 
+    @patch.object(module.psycopg2, 'connect')
+    def test_snc_environment_loads_unique_version_without_selector(self, connect):
+        cursor = self.database(connect)
+        cursor.fetchall.return_value = [('Administrativas', 'snc_1', 'CONTROL', 'SELECT 1', 'SNC')]
+        for model, table in module.SNC_REPOSITORY_TABLES.items():
+            with patch.object(self.widget, 'open_sql_version_dialog'):
+                self.widget.model.setCurrentText(model)
+                self.widget.environment.setCurrentIndex(0)
+            source = {'kind': 'tables', 'schema': 'public', 'tables': [table], 'snc': True, 'label': 'public.' + table}
+            versions = [({'table': table, 'version': 'v1'}, 'v1', 'Carga SNC', 'PUBLICADA', None)]
+            with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'published_versions', return_value=versions), patch.object(module, 'SqlVersionDialog') as selector:
+                self.widget.environment.setCurrentText(module.SNC_ENVIRONMENT)
+            selector.assert_not_called()
+            self.assertFalse(self.widget.choose_sql_version.isEnabled())
+            self.assertEqual(self.widget.selected_sql_version['codigo'], 'v1')
+            self.assertTrue(self.widget.category_checks[module.SNC_CATEGORY].isChecked())
+            self.assertTrue(self.widget.run_button.isEnabled())
+        with patch.object(self.widget, 'open_sql_version_dialog'):
+            self.widget.environment.setCurrentText('Validaciones del modelo')
+        self.assertTrue(self.widget.choose_sql_version.isEnabled())
+        self.assertIsNone(self.widget.selected_sql_version)
+
+    @patch.object(module.psycopg2, 'connect')
+    def test_snc_zero_or_multiple_versions_remains_blocked(self, connect):
+        source = {'kind': 'tables', 'schema': 'public', 'tables': ['reglas_cargue_snc_cica'], 'snc': True, 'label': 'SNC'}
+        version = ({'table': source['tables'][0], 'version': 'v1'}, 'v1', 'SNC', 'PUBLICADA', None)
+        for versions in ([], [version, version]):
+            self.select_model('CICA')
+            with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'published_versions', return_value=versions), patch.object(module.QMessageBox, 'warning'), patch.object(module, 'SqlVersionDialog') as selector:
+                self.widget.open_sql_version_dialog()
+            selector.assert_not_called()
+            self.assertIsNone(self.widget.selected_sql_version)
+            self.assertFalse(self.widget.run_button.isEnabled())
+            self.assertFalse(self.widget.choose_sql_version.isEnabled())
+        connect.assert_not_called()
+
     def test_initial_state_and_direct_execution_are_blocked(self):
         self.assertFalse(self.widget.run_button.isEnabled())
         self.assertTrue(all(not card.isEnabled() and not card.isChecked()
@@ -152,7 +188,7 @@ class SncTests(unittest.TestCase):
         cursor = self.database(connect)
         cursor.fetchall.return_value = []
         source = {'kind': 'tables', 'tables': ['reglas_cargue_snc_cica'], 'snc': True}
-        with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'SqlVersionDialog') as chooser:
+        with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'published_versions', return_value=[({'table': source['tables'][0], 'version': 'v1'}, 'v1', 'SNC', 'PUBLICADA', None)]), patch.object(module, 'SqlVersionDialog') as chooser:
             chooser.return_value.exec.return_value = QDialog.Accepted
             chooser.return_value.selected_version = {'id': {'table': source['tables'][0], 'version': 'v1'}, 'codigo': 'v1'}
             self.widget.open_sql_version_dialog()
@@ -183,7 +219,7 @@ class SncTests(unittest.TestCase):
         source = {'kind': 'tables', 'tables': ['reglas_cargue_snc_xtf'], 'snc': True}
         cursor = self.database(connect)
         cursor.fetchall.return_value = [('Juridicas', 'snc_1', 'CONTROL', 'SELECT 1', 'Control SNC')]
-        with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'SqlVersionDialog') as chooser:
+        with patch.object(self.widget, 'repository_source', return_value=source), patch.object(module, 'published_versions', return_value=[({'table': source['tables'][0], 'version': 'v1'}, 'v1', 'SNC', 'PUBLICADA', None)]), patch.object(module, 'SqlVersionDialog') as chooser:
             chooser.return_value.exec.return_value = QDialog.Accepted
             chooser.return_value.selected_version = {'id': {'table': source['tables'][0], 'version': 'v1'}, 'codigo': 'v1'}
             self.widget.open_sql_version_dialog()

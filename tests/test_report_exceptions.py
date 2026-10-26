@@ -59,21 +59,18 @@ class ReportExceptionTests(unittest.TestCase):
             self.assertLessEqual(len(rule.formula1), 255)
         self.assertEqual([rule.type for rule in validations], ['list', 'list'])
         self.assertEqual([str(rule.sqref) for rule in validations], ['I2', 'K2'])
-        self.assertTrue(all(rule.formula1 == '_ExcepcionSiNo' for rule in validations))
+        self.assertTrue(all(rule.formula1 == '"Sí,No"' for rule in validations))
         self.assertGreater(len(sheet.conditional_formatting), 0)
         book.close()
 
-    def test_yes_no_domains_are_named_ranges_with_visible_dropdown(self):
+    def test_domains_are_inline_lists_with_visible_dropdown_and_no_external_names(self):
         save_review(self.path, cases())
         book = load_workbook(self.path); sheet = book['Revisión']
-        self.assertEqual(book['_DominiosExcepcion'].sheet_state, 'hidden')
-        self.assertEqual([book['_DominiosExcepcion'].cell(row, 1).value for row in (1, 2)], ['No', 'Sí'])
-        self.assertIn('_ExcepcionSiNo', book.defined_names)
-        self.assertIn('_ExcepcionSoloNo', book.defined_names)
+        self.assertNotIn('_DominiosExcepcion', book.sheetnames)
         for validation in sheet.data_validations.dataValidation:
-            if validation.type == 'list':
-                self.assertFalse(validation.showDropDown)
-                self.assertIn('_ExcepcionSiNo', validation.formula1)
+            self.assertEqual(validation.type, 'list')
+            self.assertFalse(validation.showDropDown)
+            self.assertEqual(validation.formula1, '"Sí,No"')
         book.close()
 
     def test_yes_green_no_red_and_dt_operator_gray_has_priority(self):

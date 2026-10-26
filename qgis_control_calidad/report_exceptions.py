@@ -4,7 +4,6 @@ from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
-from openpyxl.workbook.defined_name import DefinedName
 
 HEADERS = ('Excepción DT', 'Observación DT', 'Excepción operador', 'Observación operador')
 FIELDS = ('excepcion_dt', 'observacion_dt', 'excepcion_operador', 'observacion_operador')
@@ -27,32 +26,16 @@ def validate(values, valid_observation):
         raise ValueError('Excepción operador requiere una Observación operador válida.')
 
 
-def ensure_domains(book):
-    name = '_DominiosExcepcion'
-    if name not in book:
-        domain = book.create_sheet(name)
-        domain['A1'] = 'No'
-        domain['A2'] = 'Sí'
-        domain.sheet_state = 'hidden'
-    for name, reference in (
-        ('_ExcepcionSiNo', "'_DominiosExcepcion'!$A$1:$A$2"),
-        ('_ExcepcionSoloNo', "'_DominiosExcepcion'!$A$1"),
-    ):
-        if name not in book.defined_names:
-            book.defined_names.add(DefinedName(name, attr_text=reference))
-
-
 def add_controls(sheet, first_row, last_row, first_column, protect=True):
     """Sí/No dropdowns and unrestricted notes; DT=Sí visually excludes a row."""
     if last_row < first_row:
         return
-    ensure_domains(sheet.parent)
     dt, note_dt, operator, note_operator = [get_column_letter(first_column + i) for i in range(4)]
     for offset, header in enumerate(HEADERS):
         sheet.cell(first_row - 1, first_column + offset).comment = Comment(
             'Seleccione Sí o No. Las observaciones se pueden diligenciar antes o después. DT en Sí oscurece toda la fila para excluirla de la revisión del operador.', 'Validador')
     for column in (dt, operator):
-        validation = DataValidation(type='list', formula1='_ExcepcionSiNo', allow_blank=False)
+        validation = DataValidation(type='list', formula1='"Sí,No"', allow_blank=False)
         validation.showDropDown = False
         validation.showErrorMessage = True
         validation.errorStyle = 'stop'

@@ -72,6 +72,11 @@ class ReviewUiTests(unittest.TestCase):
                 self.assertTrue(sheet['I2'].data_type == 'f')
                 self.assertTrue(sheet['I2'].protection.locked)
                 self.assertTrue(detail.protection.sheet)
+                self.assertEqual(len(detail.data_validations.dataValidation), 2)
+                for validation in detail.data_validations.dataValidation:
+                    self.assertEqual(validation.type, 'list')
+                    self.assertFalse(validation.showDropDown)
+                    self.assertEqual(validation.formula1, '"Sí,No"')
             book.close()
         self.assertEqual(self.result.status, 'Correcta')
 

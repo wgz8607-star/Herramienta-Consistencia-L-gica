@@ -77,7 +77,7 @@ Si cambia la primera fila por reordenamiento o eliminación de reglas, transferi
 sus metadatos a la nueva primera fila. El cambio aplica a las tablas de `public`;
 los repositorios antiguos basados en esquema mantienen su tabla `versiones`.
 
-## Excepciones DT y operador (1.2.3)
+## Excepciones DT y operador (1.2.4)
 
 La revisión se diligencia en Excel. No se genera la ventana «Revisión de hallazgos
 por registro» ni se muestra el botón «Revisar hallazgos». Se conservan **Guardar
@@ -200,3 +200,10 @@ La selección o reselección de modelo restablece **Seleccione un ambiente…**,
 borra la versión SQL y bloquea la ejecución hasta elegir reglas válidas. Los
 resultados ya ejecutados mantienen su contexto original para revisarlos y
 exportarlos aunque se preparen otras opciones de ejecución.
+
+Desde 1.2.4 el dominio Sí/No se incluye directamente en cada validación de lista,
+sin referencias a rangos nombrados u hojas ocultas. La flecha de desplegable se
+muestra al seleccionar una celda de excepción en la hoja de la regla. En los
+paquetes, Revisión es el consolidado de fórmulas y no se edita allí. Los archivos
+Excel creados con versiones anteriores deben regenerarse para incorporar el
+nuevo dominio.

@@ -451,32 +451,29 @@ class ControlCalidadDialog(QDialog):
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
-        group = QGroupBox("2. Controles a ejecutar")
-        style_section(group, "#00C7CB")
-        group_layout = QVBoxLayout(group)
-        group_layout.setContentsMargins(8, 10, 8, 7)
-        group_layout.setSpacing(5)
-        control_row = QHBoxLayout()
-        all_button = QPushButton("Seleccionar todos")
-        all_button.clicked.connect(self.select_all_categories)
-        control_row.addWidget(all_button)
+        group = QWidget()
+        group.setObjectName('controlSelection')
+        group.setStyleSheet('QWidget#controlSelection { background: white; border: 1px solid #00C7CB; border-radius: 6px; }')
+        group_layout = QHBoxLayout(group)
+        group_layout.setContentsMargins(8, 6, 8, 6)
+        group_layout.setSpacing(8)
+        control_title = QLabel("Controles a ejecutar")
+        control_title.setStyleSheet('color: #0468A3; font-weight: 700; font-size: 12px;')
+        group_layout.addWidget(control_title)
+        self.category_menu = QMenu(self)
+        self.category_menu.setToolTipsVisible(True)
+        self.category_button = QToolButton()
+        self.category_button.setText("Seleccionar grupos")
+        self.category_button.setStyleSheet('QToolButton { background: #068CBB; color: white; border: none; border-radius: 4px; padding: 6px 14px; font-size: 12px; font-weight: 600; }')
+        self.category_button.setPopupMode(QToolButton.InstantPopup)
+        self.category_button.setMenu(self.category_menu)
+        group_layout.addWidget(self.category_button)
         self.category_summary = QLabel()
-        self.category_summary.setWordWrap(True)
-        self.category_summary.setStyleSheet("color: #575756;")
-        control_row.addWidget(self.category_summary)
-        control_row.addStretch()
-        group_layout.addLayout(control_row)
-        self.category_cards = QGridLayout()
-        self.category_cards.setHorizontalSpacing(6)
-        self.category_cards.setVerticalSpacing(6)
-        group_layout.addLayout(self.category_cards)
+        self.category_summary.setStyleSheet('color: #575756; font-size: 12px;')
+        group_layout.addWidget(self.category_summary, 1)
         right_layout.addWidget(group)
-        hint = QLabel("Los grupos seleccionados se ejecutan sin modificar los datos de origen.")
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color: #52666a;")
-        right_layout.addWidget(hint)
 
-        result_box = QGroupBox("3. Resultados de la ejecución")
+        result_box = QGroupBox("Resultados de la ejecución")
         style_section(result_box, "#3FA4F5")
         result_layout = QVBoxLayout(result_box)
         self.summary = QLabel("Aún no se han ejecutado controles.")
@@ -494,10 +491,12 @@ class ControlCalidadDialog(QDialog):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setStyleSheet("QTableWidget { background: white; gridline-color: #D7EAF7; border: 1px solid #3FA4F5; } "
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.verticalHeader().setDefaultSectionSize(24)
+        self.table.setStyleSheet("QTableWidget { font-size: 12px; background: white; gridline-color: #D7EAF7; border: 1px solid #3FA4F5; } "
                                  "QHeaderView::section { background: #068CBB; color: white; border: none; padding: 4px; font-size: 12px; font-weight: 700; } "
                                  "QTableWidget::item:selected { background: #BFEAF0; color: #575756; }")
-        self.table.setMinimumHeight(160)
+        self.table.setMinimumHeight(180)
         result_layout.addWidget(self.table)
         review_actions = QHBoxLayout()
         self.review_save_button = QPushButton("Guardar revisión en Excel")
@@ -507,21 +506,26 @@ class ControlCalidadDialog(QDialog):
         for button in (self.review_save_button, self.review_recover_button):
             button.setEnabled(False)
             review_actions.addWidget(button)
-        result_layout.addLayout(review_actions)
-        detail_group = QGroupBox("Detalles de revisión — cargar o liberar por componente")
+        detail_group = QGroupBox("Gestión de Excepciones")
+        style_section(detail_group, "#3FA4F5")
         detail_group_layout = QVBoxLayout(detail_group)
-        detail_note = QLabel("Los archivos no quedan abiertos. Liberar retira su revisión importada; después puede editar el Excel y volver a cargarlo.")
+        detail_note = QLabel("Cargue y libere cada detalle de revisión. Los archivos quedan disponibles para editar.")
         detail_note.setWordWrap(True)
         detail_group_layout.addWidget(detail_note)
-        detail_scroll = QScrollArea()
-        detail_scroll.setWidgetResizable(True)
-        detail_scroll.setMaximumHeight(160)
-        detail_content = QWidget()
-        self.detail_review_layout = QGridLayout(detail_content)
-        detail_scroll.setWidget(detail_content)
-        detail_group_layout.addWidget(detail_scroll)
-        result_layout.addWidget(detail_group)
-        right_layout.addWidget(result_box, 1)
+        self.detail_review_table = QTableWidget(0, 4)
+        self.detail_review_table.setHorizontalHeaderLabels(['Detalle', 'Archivo', 'Acciones', 'Estado'])
+        self.detail_review_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.detail_review_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.detail_review_table.verticalHeader().setVisible(False)
+        self.detail_review_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.detail_review_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.detail_review_table.setMinimumHeight(220)
+        self.detail_review_table.setStyleSheet('QTableWidget { background: white; font-size: 12px; } QLabel { font-size: 12px; } QPushButton { font-size: 12px; padding: 4px 6px; } QHeaderView::section { background: #068CBB; color: white; padding: 5px; font-size: 12px; }')
+        self.detail_filename_labels = {}
+        detail_group_layout.addWidget(self.detail_review_table, 1)
+        detail_group_layout.addLayout(review_actions)
+        right_layout.addWidget(result_box, 2)
+        right_layout.addWidget(detail_group, 3)
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
@@ -888,12 +892,9 @@ class ControlCalidadDialog(QDialog):
         return params
 
     def refresh_categories(self, *_):
-        if not hasattr(self, "category_cards"):
+        if not hasattr(self, "category_menu"):
             return
-        while self.category_cards.count():
-            item = self.category_cards.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        self.category_menu.clear()
         self.category_checks.clear()
         if self.repository_rules:
             counts = defaultdict(int)
@@ -908,39 +909,26 @@ class ControlCalidadDialog(QDialog):
         categories = list(categories)
         if not self.selected_sql_version and self.model.currentText() in SNC_REPOSITORY_TABLES and not any(name == SNC_CATEGORY for name, _ in categories):
             categories.append((SNC_CATEGORY, 0))
-        for index, (category_name, count) in enumerate(categories):
-            card = QPushButton()
-            card.setObjectName("categoryCard")
-            card.setCheckable(True)
+        self.category_menu.addAction("Seleccionar todos", self.select_all_categories)
+        self.category_menu.addAction("Desmarcar todos", self.clear_category_selection)
+        self.category_menu.addSeparator()
+        for category_name, count in categories:
+            text = "+ Cargue SNC" if category_name == SNC_CATEGORY else f"{category_name} · {count} reglas"
+            action = self.category_menu.addAction(text)
+            action.setCheckable(True)
             optional_snc = category_name == SNC_CATEGORY
-            snc_selected = (
-                optional_snc and count > 0 and bool(self.selected_sql_version)
-            )
-            card.setChecked(not optional_snc or snc_selected)
-            card.setEnabled(not optional_snc or count > 0)
+            action.setChecked(not optional_snc or (count > 0 and bool(self.selected_sql_version)))
+            action.setEnabled(not optional_snc or count > 0)
             if optional_snc and not count:
-                card.setToolTip("Pendiente incorporar las reglas SQL de cargue a SNC para este modelo y ambiente.")
-            card.setIconSize(QSize(14, 14))
-            card.setLayoutDirection(Qt.RightToLeft)
-            card.setMinimumHeight(30)
-            card.setStyleSheet(
-                "QPushButton#categoryCard { background: #F7F9FA; color: #9AA3A8; border: 1px solid #D7E0E5; "
-                "border-radius: 5px; text-align: left; padding: 3px 7px; font-weight: 600; } "
-                "QPushButton#categoryCard:hover { background: #E2F7F8; color: #0468A3; border: 2px solid #3FA4F5; } "
-                "QPushButton#categoryCard:checked { background: #0468A3; color: white; border: 2px solid #00C7CB; }"
-            )
-            self.update_category_card(card, category_name, count, card.isChecked())
-            card.toggled.connect(lambda checked, button=card, name=category_name, rules=count: self.update_category_card(button, name, rules, checked))
-            card.toggled.connect(self.update_category_summary)
-            self.category_checks[category_name] = card
-            self.category_cards.addWidget(card, index // 3, index % 3)
+                action.setToolTip("No hay reglas SNC cargadas para este ambiente.")
+            action.toggled.connect(self.update_category_summary)
+            self.category_checks[category_name] = action
         self.update_category_summary()
 
-    @staticmethod
-    def update_category_card(card, name, rules, checked):
-        icon_name = "selected.svg" if checked else "unselected.svg"
-        card.setIcon(QIcon(str(PLUGIN_DIR / "resources" / "icons" / icon_name)))
-        card.setText("+ Cargue SNC" if name == SNC_CATEGORY else f"{name} · {rules} reglas")
+    def clear_category_selection(self):
+        for action in self.category_checks.values():
+            action.setChecked(False)
+        self.update_category_summary()
 
     def select_all_categories(self):
         for name, action in self.category_checks.items():
@@ -954,7 +942,9 @@ class ControlCalidadDialog(QDialog):
             count = sum(1 for item in self.repository_rules if item["type"] == "CONTROL" and item["component"] in selected and item["sql"] and item["sql"].strip())
         else:
             count = sum(len(list((SQL_ROOT / MODELS[self.model.currentText()] / name).glob("*.sql"))) for name in selected)
-        self.category_summary.setText(f"{len(selected)} grupos seleccionados · {count} reglas a ejecutar")
+        self.category_summary.setText(f"{len(selected)} grupos · {count} reglas")
+        self.category_summary.setToolTip(', '.join(selected))
+        self.category_button.setEnabled(any(action.isEnabled() for action in self.category_checks.values()))
         self.update_run_availability()
 
     def connection_params(self):
@@ -1185,36 +1175,50 @@ class ControlCalidadDialog(QDialog):
         self.refresh_review_statistics()
         components = sorted({case.component for case in self.review_cases})
         if set(components) != set(self.detail_review_rows):
-            while self.detail_review_layout.count():
-                item = self.detail_review_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
+            self.detail_review_table.setRowCount(0)
             self.detail_review_rows = {}
+            self.detail_filename_labels = {}
             for row, component in enumerate(components):
-                name = QLabel(component)
-                load = QPushButton("Cargar detalle")
+                self.detail_review_table.insertRow(row)
+                self.detail_review_table.setRowHeight(row, 30)
+                self.detail_review_table.setItem(row, 0, QTableWidgetItem(component))
+                filename = QLabel('—')
+                filename.setWordWrap(True)
+                actions = QWidget()
+                action_layout = QHBoxLayout(actions)
+                action_layout.setContentsMargins(2, 2, 2, 2)
+                action_layout.setSpacing(3)
+                load = QPushButton("Cargar")
                 release = QPushButton("Liberar")
+                action_layout.addWidget(load)
+                action_layout.addWidget(release)
                 state = QLabel("No cargado")
                 state.setWordWrap(True)
                 load.clicked.connect(lambda checked=False, c=component: self.recover_detail(c))
                 release.clicked.connect(lambda checked=False, c=component: self.release_detail(c))
-                for column, widget in enumerate((name, load, release, state)):
-                    self.detail_review_layout.addWidget(widget, row, column)
+                self.detail_review_table.setCellWidget(row, 1, filename)
+                self.detail_review_table.setCellWidget(row, 2, actions)
+                self.detail_review_table.setCellWidget(row, 3, state)
                 self.detail_review_rows[component] = (load, release, state)
+                self.detail_filename_labels[component] = filename
         for component, (load, release, state) in self.detail_review_rows.items():
             source = self.review_imports.sources.get(component)
             load.setEnabled(not self.controls_running)
             release.setEnabled(bool(source) and not self.controls_running)
-            load.setText("Recargar detalle" if source else "Cargar detalle")
+            load.setText("Recargar" if source else "Cargar")
             if source:
                 counts = source['counts']
                 warnings = sum(counts[name] for name in ('sin_correspondencia', 'ambiguas', 'conflictos', 'excepciones_invalidas', 'estados_invalidos', 'datos_invalidos', 'operador_bloqueado'))
                 label = ('Cargado con observaciones' if warnings else 'Cargado') if counts['coincidencias'] else 'Sin coincidencias'
-                state.setText(f"{label}: {Path(source['path']).name} · {counts['incorporadas']} incorporadas · {counts['conflictos']} conflictos")
-                state.setToolTip(source['path'])
+                self.detail_filename_labels[component].setText(Path(source['path']).name)
+                self.detail_filename_labels[component].setToolTip(source['path'])
+                state.setText(label)
+                state.setToolTip(f"{source['path']}\n{counts['incorporadas']} incorporadas · {counts['conflictos']} conflictos")
                 color = '#087F23' if counts['coincidencias'] and not warnings else '#A05A00'
                 state.setStyleSheet(f'color: {color}; font-weight: 600;')
             else:
+                self.detail_filename_labels[component].setText('—')
+                self.detail_filename_labels[component].setToolTip('')
                 state.setText('No cargado')
                 state.setToolTip('')
                 state.setStyleSheet('color: #575756;')

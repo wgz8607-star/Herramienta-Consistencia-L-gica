@@ -345,3 +345,18 @@ sin abrir la ventana de versiones. Se mantiene visible la versión cargada.
 Si no existe ninguna, hay más de una o falla la consulta, no se habilita la
 ejecución ni se elige una versión arbitrariamente. Para las validaciones
 habituales del modelo se conserva la selección manual de versiones.
+
+## Controles compactos y Gestión de Excepciones (1.5.0)
+
+**Controles a ejecutar** ocupa una sola línea. **Seleccionar grupos** abre una
+lista desplegable con casillas independientes, conteos de reglas y las acciones
+Seleccionar todos / Desmarcar todos. Se mantienen las condiciones de
+habilitación: solo se ofrecen los grupos de las sentencias cargadas; para SNC,
+solo Cargue SNC. No se muestran tarjetas permanentes de grupos.
+
+**Gestión de Excepciones** dispone de más espacio y muestra una tabla de detalle,
+archivo, acciones Cargar/Recargar y Liberar, y estado de cada carga. Los nombres
+de archivos y los mensajes completos se pueden consultar en los textos de ayuda
+al situar el puntero sobre la celda. Los botones Guardar revisión en Excel y
+Cargar revisión consolidada se agrupan bajo esa tabla. Las pestañas de conexión
+y referencias permanecen a la izquierda, con Ejecutar validación debajo.

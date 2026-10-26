@@ -147,6 +147,25 @@ class SncTests(unittest.TestCase):
             self.assertFalse(self.widget.choose_sql_version.isEnabled())
         connect.assert_not_called()
 
+    def test_compact_control_menu_supports_multiple_selection(self):
+        self.widget.selected_sql_version = {'codigo': 'v1'}
+        self.widget.repository_rules = [
+            {'type': 'CONTROL', 'component': 'Administrativas', 'sql': 'SELECT 1'},
+            {'type': 'CONTROL', 'component': 'Juridicas', 'sql': 'SELECT 2'},
+        ]
+        self.widget.refresh_categories()
+        self.assertIs(self.widget.category_button.menu(), self.widget.category_menu)
+        self.assertFalse(hasattr(self.widget, 'category_cards'))
+        self.assertEqual(set(self.widget.category_checks), {'Administrativas', 'Juridicas'})
+        self.assertTrue(self.widget.run_button.isEnabled())
+        next(action for action in self.widget.category_menu.actions() if action.text() == 'Desmarcar todos').trigger()
+        self.assertFalse(self.widget.run_button.isEnabled())
+        self.widget.category_checks['Juridicas'].trigger()
+        self.assertTrue(self.widget.run_button.isEnabled())
+        self.assertIn('1 grupos', self.widget.category_summary.text())
+        self.widget.category_checks['Administrativas'].trigger()
+        self.assertIn('2 grupos', self.widget.category_summary.text())
+
     def test_initial_state_and_direct_execution_are_blocked(self):
         self.assertFalse(self.widget.run_button.isEnabled())
         self.assertTrue(all(not card.isEnabled() and not card.isChecked()
@@ -232,7 +251,7 @@ class SncTests(unittest.TestCase):
         self.widget.select_all_categories()
         self.assertTrue(card.isChecked())
         self.assertIn('1 reglas', self.widget.category_summary.text())
-        card.click()
+        card.trigger()
         self.assertFalse(self.widget.run_button.isEnabled())
         query, params = cursor.execute.call_args.args
         self.assertIn('public.reglas_cargue_snc_xtf', query)

@@ -9,9 +9,9 @@ Plugin para QGIS 3.28 o superior. Ejecuta las reglas SQL para **Modelo Interno d
 
 Tras usar **Listar Esquemas**, el plugin lista los esquemas disponibles y permite seleccionar el que se validará.
 
-## Ingesta CICA
+## Cargue archivos CICA
 
-Al seleccionar CICA aparece el botón **Cargar insumos CICA**. Solicita individualmente los siete CSV requeridos y la geodatabase `.gdb` —directa o comprimida en ZIP—, validando su presencia antes de la carga al esquema de destino.
+Al seleccionar CICA aparece **Cargue archivos CICA**. Permite elegir los CSV individualmente y una geodatabase `.gdb` o ZIP. Se preparan copias temporales para validar durante la sesión, sin nuevo esquema de destino y sin modificar los originales. Consulte la guía para las condiciones de las sentencias y las vistas materializadas.
 
 ## Referencias R1 y R2
 
@@ -99,8 +99,7 @@ protegidos para evitar dos fuentes de edición. La clave se conserva oculta en
 las hojas de detalle. Cambiar el orden de las filas no altera el cruce.
 
 Las columnas de excepción se muestran en verde para **Sí** y rojo para **No**.
-Cuando DT es Sí, solo los valores de los dos campos del operador quedan
-visualmente ocultos; las columnas de DT y los datos conservan sus colores. En reportes sin hojas de regla (archivo ejecutivo o Guardar revisión en
+Las marcas del operador permanecen visibles aunque DT marque Sí. En reportes sin hojas de regla (archivo ejecutivo o Guardar revisión en
 Excel), el seguimiento se diligencia directamente en **Revisión**.
 
 Al recuperar un paquete, el plugin obtiene las marcas desde las hojas de regla
@@ -118,19 +117,10 @@ exigen un orden de diligenciamiento: se puede seleccionar Sí y luego escribir
 la nota. En las hojas de regla, las cuatro celdas del seguimiento están
 desbloqueadas; los datos originales siguen protegidos.
 
-Cuando **Excepción DT = Sí**, se ocultan visualmente solo los valores de
-**Excepción operador** y **Observación operador** de esa fila, usando texto y
-fondo blancos. El resto de la fila permanece visible; la marca DT conserva su
-verde y las otras marcas su rojo/verde. Al cambiar DT a No, los valores del
-operador vuelven a verse. Este efecto no borra datos ni oculta físicamente las
-columnas: en Excel una columna oculta afecta a toda la hoja, no a un solo caso.
-El contenido sigue existiendo y puede verse en la barra de fórmulas; no es una
-medida de seguridad. No se añaden macros ni ventanas de edición.
-
-La recuperación sigue verificando la justificación y la prioridad de DT:
-flexibilizar la edición no convierte una marca incompleta en una excepción
-validada. Si DT es Sí con justificación, el seguimiento del operador no se
-incorpora para ese caso.
+Las marcas y observaciones de DT y operador permanecen visibles y editables,
+aunque ambas excepciones sean Sí. Cada rol requiere su propia justificación;
+solo DT descuenta errores. La recuperación y la generación conservan ambos
+seguimientos.
 
 **Recuperar revisión** solo reutiliza coincidencias únicas con los mismos datos
 y criterio. Si una excepción carece de su observación, la convierte a No e
@@ -437,3 +427,13 @@ resumen de carga, incluido en la versión 1.6.1.
 ## Versión 2.0.0
 
 Interfaz compacta con indicadores y totales, seguimiento de archivos modificados, fecha de carga por detalle, incidencias desplegables y observaciones de ancho adaptable. Consulte la guía integrada en la pestaña Ayuda.
+
+## Versión 2.1.0
+
+- Excepciones del operador visibles aun cuando DT marque Sí.
+- Carga independiente de CSV CICA en tablas temporales de la conexión de validación; sin escritura en tablas persistentes.
+- Descarga local de los formatos homologados originales para CICA V2 y Modelo interno V2 después de validar la versión correspondiente.
+
+Consulte la guía integrada para los tipos de datos de los CSV, la consulta de tablas no seleccionadas y las condiciones de habilitación de los formatos.
+
+La geodatabase también se utiliza temporalmente, conservando atributos, geometría y EPSG. Sus tablas de trabajo desaparecen al finalizar la ejecución.

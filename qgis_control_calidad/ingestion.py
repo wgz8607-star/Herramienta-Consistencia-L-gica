@@ -1,118 +1,114 @@
-"""Formulario de preparación de insumos CICA para PostgreSQL/PostGIS."""
-from __future__ import annotations
-
-import csv
-import zipfile
-from pathlib import Path
-
+"""Prepare independent CICA CSV snapshots for temporary validation tables."""
 from qgis.PyQt.QtWidgets import (
-    QDialog, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
-
-
-CSV_INPUTS = {
-    "Datos Contacto": "cica_contacto",
-    "Datos Predio - Derecho": "cica_predio_derecho",
-    "Predio": "cica_predio",
-    "Datos Propietario": "cica_propietario",
-    "Justificación": "cica_justificacion",
-    "Seguimiento de Control": "cica_seguimiento_control",
-    "Unidad de Construcción": "cica_unidad_construccion",
-}
+from .cica_data import TABLES as CSV_INPUTS, prepare_csv
+from .cica_gdb import prepare_gdb
 
 
 class CicaIngestionDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, references=None, geodatabase=None):
         super().__init__(parent)
-        self.setWindowTitle("Ingesta de insumos CICA")
-        self.resize(760, 620)
+        self.setWindowTitle('Cargue archivos CICA')
+        self.resize(820, 520)
+        self.prepared = {}
+        self.prepared_gdb = None
+        self.existing_gdb = geodatabase
+        self.existing = dict(references or {})
         self.files = {}
         layout = QVBoxLayout(self)
-        title = QLabel("Ingesta CICA: archivos planos y geodatabase")
-        title.setStyleSheet("font-size: 18px; font-weight: 600; color: #08756a;")
-        layout.addWidget(title)
-        note = QLabel("Seleccione los siete CSV individualmente. La verificación comprueba que estén completos antes de cargar a PostgreSQL/PostGIS.")
+        note = QLabel('Seleccione los CSV individualmente y la geodatabase (.gdb o .zip). Los archivos se usarán temporalmente durante la validación, sin modificar los originales. Puede reemplazar un archivo sin volver a seleccionar los demás.')
         note.setWordWrap(True)
         layout.addWidget(note)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        content = QWidget()
-        form = QFormLayout(content)
-        for label, destination in CSV_INPUTS.items():
-            field = QLineEdit()
-            field.setReadOnly(True)
-            button = QPushButton("Seleccionar")
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        content = QWidget(); form = QFormLayout(content)
+        for label, table in CSV_INPUTS.items():
+            field = QLineEdit(); field.setReadOnly(True)
+            if table in self.existing:
+                ref = self.existing[table]
+                field.setText(f'{ref.filename} · {ref.row_count} registros')
+            button = QPushButton('Cargar CSV…')
             button.clicked.connect(lambda _=False, key=label: self.choose_csv(key))
-            row = QHBoxLayout()
-            row.addWidget(field, 1)
-            row.addWidget(button)
-            form.addRow(f"{label} → {destination}", row)
-            self.files[label] = field
-        self.gdb = QLineEdit()
-        self.gdb.setReadOnly(True)
-        choose_gdb = QPushButton("Seleccionar")
+            row = QHBoxLayout(); row.addWidget(field, 1); row.addWidget(button)
+            form.addRow(label, row); self.files[label] = field
+        self.gdb = QLineEdit(); self.gdb.setReadOnly(True)
+        if self.existing_gdb:
+            self.gdb.setText(f'{self.existing_gdb.filename} · {len(self.existing_gdb.layers)} capas/tablas')
+        choose_gdb = QPushButton('Seleccionar geodatabase…')
         choose_gdb.clicked.connect(self.choose_gdb)
-        gdb_row = QHBoxLayout()
-        gdb_row.addWidget(self.gdb, 1)
-        gdb_row.addWidget(choose_gdb)
-        form.addRow("Geodatabase CICA (.gdb o .zip)", gdb_row)
-        self.schema = QLineEdit("cica_cargue")
-        form.addRow("Nuevo esquema de destino", self.schema)
-        scroll.setWidget(content)
-        layout.addWidget(scroll, 1)
-
-        self.status = QLabel("Seleccione los insumos requeridos.")
-        layout.addWidget(self.status)
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-        validate = QPushButton("Validar insumos")
-        validate.clicked.connect(self.validate_inputs)
-        buttons.addWidget(validate)
-        layout.addLayout(buttons)
+        gdb_row = QHBoxLayout(); gdb_row.addWidget(self.gdb, 1); gdb_row.addWidget(choose_gdb)
+        form.addRow('Geodatabase CICA', gdb_row)
+        scroll.setWidget(content); layout.addWidget(scroll, 1)
+        self.status = QLabel('Sin esquema de destino. Los archivos estarán disponibles para las validaciones de esta sesión; los datos de trabajo de cada ejecución se eliminan al finalizarla.')
+        self.status.setWordWrap(True); layout.addWidget(self.status)
+        buttons = QHBoxLayout(); buttons.addStretch()
+        cancel = QPushButton('Cancelar'); cancel.clicked.connect(self.reject)
+        apply = QPushButton('Usar archivos temporales'); apply.clicked.connect(self.validate_inputs)
+        buttons.addWidget(cancel); buttons.addWidget(apply); layout.addLayout(buttons)
 
     def choose_csv(self, key):
-        path, _ = QFileDialog.getOpenFileName(self, f"Seleccione {key}", "", "Archivos CSV (*.csv)")
-        if path:
-            self.files[key].setText(path)
+        path, _ = QFileDialog.getOpenFileName(self, f'Seleccione {key}', '', 'Archivos CSV (*.csv)')
+        if not path:
+            return
+        table = CSV_INPUTS[key]
+        self.setEnabled(False)
+        try:
+            owner = self.parent()
+            reference = owner.report_task(prepare_csv, table, path) if owner is not None and hasattr(owner, 'report_task') else prepare_csv(table, path)
+        except Exception as error:
+            QMessageBox.warning(self, 'No se cargó el CSV', str(error))
+            return
+        finally:
+            self.setEnabled(True)
+        previous = self.prepared.get(table)
+        self.prepared[table] = reference
+        if previous:
+            previous.close()
+        self.files[key].setText(f'{reference.filename} · {reference.row_count} registros')
+        self.status.setText(f'{key}: preparado temporalmente. Use «Usar archivos temporales» para aplicarlo.')
 
     def choose_gdb(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Seleccione la geodatabase comprimida", "", "Archivo ZIP (*.zip)")
+        path, _ = QFileDialog.getOpenFileName(self, 'Seleccione una geodatabase comprimida', '', 'Geodatabase comprimida (*.zip)')
         if not path:
-            path = QFileDialog.getExistingDirectory(self, "Seleccione la carpeta .gdb")
-        if path:
-            self.gdb.setText(path)
+            path = QFileDialog.getExistingDirectory(self, 'Seleccione la carpeta .gdb')
+        if not path:
+            return
+        self.setEnabled(False)
+        self.status.setText('Preparando geodatabase temporal…')
+        try:
+            owner = self.parent()
+            prepared = owner.report_task(prepare_gdb, path) if owner is not None and hasattr(owner, 'report_task') else prepare_gdb(path)
+        except Exception as error:
+            QMessageBox.warning(self, 'No se cargó la geodatabase', str(error))
+            return
+        finally:
+            self.setEnabled(True)
+        if self.prepared_gdb:
+            self.prepared_gdb.close()
+        self.prepared_gdb = prepared
+        self.gdb.setText(f'{prepared.filename} · {len(prepared.layers)} capas/tablas')
+        self.gdb.setToolTip('\n'.join(f'{layer.source_name} → {name}: {layer.row_count} registros' for name, layer in prepared.layers.items()))
+        self.status.setText('Geodatabase preparada. Pulse «Usar archivos temporales» para aplicarla. Si una tabla también tiene CSV seleccionado, se utiliza el CSV.')
 
     def validate_inputs(self):
-        missing = [label for label, field in self.files.items() if not field.text()]
-        if missing:
-            QMessageBox.warning(self, "Insumos incompletos", "Faltan: " + ", ".join(missing))
+        if not (self.prepared or self.existing or self.prepared_gdb or self.existing_gdb):
+            QMessageBox.warning(self, 'Sin insumos', 'Seleccione al menos un CSV o una geodatabase.')
             return
-        if not self.gdb.text():
-            QMessageBox.warning(self, "Insumo incompleto", "Seleccione la geodatabase CICA.")
-            return
-        errors = []
-        for label, field in self.files.items():
-            try:
-                with open(field.text(), "r", encoding="utf-8-sig", newline="") as stream:
-                    header = next(csv.reader(stream), [])
-                if not header or not any("predial" in value.lower() for value in header):
-                    errors.append(label)
-            except Exception:
-                errors.append(label)
-        gdb_path = Path(self.gdb.text())
-        valid_gdb = (gdb_path.is_dir() and gdb_path.suffix.lower() == ".gdb")
-        if gdb_path.suffix.lower() == ".zip":
-            try:
-                with zipfile.ZipFile(gdb_path) as archive:
-                    valid_gdb = any(entry.filename.lower().endswith(".gdb/") for entry in archive.infolist())
-            except zipfile.BadZipFile:
-                valid_gdb = False
-        if not valid_gdb:
-            errors.append("Geodatabase")
-        if errors:
-            QMessageBox.critical(self, "No se pudieron validar insumos", "Revise: " + ", ".join(errors))
-            return
-        self.status.setText("Insumos completos y válidos. Esquema de destino: " + self.schema.text().strip())
-        QMessageBox.information(self, "Insumos validados", "Los 7 CSV y la geodatabase CICA están listos para cargar en el esquema indicado.")
+        self.accept()
+
+    def take_prepared(self):
+        prepared, self.prepared = self.prepared, {}
+        return prepared
+
+    def take_geodatabase(self):
+        prepared, self.prepared_gdb = self.prepared_gdb, None
+        return prepared
+
+    def clear_prepared(self):
+        if self.prepared_gdb:
+            self.prepared_gdb.close()
+            self.prepared_gdb = None
+        for reference in self.prepared.values():
+            reference.close()
+        self.prepared = {}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import shutil
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -26,6 +27,9 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
+from .cica_data import install_csv, resolve_csv_tables
+from .cica_gdb import install_gdb
+from .templates import validation_format
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
 from .review_imports import ReviewImports
@@ -191,13 +195,15 @@ class RuleWorker(QObject):
     finished = pyqtSignal()
     message = pyqtSignal(str)
 
-    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None):
+    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None, cica_references=None, cica_gdb=None):
         super().__init__()
         self.params = params
         self.schema = schema
         self.prefix = prefix
         self.r1_table = r1_table
         self.references = dict(references or {})
+        self.cica_references = dict(cica_references or {})
+        self.cica_gdb = cica_gdb
         self.rules = rules
         self.general_report_path = general_report_path
 
@@ -224,7 +230,8 @@ class RuleWorker(QObject):
         sql = sql.replace('{esquema}.{punto}', schema_prefix)
         sql = sql.replace('{esquema}{punto}.', schema_prefix)
         sql = sql.replace('{esquema}{punto}', schema_prefix)
-        return sql.replace('{esquema}', schema_prefix).replace('{punto}', self.prefix)
+        sql = sql.replace('{esquema}.', schema_prefix).replace('{esquema}', schema_prefix).replace('{punto}', self.prefix)
+        return resolve_csv_tables(sql, self.schema, self.cica_references, self.cica_gdb.layers if self.cica_gdb else ())
 
     def run(self):
         try:
@@ -232,7 +239,13 @@ class RuleWorker(QObject):
                 for kind, reference in sorted(self.references.items()):
                     self.message.emit(f'Cargando {kind} en tabla temporal de la sesión…')
                     install_reference(connection, reference)
-                if self.references:
+                if self.cica_gdb:
+                    self.message.emit('Preparando geodatabase temporal para validar…')
+                    install_gdb(connection, self.cica_gdb, exclude=self.cica_references)
+                for table, reference in sorted(self.cica_references.items()):
+                    self.message.emit(f'Cargando {table} en tabla temporal de la sesión…')
+                    install_csv(connection, reference, self.schema, self.cica_gdb.layers.get(table) if self.cica_gdb else None)
+                if self.references or self.cica_references or self.cica_gdb:
                     # Commit setup once so a failing rule cannot roll back the tables.
                     connection.commit()
                 for index, (category, rule_name, raw_sql, description) in enumerate(self.rules, 1):
@@ -312,6 +325,10 @@ class ControlCalidadDialog(QDialog):
         self._repository_password = None
         self.references_ready = False
         self.temporary_references = {}
+        self.cica_references = {}
+        self.cica_gdb = None
+        self.pending_format = None
+        self.completed_format = None
         self._build()
         self.refresh_categories()
 
@@ -432,8 +449,8 @@ class ControlCalidadDialog(QDialog):
         version_row.addWidget(self.sql_version_label, 1)
         version_row.addWidget(choose_sql_version)
         form.addRow("Versión de SQL", version_row)
-        self.ingestion_label = QLabel("Ingesta CICA")
-        self.ingestion_button = QPushButton("Cargar insumos CICA…")
+        self.ingestion_label = QLabel("Archivos CICA")
+        self.ingestion_button = QPushButton("Cargue archivos CICA…")
         self.ingestion_button.clicked.connect(self.open_ingestion)
         form.addRow(self.ingestion_label, self.ingestion_button)
         form.addRow("Forma de conexión", self.connection_mode)
@@ -574,6 +591,12 @@ class ControlCalidadDialog(QDialog):
         self.incidents_toggle.toggled.connect(self.toggle_incidents)
         detail_group_layout.addWidget(self.incidents_toggle)
         detail_group_layout.addWidget(self.incidents_browser)
+        self.format_download = QPushButton('Descargar formato homologado V2')
+        self.format_download.setEnabled(False)
+        self.format_download.setStyleSheet('QPushButton { background: transparent; color: #0468A3; text-decoration: underline; text-align: left; padding: 4px; } QPushButton:disabled { color: #8B929A; }')
+        self.format_download.setToolTip('Se habilita al finalizar una validación del modelo CICA V2 o Modelo interno V2.')
+        self.format_download.clicked.connect(self.download_validation_format)
+        detail_group_layout.addWidget(self.format_download)
         self.last_execution_label = QLabel('Sin ejecución')
         self.last_execution_label.setStyleSheet('font-size: 11px; color: #52666a;')
         detail_group_layout.addWidget(self.last_execution_label)
@@ -762,6 +785,7 @@ class ControlCalidadDialog(QDialog):
         self.ingestion_button.setVisible(visible)
 
     def reset_model_selection(self, *_):
+        self.format_download.setEnabled(False)
         self.environment.blockSignals(True)
         self.environment.setCurrentIndex(0)
         self.environment.blockSignals(False)
@@ -770,6 +794,7 @@ class ControlCalidadDialog(QDialog):
         self.clear_repository_rules()
 
     def model_changed(self, *_):
+        self.format_download.setEnabled(False)
         self.clear_repository_rules()
         snc = self.environment.currentText() == SNC_ENVIRONMENT
         self.choose_sql_version.setEnabled(self.environment.currentIndex() > 0 and not snc)
@@ -826,6 +851,7 @@ class ControlCalidadDialog(QDialog):
         raise ValueError("No se encontró el repositorio centralizado de SQL para el modelo seleccionado.")
 
     def clear_repository_rules(self):
+        self.format_download.setEnabled(False)
         self.selected_sql_version = None
         self.repository_rules = []
         self.sql_version_label.setText("Seleccione una versión de SQL")
@@ -916,8 +942,42 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.warning(self, "No fue posible cargar reglas", str(error))
 
     def open_ingestion(self):
-        dialog = CicaIngestionDialog(self)
-        dialog.exec()
+        if self.controls_running or self.exporting:
+            return
+        dialog = CicaIngestionDialog(self, self.cica_references, self.cica_gdb)
+        try:
+            if dialog.exec() == QDialog.Accepted:
+                for table, reference in dialog.take_prepared().items():
+                    old = self.cica_references.get(table)
+                    self.cica_references[table] = reference
+                    if old:
+                        old.close()
+                prepared_gdb = dialog.take_geodatabase()
+                if prepared_gdb:
+                    if self.cica_gdb:
+                        self.cica_gdb.close()
+                    self.cica_gdb = prepared_gdb
+                self.ingestion_button.setText('Cargue archivos CICA…')
+                self.ingestion_button.setToolTip(f'{len(self.cica_references)} CSV · ' + (f'{len(self.cica_gdb.layers)} capas/tablas temporales' if self.cica_gdb else 'Sin geodatabase temporal'))
+        finally:
+            dialog.clear_prepared()
+
+    def download_validation_format(self):
+        if not self.completed_format or not self.format_download.isEnabled():
+            return
+        label, source = self.completed_format
+        destination, _ = QFileDialog.getSaveFileName(self, label, source.name, 'Formato Excel (*.xlsx)')
+        if not destination:
+            return
+        if not destination.lower().endswith('.xlsx'):
+            destination += '.xlsx'
+        try:
+            if Path(destination).resolve() == source.resolve():
+                raise ValueError('Seleccione una ubicación distinta de los archivos internos del plugin.')
+            shutil.copyfile(source, destination)
+            self.status.setText('Formato guardado: ' + destination)
+        except Exception as error:
+            QMessageBox.warning(self, 'No se pudo descargar el formato', str(error))
 
     def reference_mode_changed(self, index):
         if index == 2:
@@ -1187,6 +1247,9 @@ class ControlCalidadDialog(QDialog):
             return
         metadata = ConfigParser()
         metadata.read(PLUGIN_DIR / 'metadata.txt', encoding='utf-8')
+        self.pending_format = validation_format(self.model.currentText(), self.environment.currentText(), self.selected_sql_version)
+        self.completed_format = None
+        self.format_download.setEnabled(False)
         self.execution_info = {
             'Identificador de entrega': uuid4().hex,
             'Fecha de ejecución': datetime.now(ZoneInfo('America/Bogota')).isoformat(timespec='seconds'),
@@ -1213,6 +1276,12 @@ class ControlCalidadDialog(QDialog):
         }
         if self.reference_mode.currentIndex() == 0 and 'R2' in self.temporary_references:
             self.review_context['reference_r2'] = self.temporary_references['R2'].fingerprint
+        cica = dict(self.cica_references) if self.model.currentText() == 'CICA' else {}
+        cica_gdb = self.cica_gdb if self.model.currentText() == 'CICA' else None
+        if cica_gdb:
+            self.review_context['cica_gdb'] = cica_gdb.fingerprint
+        if cica:
+            self.review_context['cica_csv'] = {table: reference.fingerprint for table, reference in sorted(cica.items())}
         self.table.setRowCount(0)
         self.general_report_rows = []
         self.general_report_error = ""
@@ -1223,12 +1292,13 @@ class ControlCalidadDialog(QDialog):
         self.progress.setVisible(True)
         self.status.setText(f"Ejecutando {len(rules)} reglas y reporte general…")
         self.controls_running = True
+        self.ingestion_button.setEnabled(False)
         self.export_button.setEnabled(False)
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
         temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
         public_r1 = self.published_r1.currentText() if self.reference_mode.currentIndex() == 1 else ''
-        self.worker = RuleWorker(params, schema, "", public_r1, rules, general_report_path, references=temporary)
+        self.worker = RuleWorker(params, schema, "", public_r1, rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb)
         self.worker.message.connect(self.status.setText)
         self.reference_mode.setEnabled(False)
         self.load_reference_button.setEnabled(False)
@@ -1261,6 +1331,11 @@ class ControlCalidadDialog(QDialog):
 
     def finished(self):
         self.controls_running = False
+        self.ingestion_button.setEnabled(True)
+        self.completed_format = self.pending_format if any(result.status != 'Error' for result in self.results) else None
+        self.format_download.setEnabled(bool(self.completed_format))
+        if self.completed_format:
+            self.format_download.setText('Descargar · ' + self.completed_format[0])
         for control in (self.reference_mode, self.load_reference_button, self.refresh_references, self.published_r1):
             control.setEnabled(True)
         self.update_run_availability()
@@ -1469,6 +1544,12 @@ class ControlCalidadDialog(QDialog):
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():
             self.release_references()
+            for reference in self.cica_references.values():
+                reference.close()
+            self.cica_references = {}
+            if self.cica_gdb:
+                self.cica_gdb.close()
+                self.cica_gdb = None
             event.accept()
         else:
             event.ignore()

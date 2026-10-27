@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **2.0.2**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **2.1.0**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -151,7 +151,7 @@ Las observaciones se pueden escribir antes o después de la marca. No están con
 
 - **No**: relleno rojo tenue (`#FFC7CE`) y texto rojo oscuro (`#9C0006`).
 - **Sí**: relleno verde tenue (`#C6EFCE`) y texto verde oscuro (`#006100`).
-- **DT = Sí**: los valores de los dos campos del operador se ocultan visualmente en esa fila. No se oculta toda la columna ni se borran los datos. No es un mecanismo de seguridad: el contenido puede verse en la barra de fórmulas.
+- **DT = Sí**: las marcas y observaciones del operador permanecen visibles y editables. Solo la excepción validada por DT descuenta errores.
 
 Dentro de cada detalle, la hoja **Revisión** refleja los valores por clave y sirve para recuperarlos. No se editan sus campos: se alimentan desde las hojas de reglas del mismo archivo. Esta hoja interna no es un archivo de revisión consolidada separado. El reporte ejecutivo contiene únicamente estadísticas y no se usa para cargar excepciones.
 
@@ -212,7 +212,7 @@ Solo se recupera el seguimiento de una coincidencia única que siga igual. Si ca
 
 Si la regla no devuelve los datos que determinan la inconsistencia, el reporte no puede detectar cambios en esos datos no expuestos. La regla 1.12 por matrícula, por ejemplo, identifica el grupo con matrícula y conteo; no entrega la lista de predios integrantes.
 
-Una excepción sin observación válida se descarta como excepción y se informa. El seguimiento actual no se sobrescribe silenciosamente en un conflicto. Si DT es Sí con justificación, se conserva el seguimiento del operador y solo se oculta visualmente en el detalle. No se borra al recuperar ni al generar otra entrega.
+Una excepción sin observación válida se descarta como excepción y se informa. El seguimiento actual no se sobrescribe silenciosamente en un conflicto. Si DT es Sí con justificación, se conserva el seguimiento del operador y permanece visible en el detalle. No se borra al recuperar ni al generar otra entrega.
 
 **Un hallazgo ausente no queda automáticamente certificado como corregido.** Compruebe que se ejecutó correctamente la misma validación, con el mismo alcance de datos. Los archivos anteriores sirven como historial.
 
@@ -283,7 +283,7 @@ Internet. Use el índice o el buscador para localizar una sección y vuelva a
 - Los campos de observación se ensanchan según el contenido hasta el límite de Excel (255 caracteres de ancho); los textos extensos se ajustan en varias líneas. Las observaciones que comienzan con = se conservan como texto.
 - Antes de ejecutar, se comprueba que existan las referencias R1/R2 requeridas por las sentencias seleccionadas.
 - Los reportes incluyen identificador y fecha de ejecución, versión del plugin, modelo, ambiente, versión SQL, base y esquema. Estos datos de trazabilidad no modifican la clave estable de cada caso ni incluyen contraseñas.
-- Las marcas y observaciones del operador se conservan cuando DT aprueba una excepción; su ocultación visual en el detalle no elimina esos datos.
+- Las marcas y observaciones del operador se conservan cuando DT aprueba una excepción; ambas permanecen visibles en el detalle.
 
 ### Corrección de generación de reportes (2.0.1)
 
@@ -291,4 +291,34 @@ Las operaciones intensivas de preparación y guardado de Excel permiten que la v
 
 ### Presentación (2.0.2)
 
-La ventana permite maximizar y restaurar su tamaño. El icono Revisión catastral identifica el plugin. Se ajustaron las reglas de formato condicional de las excepciones: Sí en verde tenue y No en rojo tenue, conservando la prioridad visual de DT sobre las celdas del operador. Los cambios de formato se incorporan en los reportes nuevos.
+La ventana permite maximizar y restaurar su tamaño. El icono Revisión catastral identifica el plugin. Se ajustaron las reglas de formato condicional de las excepciones: Sí en verde tenue y No en rojo tenue, manteniendo independientes las marcas de DT y operador. Los cambios de formato se incorporan en los reportes nuevos.
+
+## Cargue archivos CICA temporales
+
+En Conexión, seleccione CICA y abra **Cargue archivos CICA**. Cargue cada CSV por separado y pulse **Usar archivos temporales**. No es obligatorio seleccionar los siete archivos juntos. Un archivo incorrecto no reemplaza la copia anterior; Cancelar conserva los insumos que ya estaban aplicados.
+
+Los siete destinos son cica_contacto, cica_predio_derecho, cica_predio, cica_propietario, cica_justificacion, cica_seguimiento_control y cica_unidad_construccion. Se aceptan separadores coma, punto y coma, tabulación o barra vertical, y codificación UTF-8 o Windows-1252. Los encabezados se normalizan a minúsculas sin tildes, con guion bajo. No se interpretan como números los identificadores del CSV.
+
+La selección prepara una copia temporal local. Al ejecutar, las tablas seleccionadas se crean en **pg_temp de la misma conexión de validación**, con permiso TEMP sobre la base. Sus nombres se redirigen en las sentencias al destino temporal. Las tablas no seleccionadas se siguen consultando en el esquema elegido.
+
+Si ya existe una tabla de igual nombre en el esquema seleccionado, la temporal utiliza sus tipos y restricciones. Las celdas vacías se cargan como NULL; datos incompatibles o columnas faltantes obligatorias producen un error de carga. Si no existe esa tabla, se crean columnas TEXT: las reglas que necesiten tipos numéricos o fechas deben convertirlos explícitamente. No se copian los valores por defecto que podrían utilizar secuencias persistentes.
+
+No se escriben filas en public ni en el esquema de origen. Las tablas temporales desaparecen al cerrar la conexión al terminar la ejecución. Las copias locales permanecen disponibles para repetir la validación durante la sesión del plugin y se limpian al cerrar la ventana.
+
+## Descargar formatos homologados V2
+
+Después de ejecutar una validación de **Validaciones del modelo**, el enlace de descarga muestra el formato correspondiente a **CICA V2** o **Modelo interno V2**. V2 corresponde a la versión de reglas seleccionada (por ejemplo, V2_29_07_2024), no al número de versión del plugin. Se prefiere la versión explícita de la tabla del repositorio, si está disponible. El enlace no se habilita en V3, en cargue SNC ni si todas las reglas terminaron con error técnico.
+
+Elija dónde guardar el Excel desde el enlace. Los dos formatos son los archivos aportados por el usuario y se entregan sin modificarlos ni diligenciarlos automáticamente; funcionan sin descargar desde un servidor externo. Cambiar la selección de modelo, ambiente o versión requiere una nueva ejecución para habilitar el formato correspondiente.
+
+### Geodatabase temporal
+
+**Cargue archivos CICA** permite seleccionar una carpeta `.gdb` o un ZIP con una sola geodatabase. No hay un campo de nuevo esquema de destino. La lectura es de solo consulta: se preparan copias locales de las capas y tablas, con sus atributos, identificadores, geometrías y código EPSG. No se transforman las coordenadas. Si una capa espacial no permite identificar su EPSG, se informa y no se sustituye el archivo anterior.
+
+Los nombres de tablas y columnas se normalizan a minúsculas, sin tildes y con guion bajo. La lista de capas y sus nombres de consulta está en el texto de ayuda del campo de geodatabase. Se conserva el nombre normalizado del campo geométrico original (por ejemplo, shape); las reglas deben usar ese nombre. Si hay un CSV seleccionado para la misma tabla, prevalece el CSV, utilizando los tipos definidos por la geodatabase.
+
+Al validar, las copias se instalan como tablas temporales en la conexión de esa ejecución. Se eliminan al cerrarla, incluso ante un error. Las copias locales sirven para repetir la validación durante la sesión y se limpian al cerrar la herramienta. Cancelar la selección conserva la geodatabase anterior; los archivos originales nunca se modifican. Se requiere PostGIS en la base que ejecuta las consultas espaciales.
+
+### Sentencias y fuentes temporales
+
+Las reglas deben consultar las tablas por el parámetro `{esquema}` (o por el esquema a validar seleccionado). La herramienta redirige únicamente las tablas seleccionadas a sus copias temporales. Una referencia fija a otro esquema no se sustituye automáticamente. Una vista materializada conserva sus propios datos y no se recalcula contra estas fuentes: su definición debe adaptarse como consulta o cálculo temporal para validar los archivos nuevos. El esquema a validar de la conexión identifica las consultas existentes; no es un nuevo destino de carga.

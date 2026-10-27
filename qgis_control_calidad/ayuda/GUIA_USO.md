@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.5.4**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.5.5**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -87,7 +87,7 @@ Los encabezados se normalizan a minúsculas, sin tildes y con separadores conver
 - Preparar los archivos crea una copia local temporal; todavía no los publica en PostgreSQL.
 - Al validar, se crean tablas **TEMP** en `pg_temp` dentro de la misma conexión que ejecuta las reglas.
 - Las tablas temporales desaparecen al cerrar esa conexión, tanto al terminar como al fallar.
-- La copia local permite repetir una ejecución con el mismo contenido. Se elimina al pulsar **Liberar**, reemplazar la referencia o cerrar la herramienta.
+- La copia local permite repetir una ejecución con el mismo contenido. Se elimina automáticamente al reemplazar la referencia o cerrar la herramienta.
 - El archivo original no se modifica. Este modo evita guardar tablas permanentes, pero los datos sí se envían al servidor durante la validación.
 
 Los TXT de ancho fijo no están implementados. Una regla que requiera R2 dará un error si no se preparó R2.
@@ -109,7 +109,7 @@ La herramienta consulta la tabla seleccionada: **no la elimina ni sobrescribe**.
 - Se ofrecen los grupos que tienen SQL ejecutable en la versión cargada.
 - En SNC solo se ofrece **+ Cargue SNC**; se selecciona cuando se carga su versión válida.
 - Sin grupos seleccionados, durante una ejecución o sin reglas válidas, el botón de ejecución permanece deshabilitado.
-- Durante la ejecución no se permite sustituir ni liberar las referencias que está utilizando el proceso.
+- Durante la ejecución no se permite sustituir las referencias que está utilizando el proceso.
 - **Minimizar (−)** conserva el estado. Al abrir otra vez el plugin desde QGIS se restaura la ventana.
 
 Las reglas se ejecutan tal como están publicadas. Si una falla, se registra un error técnico y se intenta continuar con las siguientes. Un estado automático **Correcta** indica que la consulta se ejecutó correctamente; no significa que devolviera cero hallazgos.
@@ -130,7 +130,7 @@ Las reglas se ejecutan tal como están publicadas. Si una falla, se registra un 
 
 Ejemplo: 100 hallazgos, 10 excepciones DT y 8 del operador dejan **90 errores**, no 82. Un mismo caso no se cuenta simultáneamente como excepción DT y operador: DT tiene prioridad.
 
-La estadística se actualiza al cargar, recargar, liberar o descartar revisiones. No borra ni cambia el resultado automático original.
+La estadística se actualiza al cargar, recargar o descartar revisiones. No borra ni cambia el resultado automático original.
 
 ## 7. Generar y diligenciar reportes
 
@@ -175,9 +175,8 @@ Las listas aparecen al seleccionar una **celda de excepción**, no su encabezado
 | Sin coincidencias | El archivo se leyó, pero no se encontraron casos coincidentes. |
 | Error de carga | No pudo cargarse. Una carga anterior válida se conserva. |
 | Recargar | Reemplaza explícitamente el seguimiento importado de ese mismo detalle. |
-| Liberar | Retira lo aportado por ese archivo a la ejecución actual; no modifica ni elimina el Excel. |
 
-Sitúe el puntero sobre el archivo o estado para ver su ruta y mensajes completos. Los archivos no quedan abiertos después de leerse: puede editarlos en Excel, guardarlos y **Recargar**. **No es necesario Liberar para editar o recargar**: esa acción solo sirve para retirar la revisión de un detalle sin cargar otro archivo. Se conservan las ediciones posteriores que no sea seguro retirar.
+Sitúe el puntero sobre el archivo o estado para ver su ruta y mensajes completos. Los archivos no quedan abiertos después de leerse: puede editarlos en Excel, guardarlos y **Recargar**. No es necesario cerrar ni liberar el archivo desde el plugin. Para quitar una marca, cámbiela a No en el Excel, guarde y recargue el mismo detalle. Se conservan las ediciones posteriores que no sea seguro retirar.
 
 **Cargar revisión consolidada** permite recuperar un archivo que reúne varios componentes. Si ya hay alguno cargado, use su recarga individual o libérelo antes: no se reemplaza silenciosamente.
 

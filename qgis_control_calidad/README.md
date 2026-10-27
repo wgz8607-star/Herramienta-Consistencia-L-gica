@@ -390,3 +390,11 @@ marcadas por DT descuentan errores».
 [Guía completa del plugin](ayuda/GUIA_USO.md). El botón **Ayuda** del encabezado
 abre esa guía en GitHub mediante el navegador del usuario. El texto también
 se incluye dentro de `ayuda/GUIA_USO.md` en el ZIP para consulta local.
+
+## Flujo sin botones Liberar (1.5.5)
+
+Se omiten los botones Liberar de Gestión de Excepciones y de Referencias R1/R2.
+Para modificar revisiones, edite y guarde el Excel y pulse Recargar. Para quitar
+marcas, cámbielas a No en el archivo y recargue. La recarga ya sustituye lo
+aportado por ese mismo detalle y conserva los otros componentes. La limpieza
+de referencias temporales se mantiene internamente al sustituirlas o cerrar.

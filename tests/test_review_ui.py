@@ -153,7 +153,7 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(counts['incorporadas'], 1)
         self.assertEqual(current[0].excepcion_dt, 'Sí')
 
-    def test_five_detail_buttons_load_release_and_reload_independently(self):
+    def test_five_detail_buttons_load_and_reload_independently(self):
         from qgis_control_calidad.review import save_review
         components = ('Administrativas', 'Economicas', 'Estructura', 'Fisicas', 'Juridicas')
         self.owner.results = [module.RuleResult('r1', c, 'Correcta', 1,
@@ -168,21 +168,22 @@ class ReviewUiTests(unittest.TestCase):
             cases[0].excepcion_dt = 'Sí'; cases[0].observacion_dt = 'DT: ' + component
             save_review(path, cases)
             paths[component] = path
-            load, release, state = self.owner.detail_review_rows[component]
+            load, state = self.owner.detail_review_rows[component]
             self.assertIn('No cargado', state.text())
             with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information'):
                 load.click()
             self.assertIn('Cargado', state.text())
-            self.assertTrue(release.isEnabled())
         self.assertTrue(all(case.excepcion_dt == 'Sí' for case in self.owner.review_cases))
         component = 'Administrativas'
-        with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Yes):
-            self.owner.detail_review_rows[component][1].click()
+        book = load_workbook(paths[component]); book['Revisión']['I2'] = 'No'; book['Revisión']['J2'] = ''
+        book.save(paths[component]); book.close()
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(paths[component], 'Excel')), patch.object(module.QMessageBox, 'information'):
+            self.owner.detail_review_rows[component][0].click()
         self.assertEqual(self.owner.review_cases[0].excepcion_dt, 'No')
         self.assertTrue(all(case.excepcion_dt == 'Sí' for case in self.owner.review_cases[1:]))
-        self.assertIn('No cargado', self.owner.detail_review_rows[component][2].text())
+        self.assertIn('Cargado', self.owner.detail_review_rows[component][1].text())
         # The file is not held open and can be edited and saved in place.
-        book = load_workbook(paths[component]); book['Revisión']['J2'] = 'DT corregida'
+        book = load_workbook(paths[component]); book['Revisión']['I2'] = 'Sí'; book['Revisión']['J2'] = 'DT corregida'
         book.save(paths[component]); book.close()
         with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(paths[component], 'Excel')), patch.object(module.QMessageBox, 'information'):
             self.owner.detail_review_rows[component][0].click()
@@ -198,10 +199,10 @@ class ReviewUiTests(unittest.TestCase):
             self.owner.recover_detail('Administrativas')
         with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path + '.missing', 'Excel')), patch.object(module.QMessageBox, 'warning'):
             self.owner.recover_detail('Administrativas')
-        self.assertIn('Error de carga', self.owner.detail_review_rows['Administrativas'][2].text())
+        self.assertIn('Error de carga', self.owner.detail_review_rows['Administrativas'][1].text())
         self.assertEqual(self.owner.review_cases[0].observacion_dt, 'DT válida')
 
-    def test_statistics_refresh_on_load_reload_release_and_discard(self):
+    def test_statistics_refresh_on_load_reload_clear_and_discard(self):
         from qgis_control_calidad.review import save_review
         path = str(Path(self.directory.name) / 'admin.xlsx')
         cases = build_cases(self.owner.results, self.owner.review_context)
@@ -222,10 +223,15 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(self.owner.table.item(0, 5).text(), '1')
         self.assertEqual(self.owner.table.item(0, 3).text(), '1')
         self.assertEqual(self.owner.table.item(0, 4).text(), '1')
-        with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Yes):
-            self.owner.release_detail('Administrativas')
+        for case in cases:
+            case.excepcion_dt = 'No'; case.observacion_dt = ''
+            case.excepcion_operador = 'No'; case.observacion_operador = ''
+        save_review(path, cases)
+        load()
         self.assertEqual(self.owner.table.item(0, 5).text(), '2')
         self.assertEqual(self.owner.table.item(0, 3).text(), '0')
+        cases[0].excepcion_dt = 'Sí'; cases[0].observacion_dt = 'DT válida'
+        save_review(path, cases)
         load()
         with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Discard):
             self.owner.confirm_review_changes()
@@ -305,6 +311,13 @@ class ReviewUiTests(unittest.TestCase):
         with patch.object(module.QDesktopServices, 'openUrl', return_value=False), patch.object(module.QMessageBox, 'information') as message:
             self.owner.open_help()
         self.assertIn(module.HELP_URL, message.call_args.args[2])
+
+    def test_release_buttons_are_not_present_in_details_or_references(self):
+        self.assertNotIn('Liberar', [button.text() for button in self.owner.findChildren(QPushButton)])
+        self.assertFalse(hasattr(self.owner, 'release_reference_button'))
+        for load, status in self.owner.detail_review_rows.values():
+            self.assertIn(load.text(), ('Cargar', 'Recargar'))
+            self.assertIn('cargado', status.text().casefold())
 
     def test_direct_save_has_all_cases(self):
         path = str(Path(self.directory.name) / 'revision.xlsx')

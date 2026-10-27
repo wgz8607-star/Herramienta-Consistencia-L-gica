@@ -579,11 +579,8 @@ class ControlCalidadDialog(QDialog):
         self.load_reference_button.clicked.connect(self.open_references)
         self.reference_status = QLabel("Sin referencias temporales")
         self.reference_status.setWordWrap(True)
-        self.release_reference_button = QPushButton("Liberar")
-        self.release_reference_button.clicked.connect(self.release_references)
         temporary_layout.addWidget(self.load_reference_button)
         temporary_layout.addWidget(self.reference_status, 1)
-        temporary_layout.addWidget(self.release_reference_button)
         self.reference_pages.addWidget(temporary_page)
         public_page = QWidget()
         public_layout = QVBoxLayout(public_page)
@@ -1113,7 +1110,6 @@ class ControlCalidadDialog(QDialog):
         self.worker.message.connect(self.status.setText)
         self.reference_mode.setEnabled(False)
         self.load_reference_button.setEnabled(False)
-        self.release_reference_button.setEnabled(False)
         self.refresh_references.setEnabled(False)
         self.published_r1.setEnabled(False)
         self.worker.moveToThread(self.thread)
@@ -1143,7 +1139,7 @@ class ControlCalidadDialog(QDialog):
 
     def finished(self):
         self.controls_running = False
-        for control in (self.reference_mode, self.load_reference_button, self.release_reference_button, self.refresh_references, self.published_r1):
+        for control in (self.reference_mode, self.load_reference_button, self.refresh_references, self.published_r1):
             control.setEnabled(True)
         self.update_run_availability()
         self.progress.setValue(self.progress.maximum())
@@ -1207,27 +1203,18 @@ class ControlCalidadDialog(QDialog):
                 self.detail_review_table.setItem(row, 0, QTableWidgetItem(component))
                 filename = QLabel('—')
                 filename.setWordWrap(True)
-                actions = QWidget()
-                action_layout = QHBoxLayout(actions)
-                action_layout.setContentsMargins(2, 2, 2, 2)
-                action_layout.setSpacing(3)
                 load = QPushButton("Cargar")
-                release = QPushButton("Liberar")
-                action_layout.addWidget(load)
-                action_layout.addWidget(release)
                 state = QLabel("No cargado")
                 state.setWordWrap(True)
                 load.clicked.connect(lambda checked=False, c=component: self.recover_detail(c))
-                release.clicked.connect(lambda checked=False, c=component: self.release_detail(c))
                 self.detail_review_table.setCellWidget(row, 1, filename)
-                self.detail_review_table.setCellWidget(row, 2, actions)
+                self.detail_review_table.setCellWidget(row, 2, load)
                 self.detail_review_table.setCellWidget(row, 3, state)
-                self.detail_review_rows[component] = (load, release, state)
+                self.detail_review_rows[component] = (load, state)
                 self.detail_filename_labels[component] = filename
-        for component, (load, release, state) in self.detail_review_rows.items():
+        for component, (load, state) in self.detail_review_rows.items():
             source = self.review_imports.sources.get(component)
             load.setEnabled(not self.controls_running)
-            release.setEnabled(bool(source) and not self.controls_running)
             load.setText("Recargar" if source else "Cargar")
             if source:
                 counts = source['counts']
@@ -1283,18 +1270,6 @@ class ControlCalidadDialog(QDialog):
         self.refresh_detail_review_controls()
         QMessageBox.information(self, f"Detalle {component}", EXCEPTION_NOTICE + '\n\n' + self.recovery_message(counts))
 
-    def release_detail(self, component):
-        if self.controls_running or component not in self.review_imports.sources:
-            return
-        answer = QMessageBox.question(self, "Liberar detalle", f"Se retirará de la ejecución actual la revisión importada de {component}. El Excel no se modifica. ¿Continuar?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if answer != QMessageBox.Yes:
-            return
-        counts = self.review_imports.release(component)
-        self.detail_import_errors.pop(component, None)
-        self.review_dirty = self.review_dirty or bool(counts['retiradas'])
-        self.refresh_detail_review_controls()
-        self.status.setText(f"Detalle {component} liberado. Puede editar el archivo y volver a cargarlo. {counts['conservadas']} ediciones posteriores conservadas.")
-
     def recover_review(self):
         if self.controls_running or not self.review_cases:
             return
@@ -1306,7 +1281,7 @@ class ControlCalidadDialog(QDialog):
             groups = sorted({record.component for record in records if record.component})
             existing = [component for component in groups if component in self.review_imports.sources]
             if existing:
-                raise ValueError('Ya hay detalles cargados: ' + ', '.join(existing) + '. Use Recargar detalle o Liberar para reemplazarlos explícitamente.')
+                raise ValueError('Ya hay detalles cargados: ' + ', '.join(existing) + '. Use Recargar en la fila del detalle para reemplazar su archivo.')
             supported = {case.component for case in self.review_cases}
             messages = []
             for component in groups:

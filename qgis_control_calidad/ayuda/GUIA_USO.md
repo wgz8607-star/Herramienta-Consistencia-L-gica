@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **2.0.1**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **2.0.2**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -288,3 +288,7 @@ Internet. Use el índice o el buscador para localizar una sección y vuelva a
 ### Corrección de generación de reportes (2.0.1)
 
 Las operaciones intensivas de preparación y guardado de Excel permiten que la ventana continúe atendiendo eventos. Se eliminaron recorridos repetidos de hojas completas al vincular las revisiones. Si ocurre un error, se oculta el progreso, se restablecen los controles y el diagnóstico queda disponible en Incidencias. Los resultados y revisiones permanecen en la sesión. Si un archivo cargado figura como no disponible, use Recargar y seleccione nuevamente el Excel guardado antes de generar una entrega.
+
+### Presentación (2.0.2)
+
+La ventana permite maximizar y restaurar su tamaño. El icono Revisión catastral identifica el plugin. Se ajustaron las reglas de formato condicional de las excepciones: Sí en verde tenue y No en rojo tenue, conservando la prioridad visual de DT sobre las celdas del operador. Los cambios de formato se incorporan en los reportes nuevos.

@@ -73,7 +73,7 @@ def add_controls(sheet, first_row, last_row, first_column, protect=True):
     sheet.conditional_formatting.add(
         f'{operator}{first_row}:{note_operator}{last_row}',
         FormulaRule(formula=[f'${dt}{first_row}="Sí"'],
-                    fill=PatternFill('solid', fgColor='FFFFFF'),
+                    fill=PatternFill('solid', fgColor='FFFFFF', bgColor='FFFFFF'),
                     font=Font(color='FFFFFF'), stopIfTrue=True),
     )
     for column in (dt, operator):
@@ -81,7 +81,8 @@ def add_controls(sheet, first_row, last_row, first_column, protect=True):
             sheet.conditional_formatting.add(
                 f'{column}{first_row}:{column}{last_row}',
                 FormulaRule(formula=[f'${column}{first_row}="{value}"'],
-                            fill=PatternFill('solid', fgColor=color), font=Font(color=text_color)),
+                            fill=PatternFill('solid', fgColor=color, bgColor=color),
+                            font=Font(color=text_color), stopIfTrue=True),
             )
     # Keep initial colors visible even in previews that do not calculate Excel
     # conditional formatting; conditional rules still update subsequent edits.

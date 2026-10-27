@@ -96,6 +96,16 @@ class ReportExceptionTests(unittest.TestCase):
         self.assertFalse(any(area.startswith('A2:') for area, _rule in rules))
         book.close()
 
+    def test_conditional_colors_define_background_and_stop_after_matching(self):
+        save_review(self.path, cases())
+        book = load_workbook(self.path)
+        sheet = book['Revisión']
+        for area in sheet.conditional_formatting:
+            for rule in sheet.conditional_formatting[area]:
+                self.assertEqual(rule.dxf.fill.bgColor.rgb, rule.dxf.fill.fgColor.rgb)
+                self.assertTrue(rule.stopIfTrue)
+        book.close()
+
     def test_observation_columns_expand_to_content_and_wrap_long_text(self):
         current = cases()
         current[0].observacion_dt = 'Justificación detallada ' * 5

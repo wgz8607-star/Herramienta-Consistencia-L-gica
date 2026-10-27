@@ -284,6 +284,7 @@ class ControlCalidadDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Validador Consistencia Lógica Alfanumérica")
         self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
         self.setWindowIcon(QIcon(str(PLUGIN_DIR / "icon.svg")))
         self.resize(1200, 820)
         self.results: list[RuleResult] = []

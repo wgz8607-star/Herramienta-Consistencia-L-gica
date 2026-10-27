@@ -245,6 +245,55 @@ class ReviewUiTests(unittest.TestCase):
             self.assertLessEqual(controls.y() + controls.height(), page.height())
             self.assertTrue(self.owner.schema.isVisible())
 
+    def test_minimize_keeps_reviews_and_pending_changes(self):
+        from qgis.PyQt.QtCore import Qt
+        self.assertTrue(self.owner.windowFlags() & Qt.WindowMinimizeButtonHint)
+        self.owner.review_cases[0].observacion_dt = 'No perder al minimizar'
+        self.owner.review_dirty = True
+        self.owner.show()
+        self.owner.showMinimized()
+        app.processEvents()
+        self.assertTrue(self.owner.isMinimized())
+        self.assertEqual(self.owner.review_cases[0].observacion_dt, 'No perder al minimizar')
+        self.assertTrue(self.owner.review_dirty)
+        self.owner.showNormal()
+        app.processEvents()
+        self.assertFalse(self.owner.isMinimized())
+
+    def test_plugin_action_restores_minimized_window(self):
+        from qgis_control_calidad.plugin import ControlCalidadPlugin
+        plugin = ControlCalidadPlugin(None)
+        plugin.dialog = MagicMock()
+        plugin.dialog.isMinimized.return_value = True
+        plugin.open_dialog()
+        plugin.dialog.showNormal.assert_called_once()
+        plugin.dialog.show.assert_not_called()
+        plugin.dialog.activateWindow.assert_called_once()
+
+    def test_detail_import_warns_only_dt_counts_and_operator_does_not_discount(self):
+        from qgis_control_calidad.review import save_review
+        path = str(Path(self.directory.name) / 'operator.xlsx')
+        current = build_cases(self.owner.results, self.owner.review_context)
+        current[0].excepcion_operador = 'Sí'; current[0].observacion_operador = 'Propuesta operador'
+        save_review(path, current)
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information') as notice:
+            self.owner.recover_detail('Administrativas')
+        self.assertIn(module.EXCEPTION_NOTICE, notice.call_args.args[2])
+        self.assertIn('No basta', notice.call_args.args[2])
+        self.assertEqual(self.owner.table.item(0, 4).text(), '1')
+        self.assertEqual(self.owner.table.item(0, 5).text(), '2')
+
+    def test_consolidated_import_includes_dt_notice_once(self):
+        from qgis_control_calidad.review import save_review
+        path = str(Path(self.directory.name) / 'consolidated.xlsx')
+        current = build_cases(self.owner.results, self.owner.review_context)
+        current[0].excepcion_dt = 'Sí'; current[0].observacion_dt = 'DT validada'
+        save_review(path, current)
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information') as notice:
+            self.owner.recover_review()
+        self.assertEqual(notice.call_args.args[2].count(module.EXCEPTION_NOTICE), 1)
+        self.assertEqual(self.owner.table.item(0, 5).text(), '1')
+
     def test_direct_save_has_all_cases(self):
         path = str(Path(self.directory.name) / 'revision.xlsx')
         with patch.object(module.QFileDialog, 'getSaveFileName', return_value=(path, 'Excel')):

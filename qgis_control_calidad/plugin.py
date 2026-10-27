@@ -27,6 +27,9 @@ class ControlCalidadPlugin:
     def open_dialog(self):
         if self.dialog is None:
             self.dialog = ControlCalidadDialog(self.iface.mainWindow())
-        self.dialog.show()
+        if self.dialog.isMinimized():
+            self.dialog.showNormal()
+        else:
+            self.dialog.show()
         self.dialog.raise_()
         self.dialog.activateWindow()

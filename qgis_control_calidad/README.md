@@ -365,3 +365,15 @@ En 1.5.1, la altura del formulario de conexión se recalcula después de aplicar
 el estilo y completar la distribución de Qt al cambiar entre conexión manual
 y guardada. Se considera la altura mínima real del formulario y su ancho para
 evitar recortar Listar Esquemas y Esquema a validar.
+
+## Minimizar y aviso de excepciones (1.5.2)
+
+La ventana tiene habilitado el botón nativo **Minimizar (−)**. Minimizar no cierra
+la herramienta ni libera las referencias o revisiones cargadas. Al abrirla desde
+el menú o el icono de QGIS se restaura si estaba minimizada.
+
+Al cargar o recargar un detalle y al cargar una revisión consolidada, el mensaje
+de resultado recuerda que solo cuentan para descontar errores las excepciones
+validadas por DT y marcadas en **Excepción DT = Sí**, con observación válida.
+La marca del operador no basta. Gestión de Excepciones conserva también este
+aviso visible, sin alterar las estadísticas ni agregar aprobaciones automáticas.

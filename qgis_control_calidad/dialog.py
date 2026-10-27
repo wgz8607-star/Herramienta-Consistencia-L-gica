@@ -39,6 +39,11 @@ DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
 MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db"}
 SNC_CATEGORY = "Cargue SNC"
 SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
+EXCEPTION_NOTICE = (
+    "Importante: las excepciones solo descuentan errores cuando fueron validadas por la DT "
+    "y marcadas como Excepción DT = Sí, con observación válida. "
+    "No basta con marcarlas como excepción del operador."
+)
 SNC_REPOSITORY_TABLES = {
     "CICA": "reglas_cargue_snc_cica",
     "Modelo Interno de Levantamiento 1.0": "reglas_cargue_snc_xtf",
@@ -274,6 +279,7 @@ class ControlCalidadDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Validador Consistencia Lógica Alfanumérica")
+        self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
         self.setWindowIcon(QIcon(str(PLUGIN_DIR / "icon.svg")))
         self.resize(1040, 700)
         self.results: list[RuleResult] = []
@@ -509,7 +515,8 @@ class ControlCalidadDialog(QDialog):
         detail_group = QGroupBox("Gestión de Excepciones")
         style_section(detail_group, "#3FA4F5")
         detail_group_layout = QVBoxLayout(detail_group)
-        detail_note = QLabel("Cargue y libere cada detalle de revisión. Los archivos quedan disponibles para editar.")
+        detail_note = QLabel("Solo las excepciones validadas por DT descuentan errores. Las marcas del operador son propuestas.")
+        detail_note.setToolTip(EXCEPTION_NOTICE)
         detail_note.setWordWrap(True)
         detail_group_layout.addWidget(detail_note)
         self.detail_review_table = QTableWidget(0, 4)
@@ -1266,7 +1273,7 @@ class ControlCalidadDialog(QDialog):
         self.review_dirty = self.review_dirty or previous != [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.detail_import_errors.pop(component, None)
         self.refresh_detail_review_controls()
-        QMessageBox.information(self, f"Detalle {component}", self.recovery_message(counts))
+        QMessageBox.information(self, f"Detalle {component}", EXCEPTION_NOTICE + '\n\n' + self.recovery_message(counts))
 
     def release_detail(self, component):
         if self.controls_running or component not in self.review_imports.sources:
@@ -1309,7 +1316,7 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.warning(self, "No se recuperó la revisión", str(error))
             return
         self.refresh_detail_review_controls()
-        QMessageBox.information(self, "Recuperación de revisión", '\n\n'.join(messages))
+        QMessageBox.information(self, "Recuperación de revisión", EXCEPTION_NOTICE + '\n\n' + '\n\n'.join(messages))
 
     def confirm_review_changes(self):
         if not self.review_dirty:

@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.6.1**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **2.0.0**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -274,3 +274,13 @@ El botón **Ayuda** abre la pestaña principal **Ayuda** de la misma ventana.
 La guía se lee del paquete instalado y no necesita navegador ni conexión a
 Internet. Use el índice o el buscador para localizar una sección y vuelva a
 **Validación** para continuar trabajando.
+
+## Mejoras de presentación y seguimiento en 2.0.0
+
+- La pantalla muestra indicadores de hallazgos, excepciones DT y errores pendientes, además de una fila TOTAL por ejecución. Las excepciones del operador se muestran por separado; solo las de DT descuentan errores.
+- Cada detalle muestra su archivo, última carga (hora de Colombia) y estado. Las incidencias de la última carga pueden desplegarse sin ocupar permanentemente el área de resultados.
+- Si un detalle cargado cambia o deja de estar disponible, aparece un aviso y se bloquea la generación de reportes hasta volver a cargarlo. Se comprueba periódicamente mientras la ventana está visible y se verifica su contenido antes de exportar. Solo se detectan cambios guardados en el archivo; guarde primero en Excel.
+- Los campos de observación se ensanchan según el contenido hasta el límite de Excel (255 caracteres de ancho); los textos extensos se ajustan en varias líneas. Las observaciones que comienzan con = se conservan como texto.
+- Antes de ejecutar, se comprueba que existan las referencias R1/R2 requeridas por las sentencias seleccionadas.
+- Los reportes incluyen identificador y fecha de ejecución, versión del plugin, modelo, ambiente, versión SQL, base y esquema. Estos datos de trazabilidad no modifican la clave estable de cada caso ni incluyen contraseñas.
+- Las marcas y observaciones del operador se conservan cuando DT aprueba una excepción; su ocultación visual en el detalle no elimina esos datos.

@@ -6,10 +6,13 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from uuid import uuid4
+from configparser import ConfigParser
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QObject, QSize, QThread, QTimer, QUrl, Qt, pyqtSignal
-from qgis.PyQt.QtGui import QIcon, QTextCursor
+from qgis.PyQt.QtGui import QIcon, QTextCursor, QColor
 from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
@@ -24,6 +27,7 @@ from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
 from .review_imports import ReviewImports
+from .review_files import fingerprint_file
 from .review import build_cases, digest, save_review, load_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS
 from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews
 
@@ -279,7 +283,7 @@ class ControlCalidadDialog(QDialog):
         self.setWindowTitle("Validador Consistencia Lógica Alfanumérica")
         self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
         self.setWindowIcon(QIcon(str(PLUGIN_DIR / "icon.svg")))
-        self.resize(1040, 700)
+        self.resize(1200, 820)
         self.results: list[RuleResult] = []
         self.review_cases = []
         self.review_imports = ReviewImports(self.review_cases)
@@ -289,6 +293,8 @@ class ControlCalidadDialog(QDialog):
         self.review_dirty = False
         self.review_snapshot = []
         self.review_context = {}
+        self.execution_info = {}
+        self.review_file_issues = {}
         self.general_report_rows = []
         self.general_report_error = ""
         self.validation_context = "Ubicación territorial pendiente de identificar."
@@ -298,6 +304,8 @@ class ControlCalidadDialog(QDialog):
         self.worker = None
         self.category_checks = {}
         self.controls_running = False
+        self.exporting = False
+        self.export_created_paths = []
         self._repository_password = None
         self.references_ready = False
         self.temporary_references = {}
@@ -313,8 +321,8 @@ class ControlCalidadDialog(QDialog):
         self.main_tabs.addTab(validation_page, "Validación")
         layout = QVBoxLayout(validation_page)
         layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
-        self.setStyleSheet("QDialog { background: #F5F7F8; } QLabel { color: #575756; } "
+        layout.setSpacing(8)
+        self.setStyleSheet("QDialog { background: #F5F7FA; font-size: 12px; } QWidget { font-size: 12px; } QLabel { color: #575756; } "
                            "QLineEdit, QComboBox { color: #575756; background: white; border: 1px solid #3FA4F5; border-radius: 4px; padding: 5px; } "
                            "QComboBox QAbstractItemView { color: #575756; background: white; selection-color: white; selection-background-color: #068CBB; border: 1px solid #3FA4F5; } "
                            "QPushButton, QGroupBox QPushButton { background: #068CBB; color: white; border: none; border-radius: 5px; padding: 6px 10px; font-weight: 600; } "
@@ -324,8 +332,9 @@ class ControlCalidadDialog(QDialog):
 
         def style_section(widget, color):
             widget.setStyleSheet(
-                f"QGroupBox {{ background: white; border: 2px solid {color}; border-radius: 8px; margin-top: 12px; padding: 10px; font-weight: 700; color: #0468A3; }} "
-                "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }"
+                "QGroupBox { background: white; border: none; border-top: 1px solid #DCE3EB; "
+                "margin-top: 18px; padding: 8px; color: #075680; } "
+                "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 5px; font-size: 15px; font-weight: 700; }"
             )
 
         heading = QLabel("Validador Consistencia Lógica Alfanumérica")
@@ -469,7 +478,7 @@ class ControlCalidadDialog(QDialog):
         right_layout = QVBoxLayout(right)
         group = QWidget()
         group.setObjectName('controlSelection')
-        group.setStyleSheet('QWidget#controlSelection { background: white; border: 1px solid #00C7CB; border-radius: 6px; }')
+        group.setStyleSheet('QWidget#controlSelection { background: white; border: 1px solid #DCE3EB; border-radius: 6px; }')
         group_layout = QHBoxLayout(group)
         group_layout.setContentsMargins(8, 6, 8, 6)
         group_layout.setSpacing(8)
@@ -489,16 +498,29 @@ class ControlCalidadDialog(QDialog):
         group_layout.addWidget(self.category_summary, 1)
         right_layout.addWidget(group)
 
-        result_box = QGroupBox("Resultados de la ejecución")
+        result_box = QGroupBox("Resultados")
         style_section(result_box, "#3FA4F5")
         result_layout = QVBoxLayout(result_box)
         self.summary = QLabel("Aún no se han ejecutado controles.")
         self.summary.setWordWrap(True)
-        result_layout.addWidget(self.summary)
         self.location_summary = QLabel("Ubicación territorial: se identificará al ejecutar los controles.")
         self.location_summary.setWordWrap(True)
-        self.location_summary.setStyleSheet("color: #0468A3; font-weight: 600; background: #E2F7F8; border-radius: 4px; padding: 5px;")
+        self.location_summary.setStyleSheet("color: #52666a; font-size: 12px; padding: 3px;")
         result_layout.addWidget(self.location_summary)
+        metrics_row = QHBoxLayout()
+        self.kpi_values = {}
+        for field, title in (('findings', 'Hallazgos'), ('dt', 'Excepciones DT'), ('pending', 'Errores pendientes')):
+            card = QFrame()
+            card.setStyleSheet('QFrame { background: #FAFCFE; border: 1px solid #DCE3EB; border-radius: 5px; } QLabel { border: none; }')
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(10, 5, 10, 5)
+            card_layout.addWidget(QLabel(title))
+            value = QLabel('0')
+            value.setStyleSheet('font-size: 22px; color: #075680; font-weight: 700; border: none;')
+            card_layout.addWidget(value)
+            self.kpi_values[field] = value
+            metrics_row.addWidget(card)
+        result_layout.addLayout(metrics_row)
         self.table = QTableWidget(0, len(STAT_HEADERS))
         self.table.setHorizontalHeaderLabels([
             header.replace('Reglas ejecutadas', 'Reglas\nejecutadas').replace('Errores técnicos', 'Errores\ntécnicos').replace('Excepciones ', 'Excepciones\n')
@@ -512,8 +534,10 @@ class ControlCalidadDialog(QDialog):
         self.table.setStyleSheet("QTableWidget { font-size: 12px; background: white; gridline-color: #D7EAF7; border: 1px solid #3FA4F5; } "
                                  "QHeaderView::section { background: #068CBB; color: white; border: none; padding: 4px; font-size: 12px; font-weight: 700; } "
                                  "QTableWidget::item:selected { background: #BFEAF0; color: #575756; }")
-        self.table.setMinimumHeight(180)
+        self.table.setMinimumHeight(215)
         result_layout.addWidget(self.table)
+        self.summary.setStyleSheet('font-size: 11px; color: #52666a;')
+        result_layout.addWidget(self.summary)
         detail_group = QGroupBox("Gestión de Excepciones")
         style_section(detail_group, "#3FA4F5")
         detail_group_layout = QVBoxLayout(detail_group)
@@ -521,20 +545,42 @@ class ControlCalidadDialog(QDialog):
         detail_note.setToolTip(EXCEPTION_NOTICE)
         detail_note.setWordWrap(True)
         detail_group_layout.addWidget(detail_note)
-        self.detail_review_table = QTableWidget(0, 4)
-        self.detail_review_table.setHorizontalHeaderLabels(['Detalle', 'Archivo', 'Acciones', 'Estado'])
+        self.detail_review_table = QTableWidget(0, 5)
+        self.detail_review_table.setHorizontalHeaderLabels(['Detalle', 'Archivo', 'Última carga', 'Estado', 'Acción'])
         self.detail_review_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.detail_review_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.detail_review_table.verticalHeader().setVisible(False)
         self.detail_review_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.detail_review_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.detail_review_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.detail_review_table.setMinimumHeight(220)
+        self.detail_review_table.setMinimumHeight(195)
         self.detail_review_table.setStyleSheet('QTableWidget { background: white; font-size: 12px; } QLabel { font-size: 12px; } QPushButton { font-size: 12px; padding: 4px 6px; } QHeaderView::section { background: #068CBB; color: white; padding: 5px; font-size: 12px; }')
         self.detail_filename_labels = {}
         detail_group_layout.addWidget(self.detail_review_table, 1)
+        self.review_file_alert = QLabel()
+        self.review_file_alert.setWordWrap(True)
+        self.review_file_alert.setStyleSheet('color: #955900; background: #FFF4DA; padding: 6px; border-radius: 4px;')
+        self.review_file_alert.hide()
+        detail_group_layout.addWidget(self.review_file_alert)
+        self.incidents_toggle = QToolButton()
+        self.incidents_toggle.setText('▸ Ver incidencias de la última carga')
+        self.incidents_toggle.setCheckable(True)
+        self.incidents_browser = QTextBrowser()
+        self.incidents_browser.setMaximumHeight(150)
+        self.incidents_browser.hide()
+        self.incidents_toggle.toggled.connect(self.toggle_incidents)
+        detail_group_layout.addWidget(self.incidents_toggle)
+        detail_group_layout.addWidget(self.incidents_browser)
+        self.last_execution_label = QLabel('Sin ejecución')
+        self.last_execution_label.setStyleSheet('font-size: 11px; color: #52666a;')
+        detail_group_layout.addWidget(self.last_execution_label)
         right_layout.addWidget(result_box, 2)
         right_layout.addWidget(detail_group, 3)
-        splitter.addWidget(right)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.NoFrame)
+        right_scroll.setWidget(right)
+        splitter.addWidget(right_scroll)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([300, 740])
@@ -545,9 +591,11 @@ class ControlCalidadDialog(QDialog):
         self.progress.setMinimumWidth(230)
         controls.addWidget(self.progress)
         self.status = QLabel("Configure la conexión y seleccione los controles.")
+        self.status.setWordWrap(True)
         controls.addWidget(self.status, 1)
         self.export_button = QPushButton("Generar reporte detallado")
         self.export_button.clicked.connect(self.export_excel)
+        self.export_button.setEnabled(False)
         self.run_button = QPushButton("Ejecutar validación")
         self.run_button.setEnabled(False)
         self.run_button.setStyleSheet("background: #0468A3; color: white; font-weight: 700; padding: 8px 14px;")
@@ -636,6 +684,10 @@ class ControlCalidadDialog(QDialog):
         self.load_qgis_connections()
         self.update_ingestion_button()
         self.resize_connection_stack()
+        self.file_watch_timer = QTimer(self)
+        self.file_watch_timer.setInterval(2000)
+        self.file_watch_timer.timeout.connect(self.poll_review_files)
+        self.file_watch_timer.start()
 
     def load_help_content(self):
         guide = PLUGIN_DIR / 'ayuda' / 'GUIA_USO.md'
@@ -784,7 +836,7 @@ class ControlCalidadDialog(QDialog):
             and item["sql"] and item["sql"].strip()
             for item in self.repository_rules
         )
-        self.run_button.setEnabled(ready and not self.controls_running)
+        self.run_button.setEnabled(ready and not self.controls_running and not self.exporting)
         self.run_button.setToolTip("" if ready else "Cargue una versión del repositorio con controles activos y seleccione al menos un grupo.")
 
     def open_sql_version_dialog(self):
@@ -1124,8 +1176,22 @@ class ControlCalidadDialog(QDialog):
         except Exception as error:
             QMessageBox.warning(self, "Conexión incompleta", str(error))
             return
+        missing = self.missing_references(rules)
+        if missing:
+            QMessageBox.warning(self, 'Faltan referencias', 'Prepare o seleccione antes de ejecutar: ' + ', '.join(missing))
+            return
         if not self.commit_review_editor() or not self.confirm_review_changes():
             return
+        metadata = ConfigParser()
+        metadata.read(PLUGIN_DIR / 'metadata.txt', encoding='utf-8')
+        self.execution_info = {
+            'Identificador de entrega': uuid4().hex,
+            'Fecha de ejecución': datetime.now(ZoneInfo('America/Bogota')).isoformat(timespec='seconds'),
+            'Versión plugin': metadata.get('general', 'version', fallback='Desconocida'),
+            'Modelo': self.model.currentText(), 'Ambiente': self.environment.currentText(),
+            'Versión SQL': self.selected_sql_version.get('codigo', ''),
+            'Base de datos': params.get('dbname', ''), 'Esquema': schema,
+        }
         self.results.clear()
         self.review_cases = []
         self.review_imports = ReviewImports(self.review_cases)
@@ -1154,6 +1220,7 @@ class ControlCalidadDialog(QDialog):
         self.progress.setVisible(True)
         self.status.setText(f"Ejecutando {len(rules)} reglas y reporte general…")
         self.controls_running = True
+        self.export_button.setEnabled(False)
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
         temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
@@ -1196,6 +1263,7 @@ class ControlCalidadDialog(QDialog):
         self.update_run_availability()
         self.progress.setValue(self.progress.maximum())
         self.status.setText("Ejecución terminada.")
+        self.last_execution_label.setText('Última ejecución: ' + self.execution_info.get('Fecha de ejecución', 'sesión actual'))
         self.review_imports = ReviewImports(self.review_cases)
         self.detail_import_errors = {}
         self.review_import_snapshot = self.review_imports.snapshot()
@@ -1210,15 +1278,24 @@ class ControlCalidadDialog(QDialog):
     def refresh_review_statistics(self):
         groups, totals = review_statistics(self.results, self.review_cases)
         self.table.setRowCount(0)
-        for component, values in sorted(groups.items()):
+        rows = list(sorted(groups.items())) + ([('TOTAL', totals)] if groups else [])
+        for component, values in rows:
             row = self.table.rowCount()
             self.table.insertRow(row)
             for column, value in enumerate(statistics_row(component, values)):
-                self.table.setItem(row, column, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                if column:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                if component == 'TOTAL':
+                    font = item.font(); font.setBold(True); item.setFont(font)
+                    item.setBackground(QColor('#E5F2FC'))
+                self.table.setItem(row, column, item)
+        for field, widget in self.kpi_values.items():
+            widget.setText(f"{totals[field]:,}".replace(',', '.'))
         self.summary.setText(
-            f"{totals['rules']} reglas ejecutadas · {totals['findings']} hallazgos · "
-            f"{totals['dt']} excepciones DT · {totals['operator']} excepciones operador · "
-            f"{totals['pending']} errores · {totals['errors']} errores técnicos"
+            f"{totals['rules']} reglas · {totals['operator']} excepciones operador · "
+            f"{totals['pending']} errores · {totals['errors']} errores técnicos. "
+            "Errores = Hallazgos − Excepciones DT."
         )
 
     def refresh_detail_review_controls(self):
@@ -1239,13 +1316,14 @@ class ControlCalidadDialog(QDialog):
                 state.setWordWrap(True)
                 load.clicked.connect(lambda checked=False, c=component: self.recover_detail(c))
                 self.detail_review_table.setCellWidget(row, 1, filename)
-                self.detail_review_table.setCellWidget(row, 2, load)
+                self.detail_review_table.setItem(row, 2, QTableWidgetItem('—'))
+                self.detail_review_table.setCellWidget(row, 4, load)
                 self.detail_review_table.setCellWidget(row, 3, state)
                 self.detail_review_rows[component] = (load, state)
                 self.detail_filename_labels[component] = filename
-        for component, (load, state) in self.detail_review_rows.items():
+        for row, (component, (load, state)) in enumerate(self.detail_review_rows.items()):
             source = self.review_imports.sources.get(component)
-            load.setEnabled(not self.controls_running)
+            load.setEnabled(not self.controls_running and not self.exporting)
             load.setText("Recargar" if source else "Cargar")
             if source:
                 counts = source['counts']
@@ -1253,20 +1331,71 @@ class ControlCalidadDialog(QDialog):
                 label = ('Cargado con observaciones' if warnings else 'Cargado') if counts['coincidencias'] else 'Sin coincidencias'
                 self.detail_filename_labels[component].setText(Path(source['path']).name)
                 self.detail_filename_labels[component].setToolTip(source['path'])
-                state.setText(label)
+                state.setText('✓ ' + label)
+                self.detail_review_table.item(row, 2).setText(datetime.fromisoformat(source['loaded_at']).strftime('%H:%M:%S'))
+                self.detail_review_table.item(row, 2).setToolTip(source['loaded_at'])
                 state.setToolTip(f"{source['path']}\n{counts['incorporadas']} incorporadas · {counts['conflictos']} conflictos")
                 color = '#087F23' if counts['coincidencias'] and not warnings else '#A05A00'
                 state.setStyleSheet(f'color: {color}; font-weight: 600;')
             else:
                 self.detail_filename_labels[component].setText('—')
                 self.detail_filename_labels[component].setToolTip('')
-                state.setText('No cargado')
+                state.setText('○ No cargado')
                 state.setToolTip('')
                 state.setStyleSheet('color: #575756;')
             if component in self.detail_import_errors:
-                state.setText('Error de carga — ' + state.text())
+                state.setText('✕ Error de carga')
+                load.setText('Reintentar')
                 state.setStyleSheet('color: #B00020; font-weight: 600;')
                 state.setToolTip(self.detail_import_errors[component])
+        self.check_review_files()
+
+    def toggle_incidents(self, visible):
+        self.incidents_browser.setVisible(visible)
+        self.incidents_toggle.setText(('▾' if visible else '▸') + ' Ver incidencias de la última carga')
+
+    def poll_review_files(self):
+        if self.isVisible() and not self.controls_running and not self.exporting:
+            self.check_review_files()
+
+    def check_review_files(self, force=False):
+        previous = set(self.review_file_issues)
+        self.review_file_issues = self.review_imports.check_files(force)
+        for component in previous - set(self.review_file_issues):
+            if component in self.detail_review_rows and component in self.review_imports.sources and component not in self.detail_import_errors:
+                source = self.review_imports.sources[component]
+                counts = source['counts']
+                warnings = sum(counts.get(name, 0) for name in ('sin_correspondencia', 'ambiguas', 'conflictos', 'excepciones_invalidas', 'estados_invalidos', 'datos_invalidos'))
+                state = self.detail_review_rows[component][1]
+                state.setText('✓ Cargado con observaciones' if warnings else '✓ Cargado')
+                state.setStyleSheet('color: #A05A00;' if warnings else 'color: #087F23;')
+                state.setToolTip(source['path'])
+        for component, message in self.review_file_issues.items():
+            if component in self.detail_review_rows:
+                load, state = self.detail_review_rows[component]
+                state.setText('⚠ Archivo modificado' if self.review_imports.sources[component].get('file_state') == 'modified' else '✕ Archivo no disponible')
+                state.setStyleSheet('color: #A05A00; font-weight: 600;')
+                state.setToolTip(message)
+                load.setText('Recargar')
+        self.review_file_alert.setVisible(bool(self.review_file_issues))
+        self.review_file_alert.setText('⚠ Recargue los detalles modificados o no disponibles antes de generar el reporte: ' + ', '.join(self.review_file_issues) if self.review_file_issues else '')
+        self.export_button.setEnabled(bool(self.results) and not self.controls_running and not self.exporting and not self.review_file_issues)
+        return self.review_file_issues
+
+    def missing_references(self, rules):
+        missing = []
+        for kind in ('R1', 'R2'):
+            marker = kind.lower()
+            needed = any('{tabla_' + marker + '}' in rule[2] or '{esquema_' + marker + '}' in rule[2] for rule in rules)
+            if not needed:
+                continue
+            if self.reference_mode.currentIndex() == 0:
+                ref = self.temporary_references.get(kind)
+                if ref is None or not ref.csv_path.is_file():
+                    missing.append(kind + ' temporal')
+            elif kind != 'R1' or not self.published_r1.currentText():
+                missing.append(kind)
+        return missing
 
     def recovery_message(self, counts):
         return (
@@ -1289,23 +1418,29 @@ class ControlCalidadDialog(QDialog):
         )
 
     def recover_detail(self, component):
-        if self.controls_running or not self.review_cases:
+        if self.controls_running or self.exporting or not self.review_cases:
             return
         path, _ = QFileDialog.getOpenFileName(self, f"Cargar detalle: {component}", "", "Excel de revisión (*.xlsx)")
         if not path:
             return
         try:
+            before = fingerprint_file(path)
             records = load_review(path)
+            after = fingerprint_file(path)
+            if before['sha256'] != after['sha256']:
+                raise ValueError('El archivo cambió durante la carga. Guárdelo y recargue.')
             previous = [case.tracking() + case.exception_tracking() for case in self.review_cases]
-            counts = self.review_imports.load(component, path, records)
+            counts = self.review_imports.load(component, path, records, file_snapshot=after)
         except Exception as error:
             self.detail_import_errors[component] = str(error)
             self.refresh_detail_review_controls()
+            self.incidents_browser.setPlainText(f'{component}: no se cargó el archivo.\n{error}\nSeleccione un detalle válido y vuelva a intentarlo.')
             QMessageBox.warning(self, "No se cargó el detalle", str(error))
             return
         self.review_dirty = self.review_dirty or previous != [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.detail_import_errors.pop(component, None)
         self.refresh_detail_review_controls()
+        self.incidents_browser.setPlainText(component + '\n\n' + self.recovery_message(counts))
         QMessageBox.information(self, f"Detalle {component}", self.recovery_message(counts))
 
     def confirm_review_changes(self):
@@ -1326,8 +1461,8 @@ class ControlCalidadDialog(QDialog):
         return False
 
     def closeEvent(self, event):
-        if self.controls_running:
-            QMessageBox.information(self, "Validación en curso", "Espere a que termine la ejecución antes de cerrar.")
+        if self.controls_running or self.exporting:
+            QMessageBox.information(self, "Proceso en curso", "Espere a que termine la ejecución o generación del reporte antes de cerrar.")
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():
             self.release_references()
@@ -1339,6 +1474,35 @@ class ControlCalidadDialog(QDialog):
         self.close()
 
     def export_excel(self):
+        if self.exporting:
+            return
+        self.export_created_paths = []
+        try:
+            self.build_detail_reports()
+        except Exception as error:
+            for path in self.export_created_paths:
+                path.unlink(missing_ok=True)
+            QMessageBox.warning(self, 'No se generó el reporte', str(error))
+        finally:
+            self.exporting = False
+            self.update_run_availability()
+            self.refresh_detail_review_controls()
+
+    def save_generated_report(self, workbook, filename):
+        if self.check_review_files(force=True):
+            raise ValueError('Un detalle cambió durante la generación. Recárguelo y genere de nuevo. No se conserva una entrega incompleta.')
+        path = Path(filename)
+        if path.exists():
+            raise FileExistsError('El archivo de destino ya existe; no se sobrescribe: ' + path.name)
+        self.export_created_paths.append(path)
+        workbook.save(path)
+
+    def build_detail_reports(self):
+        if self.controls_running:
+            return
+        if self.check_review_files(force=True):
+            QMessageBox.warning(self, 'Revisión desactualizada', 'Hay detalles modificados o no disponibles. Guarde y recargue esos archivos antes de generar una nueva entrega.')
+            return
         if not self.commit_review_editor():
             return
         if not self.results:
@@ -1347,6 +1511,9 @@ class ControlCalidadDialog(QDialog):
         directory = QFileDialog.getExistingDirectory(self, "Seleccione la carpeta para guardar el reporte detallado")
         if not directory:
             return
+        self.exporting = True
+        self.run_button.setEnabled(False)
+        self.refresh_detail_review_controls()
         rule_sheet_count = len({(result.category, result.rule) for result in self.results if result.rows})
         package_count = len({result.category for result in self.results if result.rows})
         report_total = max(len(self.results) + rule_sheet_count + package_count + 3, 1)
@@ -1365,7 +1532,7 @@ class ControlCalidadDialog(QDialog):
             self.status.setText(message)
             QApplication.processEvents()
 
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         path = str(Path(directory) / f"resumen_control_calidad_{stamp}.xlsx")
         book = Workbook()
         summary = book.active
@@ -1373,6 +1540,8 @@ class ControlCalidadDialog(QDialog):
         context = book.create_sheet("Contexto de validación", 0)
         context.append(["Ubicación territorial validada"])
         context.append([self.validation_context])
+        for name, value in self.execution_info.items():
+            context.append([name, value])
         summary.append(STAT_HEADERS)
         groups, totals = review_statistics(self.results, self.review_cases)
         for result in self.results:
@@ -1543,6 +1712,8 @@ class ControlCalidadDialog(QDialog):
             package_context = package.create_sheet("Contexto de validación", 0)
             package_context.append(["Ubicación territorial validada"])
             package_context.append([self.validation_context])
+            for name, value in self.execution_info.items():
+                package_context.append([name, value])
             for cell in package_context[1]:
                 cell.fill = PatternFill("solid", fgColor="0468A3"); cell.font = Font(color="FFFFFF", bold=True, size=11)
             package_context.cell(2, 1).fill = description_fill
@@ -1564,7 +1735,9 @@ class ControlCalidadDialog(QDialog):
                 package_index.cell(package_index.max_row, 4).hyperlink = f"#{source.title}!A1"
                 for source_row in source.iter_rows():
                     for cell in source_row:
-                        target.cell(cell.row, cell.column, cell.value)
+                        copied = target.cell(cell.row, cell.column, cell.value)
+                        copied.data_type = cell.data_type
+                        copied.number_format = cell.number_format
                 for merged_range in source.merged_cells.ranges:
                     target.merge_cells(str(merged_range))
                 for cell in target[1]:
@@ -1595,14 +1768,16 @@ class ControlCalidadDialog(QDialog):
             save_review(None, [case for case in self.review_cases if case.component == category],
                         [result for result in self.results if result.category == category], workbook=package)
             link_rule_reviews(package)
-            package.save(str(Path(directory) / f"detalle_{safe_category}_{stamp}.xlsx"))
+            self.save_generated_report(package, Path(directory) / f"detalle_{safe_category}_{stamp}.xlsx")
             advance_report(f"Guardando paquete {category}…")
         for sheet in [detail, *[book[name] for name in rule_sheet_names.values()]]:
             book.remove(sheet)
         advance_report("Guardando reporte Excel…")
         # The executive file remains statistical only; human follow-up lives
         # exclusively in each detail workbook, not in another editable snapshot.
-        book.save(path)
+        self.save_generated_report(book, path)
+        if self.check_review_files(force=True):
+            raise ValueError('Un detalle cambió durante la generación. Recárguelo y genere de nuevo.')
         self.progress.setValue(report_total)
         self.export_button.setEnabled(True)
         self.status.setText("Reporte exportado correctamente.")

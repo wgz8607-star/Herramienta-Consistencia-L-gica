@@ -433,3 +433,7 @@ visual; al cambiar DT a No, los valores del operador vuelven a verse. Los
 conteos por rol pueden incluir el mismo caso, pero solo DT descuenta errores
 y lo hace una sola vez. Se retira además la línea de seguimientos omitidos del
 resumen de carga, incluido en la versión 1.6.1.
+
+## Versión 2.0.0
+
+Interfaz compacta con indicadores y totales, seguimiento de archivos modificados, fecha de carga por detalle, incidencias desplegables y observaciones de ancho adaptable. Consulte la guía integrada en la pestaña Ayuda.

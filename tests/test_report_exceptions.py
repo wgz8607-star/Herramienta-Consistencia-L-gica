@@ -96,6 +96,21 @@ class ReportExceptionTests(unittest.TestCase):
         self.assertFalse(any(area.startswith('A2:') for area, _rule in rules))
         book.close()
 
+    def test_observation_columns_expand_to_content_and_wrap_long_text(self):
+        current = cases()
+        current[0].observacion_dt = 'Justificación detallada ' * 5
+        current[0].observacion_operador = 'Texto operador ' * 50
+        save_review(self.path, current)
+        book = load_workbook(self.path); sheet = book['Revisión']
+        self.assertGreater(sheet.column_dimensions['J'].width, 42)
+        self.assertGreater(sheet.column_dimensions['L'].width, sheet.column_dimensions['J'].width)
+        self.assertLessEqual(sheet.column_dimensions['L'].width, 255)
+        self.assertTrue(sheet['J2'].alignment.wrap_text)
+        self.assertTrue(sheet['L2'].alignment.wrap_text)
+        self.assertGreater(sheet.row_dimensions[2].height, 30)
+        self.assertEqual(sheet['L2'].value, current[0].observacion_operador)
+        book.close()
+
     def test_recovery_preserves_dt_or_operator_only_when_case_unchanged(self):
         for flag, note in (('excepcion_dt', 'observacion_dt'), ('excepcion_operador', 'observacion_operador')):
             old = cases(); setattr(old[0], flag, 'Sí'); setattr(old[0], note, 'Texto de justificación')

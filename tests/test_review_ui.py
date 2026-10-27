@@ -345,6 +345,73 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(fresh[0].exception_tracking(), ('Sí', 'Validada DT', 'Sí', 'Propuesta aprobada'))
         self.assertEqual(fresh[1].exception_tracking(), ('No', '', 'Sí', 'Propuesta pendiente'))
 
+    def test_modified_detail_blocks_export_until_reloaded(self):
+        from qgis_control_calidad.review import save_review
+        path = Path(self.directory.name) / 'review.xlsx'
+        current = build_cases(self.owner.results, self.owner.review_context)
+        current[0].excepcion_dt = 'Sí'; current[0].observacion_dt = 'Inicial'
+        save_review(path, current)
+        def load():
+            with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(str(path), 'Excel')), patch.object(module.QMessageBox, 'information'):
+                self.owner.recover_detail('Administrativas')
+        load()
+        self.assertTrue(self.owner.export_button.isEnabled())
+        self.assertNotEqual(self.owner.detail_review_table.item(0, 2).text(), '—')
+        book = load_workbook(path); book['Revisión']['J2'] = 'Modificada'
+        book.save(path); book.close()
+        self.owner.check_review_files(force=True)
+        self.assertFalse(self.owner.export_button.isEnabled())
+        self.assertIn('Archivo modificado', self.owner.detail_review_rows['Administrativas'][1].text())
+        self.assertFalse(self.owner.review_file_alert.isHidden())
+        with patch.object(module.QFileDialog, 'getExistingDirectory') as chooser, patch.object(module.QMessageBox, 'warning'):
+            self.owner.export_excel()
+        chooser.assert_not_called()
+        self.assertEqual(self.owner.review_cases[0].observacion_dt, 'Inicial')
+        load()
+        self.assertEqual(self.owner.review_cases[0].observacion_dt, 'Modificada')
+        self.assertTrue(self.owner.export_button.isEnabled())
+        self.assertTrue(self.owner.review_file_alert.isHidden())
+
+    def test_missing_detail_preserves_review_but_blocks_export(self):
+        from qgis_control_calidad.review import save_review
+        path = Path(self.directory.name) / 'review.xlsx'
+        current = build_cases(self.owner.results, self.owner.review_context)
+        current[0].observacion_operador = 'Conservar'
+        save_review(path, current)
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(str(path), 'Excel')), patch.object(module.QMessageBox, 'information'):
+            self.owner.recover_detail('Administrativas')
+        path.unlink()
+        self.owner.check_review_files(force=True)
+        self.assertIn('no disponible', self.owner.detail_review_rows['Administrativas'][1].text())
+        self.assertEqual(self.owner.review_cases[0].observacion_operador, 'Conservar')
+        self.assertFalse(self.owner.export_button.isEnabled())
+
+    def test_total_row_and_kpis_match_original_and_dt_only_statistics(self):
+        self.owner.review_cases[0].excepcion_dt = 'Sí'; self.owner.review_cases[0].observacion_dt = 'DT'
+        self.owner.review_cases[1].excepcion_operador = 'Sí'; self.owner.review_cases[1].observacion_operador = 'Operador'
+        self.owner.refresh_review_statistics()
+        last = self.owner.table.rowCount()-1
+        self.assertEqual(self.owner.table.item(last, 0).text(), 'TOTAL')
+        self.assertEqual(self.owner.table.item(last, 5).text(), '1')
+        self.assertEqual(self.owner.kpi_values['findings'].text(), '2')
+        self.assertEqual(self.owner.kpi_values['dt'].text(), '1')
+        self.assertEqual(self.owner.kpi_values['pending'].text(), '1')
+
+    def test_exported_observations_are_wide_literal_text(self):
+        note = '= Texto literal con tildes y justificación extensa ' * 3
+        self.owner.review_cases[0].observacion_dt = note
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
+        book = load_workbook(path); sheet = book['regla_1']
+        columns = {cell.value: cell.column for cell in sheet[4]}
+        cell = sheet.cell(5, columns['Observación DT'])
+        self.assertEqual(cell.value, note)
+        self.assertEqual(cell.data_type, 's')
+        self.assertTrue(cell.alignment.wrap_text)
+        self.assertGreater(sheet.column_dimensions[cell.column_letter].width, 42)
+        book.close()
+
     def test_help_opens_local_guide_inside_plugin(self):
         self.assertEqual(self.owner.main_tabs.currentIndex(), 0)
         self.owner.help_button.click()

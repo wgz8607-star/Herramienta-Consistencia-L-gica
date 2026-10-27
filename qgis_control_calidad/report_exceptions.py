@@ -1,5 +1,7 @@
 """DT/operator exception controls shared by every record-level Excel report."""
 from copy import copy
+import math
+import unicodedata
 
 from openpyxl.styles import PatternFill, Protection, Font
 from openpyxl.comments import Comment
@@ -25,6 +27,27 @@ def validate(values, valid_observation):
         raise ValueError('Excepción DT requiere una Observación DT válida.')
     if yes(operator) and not valid_observation(note_operator):
         raise ValueError('Excepción operador requiere una Observación operador válida.')
+
+
+def fit_observations(sheet, first_row, last_row, first_column):
+    """Fit notes to current content, up to Excel's column/row limits."""
+    def length(value):
+        return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1
+                   for c in value.expandtabs(4))
+    for column in (first_column + 1, first_column + 3):
+        lines = [line for row in range(first_row, last_row+1)
+                 for line in str(sheet.cell(row, column).value or '').splitlines()]
+        width = min(255, max(48, max((length(line) for line in lines), default=0) + 3))
+        sheet.column_dimensions[get_column_letter(column)].width = width
+        for row in range(first_row, last_row+1):
+            cell = sheet.cell(row, column)
+            alignment = copy(cell.alignment)
+            alignment.wrap_text = True
+            alignment.vertical = 'top'
+            cell.alignment = alignment
+            text = str(cell.value or '')
+            count = sum(max(1, math.ceil(length(line) / max(1, width-2))) for line in (text.splitlines() or ['']))
+            sheet.row_dimensions[row].height = min(409.5, max(sheet.row_dimensions[row].height or 15, count*15+4))
 
 
 def add_controls(sheet, first_row, last_row, first_column, protect=True):
@@ -74,6 +97,7 @@ def add_controls(sheet, first_row, last_row, first_column, protect=True):
     for row in sheet.iter_rows(min_row=first_row, max_row=last_row, min_col=first_column, max_col=first_column+3):
         for cell in row:
             cell.protection = Protection(locked=False)
+    fit_observations(sheet, first_row, last_row, first_column)
     if protect:
         sheet.protection.sheet = True
         sheet.protection.autoFilter = False

@@ -1,6 +1,9 @@
 """Track detail imports independently and reversibly within the current run."""
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from .review_files import inspect_source
 
 from .review import REVIEW_FIELDS, restore_review
 from .report_exceptions import FIELDS as EXCEPTION_FIELDS
@@ -44,7 +47,7 @@ class ReviewImports:
         self.sources.pop(component, None)
         return counts
 
-    def load(self, component, path, records):
+    def load(self, component, path, records, file_snapshot=None):
         if not any(case.component == component for case in self.cases):
             raise ValueError('No hay resultados de este detalle en la ejecución actual.')
         declared = {record.component for record in records if record.component}
@@ -65,5 +68,17 @@ class ReviewImports:
                    if values != tracking(candidate[index])}
         for index in before:
             assign(self.cases[index], tracking(candidate[index]))
-        self.sources[component] = {'path': str(path), 'counts': dict(counts), 'changes': changes}
+        self.sources[component] = {'path': str(path), 'counts': dict(counts), 'changes': changes,
+                                   'loaded_at': datetime.now(ZoneInfo('America/Bogota')).isoformat(timespec='seconds'),
+                                   'file_snapshot': deepcopy(file_snapshot),
+                                   'observed_stat': file_snapshot['stat'] if file_snapshot else None,
+                                   'file_state': 'current', 'file_error': ''}
         return counts
+
+    def check_files(self, force=False):
+        issues = {}
+        for component, source in self.sources.items():
+            issue = inspect_source(source, force)
+            if issue:
+                issues[component] = issue
+        return issues

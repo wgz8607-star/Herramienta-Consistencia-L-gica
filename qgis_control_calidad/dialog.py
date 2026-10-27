@@ -1282,7 +1282,6 @@ class ControlCalidadDialog(QDialog):
             f"• Sin coincidencia: {counts['sin_correspondencia']}\n"
             f"• Coincidencias ambiguas: {counts['ambiguas']}\n"
             f"• Conflictos (se conservó la revisión actual): {counts['conflictos']}\n"
-            f"• Seguimientos del operador omitidos por prioridad DT: {counts['operador_bloqueado']}\n"
             f"• Registros no recuperables: {counts['datos_invalidos']}\n"
             f"  — Por identidad insuficiente: {counts['identidad_insuficiente']}\n"
             f"  — Por datos o identidad alterados: {counts['identidad_alterada']}\n\n"

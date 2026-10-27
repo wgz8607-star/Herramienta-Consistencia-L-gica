@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.6.0**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.6.1**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -128,7 +128,7 @@ Las reglas se ejecutan tal como están publicadas. Si una falla, se registra un 
 
 **Solo las excepciones validadas y marcadas por DT descuentan errores.**
 
-Ejemplo: 100 hallazgos, 10 excepciones DT y 8 del operador dejan **90 errores**, no 82. Un mismo caso no se cuenta simultáneamente como excepción DT y operador: DT tiene prioridad.
+Ejemplo: 100 hallazgos, 10 excepciones DT y 8 del operador dejan **90 errores**, no 82. Un caso puede conservar ambas marcas y aparecer en los conteos de ambos roles. Solo su marca DT descuenta el hallazgo, una única vez.
 
 La estadística se actualiza al cargar, recargar o descartar revisiones. No borra ni cambia el resultado automático original.
 
@@ -188,13 +188,12 @@ El mensaje separa **DT**, **Operador** e **Incidencias de carga**.
 |---|---|
 | DT — Incorporadas | Excepciones DT con observación válida que se incorporaron al caso actual. Incluye las propuestas del operador aprobadas por DT. |
 | DT — Descartadas sin observación | Marcas DT en Sí sin texto válido en su observación; no se aceptan como excepción. |
-| Operador — Incorporadas | Propuestas justificadas del operador incorporadas sin una marca DT prioritaria. No descuentan errores. |
+| Operador — Incorporadas | Marcas justificadas del operador incorporadas, incluso si DT también está en Sí. No descuentan errores. |
 | Operador — Descartadas sin observación | Marcas del operador en Sí sin texto válido en su observación. |
 | Operador — Aprobadas por DT | Casos incorporados que llegan con ambas marcas en Sí y ambas observaciones válidas. Son un subconjunto de las incorporadas por DT; no son excepciones adicionales. El plugin reconoce lo diligenciado, no verifica la identidad del evaluador ni aprueba casos por sí mismo. |
 | Sin coincidencia | La clave del archivo no aparece en la ejecución actual. Puede cambiar por datos, SQL, contexto o referencias; no prueba por sí solo que el error esté corregido. |
 | Coincidencias ambiguas | No existe una coincidencia única y segura; no se asigna automáticamente. |
 | Conflictos | Se conservó seguimiento actual diferente, sin sobrescribirlo. |
-| Seguimientos del operador omitidos por prioridad DT | Casos incorporados con DT en Sí y, además, una marca o un comentario del operador. Prevalece DT. Un comentario del operador con marca No no se cuenta como excepción aprobada. |
 | Registros no recuperables | Total de filas con identidad insuficiente o que no superaron la verificación de datos. |
 | Por identidad insuficiente | Desglose del total anterior: no hay identificación recuperable suficiente. |
 | Por datos o identidad alterados | Desglose del total anterior: los datos, la clave o las referencias de las hojas no superaron la verificación. |
@@ -202,8 +201,7 @@ El mensaje separa **DT**, **Operador** e **Incidencias de carga**.
 Las cifras describen la carga actual, no se acumulan cada vez que recarga el
 mismo archivo. Las incorporadas cuentan solo excepciones efectivamente
 transferidas, no observaciones sin marca ni casos rechazados por conflicto.
-No sume todas las líneas: las aprobadas por DT están incluidas en DT, la omisión
-por prioridad puede describir el mismo caso y los dos últimos contadores son
+No sume todas las líneas: las aprobadas por DT están incluidas en ambos roles y los dos últimos contadores son
 desgloses. La estadística de errores se calcula por separado y descuenta solo DT.
 
 ### ¿Cuándo se recupera una excepción?
@@ -214,7 +212,7 @@ Solo se recupera el seguimiento de una coincidencia única que siga igual. Si ca
 
 Si la regla no devuelve los datos que determinan la inconsistencia, el reporte no puede detectar cambios en esos datos no expuestos. La regla 1.12 por matrícula, por ejemplo, identifica el grupo con matrícula y conteo; no entrega la lista de predios integrantes.
 
-Una excepción sin observación válida se descarta como excepción y se informa. El seguimiento actual no se sobrescribe silenciosamente en un conflicto. Si DT es Sí con justificación, no se incorpora seguimiento del operador para ese caso.
+Una excepción sin observación válida se descarta como excepción y se informa. El seguimiento actual no se sobrescribe silenciosamente en un conflicto. Si DT es Sí con justificación, se conserva el seguimiento del operador y solo se oculta visualmente en el detalle. No se borra al recuperar ni al generar otra entrega.
 
 **Un hallazgo ausente no queda automáticamente certificado como corregido.** Compruebe que se ejecutó correctamente la misma validación, con el mismo alcance de datos. Los archivos anteriores sirven como historial.
 

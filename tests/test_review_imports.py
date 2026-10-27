@@ -46,10 +46,10 @@ class ReviewImportTests(unittest.TestCase):
         counts = manager.load('Administrativas', 'detalle.xlsx', records)
         self.assertEqual(counts['dt_incorporadas'], 4)
         self.assertEqual(counts['dt_sin_observacion'], 1)
-        self.assertEqual(counts['operador_incorporadas'], 1)
+        self.assertEqual(counts['operador_incorporadas'], 2)
         self.assertEqual(counts['operador_sin_observacion'], 2)
         self.assertEqual(counts['operador_aprobadas_dt'], 1)
-        self.assertEqual(counts['operador_bloqueado'], 3)
+        self.assertEqual(counts['operador_bloqueado'], 0)
         self.assertEqual(counts['excepciones_invalidas'], 3)
         self.assertEqual(manager.sources['Administrativas']['counts']['operador_aprobadas_dt'], 1)
         # A recarga is counted again from its file, not accumulated over imports.

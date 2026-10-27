@@ -310,8 +310,40 @@ class ReviewUiTests(unittest.TestCase):
         self.assertIn('Operador\n• Incorporadas: 2\n• Descartadas sin observación: 3', message)
         self.assertIn('• Aprobadas por DT: 1', message)
         self.assertIn('Incidencias de carga', message)
-        self.assertIn('omitidos por prioridad DT: 2', message)
+        self.assertNotIn('omitidos por prioridad DT', message)
         self.assertTrue(message.endswith(module.EXCEPTION_NOTICE))
+
+    def test_operator_followup_survives_import_and_new_detail_export(self):
+        from qgis_control_calidad.review import load_review, restore_review
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        original = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
+        book = load_workbook(original); sheet = book['regla_1']
+        cols = {cell.value: cell.column for cell in sheet[4]}
+        sheet.cell(5, cols['Excepción DT'], 'Sí')
+        sheet.cell(5, cols['Observación DT'], 'Validada DT')
+        for row, note in ((5, 'Propuesta aprobada'), (6, 'Propuesta pendiente')):
+            sheet.cell(row, cols['Excepción operador'], 'Sí')
+            sheet.cell(row, cols['Observación operador'], note)
+        book.save(original); book.close()
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(str(original), 'Excel')), patch.object(module.QMessageBox, 'information'):
+            self.owner.recover_detail('Administrativas')
+        self.assertEqual(self.owner.review_cases[0].excepcion_operador, 'Sí')
+        self.assertEqual(self.owner.review_cases[0].observacion_operador, 'Propuesta aprobada')
+        self.assertEqual(self.owner.table.item(0, 3).text(), '1')
+        self.assertEqual(self.owner.table.item(0, 4).text(), '2')
+        self.assertEqual(self.owner.table.item(0, 5).text(), '1')
+        output = Path(self.directory.name) / 'nueva_entrega'
+        output.mkdir()
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=str(output)):
+            self.owner.export_excel()
+        regenerated = next(output.glob('detalle_Administrativas_*.xlsx'))
+        fresh = build_cases(self.owner.results, self.owner.review_context)
+        counts = restore_review(fresh, load_review(regenerated))
+        self.assertEqual(counts['operador_incorporadas'], 2)
+        self.assertEqual(counts['operador_aprobadas_dt'], 1)
+        self.assertEqual(fresh[0].exception_tracking(), ('Sí', 'Validada DT', 'Sí', 'Propuesta aprobada'))
+        self.assertEqual(fresh[1].exception_tracking(), ('No', '', 'Sí', 'Propuesta pendiente'))
 
     def test_help_opens_local_guide_inside_plugin(self):
         self.assertEqual(self.owner.main_tabs.currentIndex(), 0)

@@ -34,13 +34,15 @@ class ReportExceptionTests(unittest.TestCase):
             setattr(row, note, 'Justificación válida')
             save_review(self.path, [row])
 
-    def test_dt_disallows_operator_fields_even_if_operator_is_not_exception(self):
+    def test_dt_keeps_operator_marks_and_notes_when_saving(self):
         row = cases()[0]
         row.excepcion_dt = 'Sí'; row.observacion_dt = 'Validado DT'
-        for flag, note in (('Sí', 'Observación operador'), ('No', 'Texto residual')):
+        for flag, note in (('Sí', 'Observación operador'), ('No', 'Comentario operador')):
             row.excepcion_operador, row.observacion_operador = flag, note
-            with self.assertRaises(ValueError):
-                save_review(self.path, [row])
+            save_review(self.path, [row])
+            restored = cases()
+            restore_review(restored, load_review(self.path))
+            self.assertEqual(restored[0].exception_tracking(), row.exception_tracking())
 
     def test_export_fields_validation_protection_and_gray_operator(self):
         save_review(self.path, cases())
@@ -109,8 +111,9 @@ class ReportExceptionTests(unittest.TestCase):
         sheet['K2'] = 'Sí'; sheet['L2'] = 'Intento operador'
         book.save(self.path); book.close()
         new = cases(); counts = restore_review(new, load_review(self.path))
-        self.assertEqual(counts['operador_bloqueado'], 1)
-        self.assertEqual(new[0].exception_tracking(), ('Sí', 'Justificación DT', 'No', ''))
+        self.assertEqual(counts['operador_bloqueado'], 0)
+        self.assertEqual(counts['operador_aprobadas_dt'], 1)
+        self.assertEqual(new[0].exception_tracking(), ('Sí', 'Justificación DT', 'Sí', 'Intento operador'))
         book = load_workbook(self.path); sheet = book['Revisión']
         sheet['J2'] = ' '; sheet['K2'] = 'No'; sheet['L2'] = ''
         book.save(self.path); book.close()

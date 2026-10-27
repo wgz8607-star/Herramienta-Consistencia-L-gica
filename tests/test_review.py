@@ -107,7 +107,7 @@ class ReviewTests(unittest.TestCase):
         current[1].excepcion_dt = 'Sí'; current[1].observacion_dt = '  '
         _, totals = review_statistics([result(self.rows)], current)
         self.assertEqual(totals['dt'], 1)
-        self.assertEqual(totals['operator'], 0)
+        self.assertEqual(totals['operator'], 1)
         self.assertEqual(totals['pending'], 1)
 
     def test_relevant_value_sql_rule_category_or_context_change_invalidates(self):

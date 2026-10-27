@@ -401,9 +401,6 @@ def restore_review(cases, records):
             counts['operador_sin_observacion'] += 1
             counts['excepciones_invalidas'] += 1
         operator_approved = dt == 'Sí' and operator_justified
-        operator_omitted = dt == 'Sí' and (operator_marked or bool(note_operator))
-        if dt == 'Sí':
-            operator, note_operator = 'No', ''
         exception_values = (dt, note_dt, operator, note_operator)
         tracking = (state, record.observation, record.timestamp)
         if case.has_tracking():
@@ -421,7 +418,6 @@ def restore_review(cases, records):
         counts['dt_incorporadas'] += int(dt == 'Sí')
         counts['operador_incorporadas'] += int(operator == 'Sí')
         counts['operador_aprobadas_dt'] += int(operator_approved)
-        counts['operador_bloqueado'] += int(operator_omitted)
     return counts
 
 
@@ -449,7 +445,7 @@ def review_statistics(results, cases):
         values = grouped[case.component]
         if yes(case.excepcion_dt) and valid_observation(case.observacion_dt):
             values['dt'] += 1
-        elif yes(case.excepcion_operador) and valid_observation(case.observacion_operador):
+        if yes(case.excepcion_operador) and valid_observation(case.observacion_operador):
             values['operator'] += 1
     for values in grouped.values():
         values['pending'] = max(0, values['findings'] - values['dt'])

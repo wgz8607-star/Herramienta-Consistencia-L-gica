@@ -23,8 +23,6 @@ def validate(values, valid_observation):
         raise ValueError('Las excepciones deben marcarse como Sí o No.')
     if yes(dt) and not valid_observation(note_dt):
         raise ValueError('Excepción DT requiere una Observación DT válida.')
-    if yes(dt) and (yes(operator) or str(note_operator or '')):
-        raise ValueError('Si Excepción DT es Sí, los campos del operador deben quedar en No y vacíos.')
     if yes(operator) and not valid_observation(note_operator):
         raise ValueError('Excepción operador requiere una Observación operador válida.')
 

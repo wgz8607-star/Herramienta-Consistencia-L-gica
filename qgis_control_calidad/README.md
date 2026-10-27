@@ -424,3 +424,12 @@ y una incorporación efectiva: no equivale a encontrar cualquier comentario del
 operador en una fila DT. Las aprobadas son un subconjunto de DT, no se descuentan
 dos veces. Los contadores se recalculan al recargar el archivo y los conflictos
 no incrementan las excepciones incorporadas.
+
+### Conservación de las marcas del operador (1.6.1)
+
+La prioridad de DT no borra la marca ni la observación del operador. Ambas se
+conservan al importar y al generar otra entrega. La ocultación en Excel es solo
+visual; al cambiar DT a No, los valores del operador vuelven a verse. Los
+conteos por rol pueden incluir el mismo caso, pero solo DT descuenta errores
+y lo hace una sola vez. Se retira además la línea de seguimientos omitidos del
+resumen de carga, incluido en la versión 1.6.1.

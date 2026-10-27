@@ -1212,7 +1212,7 @@ class ControlCalidadDialog(QDialog):
             f"Correspondencias ambiguas: {counts['ambiguas']}\n"
             f"Seguimientos actuales conservados por conflicto: {counts['conflictos']}\n"
             f"Excepciones sin observación descartadas: {counts['excepciones_invalidas']}\n"
-            f"Campos de operador descartados por Excepción DT: {counts['operador_bloqueado']}\n"
+            f"Excepciones de operador aprobadas por DT: {counts['operador_bloqueado']}\n"
             f"Datos alterados o no recuperables: {counts['datos_invalidos']}\n"
             f"Identidad insuficiente: {counts['identidad_insuficiente']}\n"
             f"Datos o identidad alterados: {counts['identidad_alterada']}"

@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.5.7**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.5.8**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 

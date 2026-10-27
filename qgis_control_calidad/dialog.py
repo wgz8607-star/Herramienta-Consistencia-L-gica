@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from qgis.PyQt.QtCore import QObject, QSize, QThread, QTimer, Qt, pyqtSignal
-from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtCore import QObject, QSize, QThread, QTimer, QUrl, Qt, pyqtSignal
+from qgis.PyQt.QtGui import QIcon, QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
@@ -37,6 +37,7 @@ PLUGIN_DIR = Path(__file__).resolve().parent
 SQL_ROOT = PLUGIN_DIR / "resources" / "sql"
 DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
 MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db"}
+HELP_URL = "https://github.com/wgz8607-star/Herramienta-Consistencia-L-gica/blob/main/qgis_control_calidad/ayuda/GUIA_USO.md"
 SNC_CATEGORY = "Cargue SNC"
 SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
 EXCEPTION_NOTICE = "Solo las excepciones validadas y marcadas por DT descuentan errores."
@@ -323,7 +324,13 @@ class ControlCalidadDialog(QDialog):
 
         heading = QLabel("Validador Consistencia Lógica Alfanumérica")
         heading.setStyleSheet("font-size: 22px; font-weight: 700; color: #0468A3;")
-        layout.addWidget(heading)
+        heading_row = QHBoxLayout()
+        heading_row.addWidget(heading, 1)
+        self.help_button = QPushButton("Ayuda")
+        self.help_button.setToolTip("Abrir guía de uso del plugin")
+        self.help_button.clicked.connect(self.open_help)
+        heading_row.addWidget(self.help_button)
+        layout.addLayout(heading_row)
         subtitle = QLabel("Modelo Interno de Levantamiento 1.0 y CICA · Validaciones alfanuméricas")
         subtitle.setStyleSheet("color: #52666a;")
         layout.addWidget(subtitle)
@@ -617,6 +624,10 @@ class ControlCalidadDialog(QDialog):
         self.load_qgis_connections()
         self.update_ingestion_button()
         self.resize_connection_stack()
+
+    def open_help(self):
+        if not QDesktopServices.openUrl(QUrl(HELP_URL)):
+            QMessageBox.information(self, "Guía de uso", "Abra este enlace en su navegador:\n" + HELP_URL)
 
     def resize_connection_stack(self):
         self.update_connection_height()

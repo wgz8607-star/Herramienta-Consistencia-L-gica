@@ -384,3 +384,9 @@ formato condicional para actualizar el color al editar la marca en Excel.
 La ocultación visual de los campos del operador sigue teniendo prioridad cuando
 DT es Sí. El aviso de carga se unifica en: «Solo las excepciones validadas y
 marcadas por DT descuentan errores».
+
+## Ayuda de uso (1.5.4)
+
+[Guía completa del plugin](ayuda/GUIA_USO.md). El botón **Ayuda** del encabezado
+abre esa guía en GitHub mediante el navegador del usuario. El texto también
+se incluye dentro de `ayuda/GUIA_USO.md` en el ZIP para consulta local.

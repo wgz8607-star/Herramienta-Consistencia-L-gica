@@ -296,6 +296,16 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(notice.call_args.args[2].count(module.EXCEPTION_NOTICE), 1)
         self.assertEqual(self.owner.table.item(0, 5).text(), '1')
 
+    def test_help_opens_guide_in_browser(self):
+        with patch.object(module.QDesktopServices, 'openUrl', return_value=True) as browser:
+            self.owner.help_button.click()
+        self.assertEqual(browser.call_args.args[0].toString(), module.HELP_URL)
+
+    def test_help_shows_link_when_browser_is_unavailable(self):
+        with patch.object(module.QDesktopServices, 'openUrl', return_value=False), patch.object(module.QMessageBox, 'information') as message:
+            self.owner.open_help()
+        self.assertIn(module.HELP_URL, message.call_args.args[2])
+
     def test_direct_save_has_all_cases(self):
         path = str(Path(self.directory.name) / 'revision.xlsx')
         with patch.object(module.QFileDialog, 'getSaveFileName', return_value=(path, 'Excel')):

@@ -73,6 +73,7 @@ class ReviewUiTests(unittest.TestCase):
                 cols = {cell.value: cell.column for cell in detail[4]}
                 self.assertEqual(detail.cell(5, cols[HEADERS[0]]).value, 'Sí')
                 self.assertEqual(detail.cell(5, cols[HEADERS[0]]).fill.fgColor.rgb, '00C6EFCE')
+                self.assertEqual(detail.cell(5, cols[HEADERS[0]]).font.color.rgb, '00006100')
                 self.assertEqual(detail.cell(6, cols[HEADERS[0]]).fill.fgColor.rgb, '00FFC7CE')
                 self.assertEqual(detail.cell(5, cols[HEADERS[1]]).value, 'Documentado por DT')
                 for header in HEADERS:

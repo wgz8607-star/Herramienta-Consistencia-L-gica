@@ -49,6 +49,7 @@ class ReportExceptionTests(unittest.TestCase):
         self.assertEqual(tuple(sheet.cell(2, col).value or '' for col in range(9, 13)), DEFAULTS)
         self.assertEqual(sheet['I2'].fill.fgColor.rgb, '00FFC7CE')
         self.assertEqual(sheet['K2'].fill.fgColor.rgb, '00FFC7CE')
+        self.assertEqual(sheet['I2'].font.color.rgb, '009C0006')
         self.assertTrue(sheet.protection.sheet)
         self.assertTrue(sheet['A2'].protection.locked)
         for col in ('I', 'J', 'K', 'L'):
@@ -83,6 +84,8 @@ class ReportExceptionTests(unittest.TestCase):
         flags = [rule for area, rule in rules if area == 'I2']
         self.assertEqual({tuple(rule.formula): rule.dxf.fill.fgColor.rgb for rule in flags},
                          {('$I2="Sí"',): '00C6EFCE', ('$I2="No"',): '00FFC7CE'})
+        self.assertEqual({tuple(rule.formula): rule.dxf.font.color.rgb for rule in flags},
+                         {('$I2="Sí"',): '00006100', ('$I2="No"',): '009C0006'})
         gray = next(rule for area, rule in rules if area == 'K2:L2')
         self.assertTrue(gray.stopIfTrue)
         self.assertEqual(gray.dxf.fill.fgColor.rgb, '00FFFFFF')

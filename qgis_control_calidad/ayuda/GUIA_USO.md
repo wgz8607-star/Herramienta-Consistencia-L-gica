@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.5.6**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.5.7**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -149,8 +149,8 @@ En un **detalle por componente**, abra la hoja de la regla que desea revisar y d
 
 Las observaciones se pueden escribir antes o después de la marca. No están condicionadas por un orden de edición. Para **recuperar una excepción como válida** debe existir una observación con texto: vacíos, espacios o caracteres invisibles no bastan.
 
-- **No**: relleno rojo tenue.
-- **Sí**: relleno verde tenue.
+- **No**: relleno rojo tenue (`#FFC7CE`) y texto rojo oscuro (`#9C0006`).
+- **Sí**: relleno verde tenue (`#C6EFCE`) y texto verde oscuro (`#006100`).
 - **DT = Sí**: los valores de los dos campos del operador se ocultan visualmente en esa fila. No se oculta toda la columna ni se borran los datos. No es un mecanismo de seguridad: el contenido puede verse en la barra de fórmulas.
 
 Dentro de cada detalle, la hoja **Revisión** refleja los valores por clave y sirve para recuperarlos. No se editan sus campos: se alimentan desde las hojas de reglas del mismo archivo. Esta hoja interna no es un archivo de revisión consolidada separado. El reporte ejecutivo contiene únicamente estadísticas y no se usa para cargar excepciones.

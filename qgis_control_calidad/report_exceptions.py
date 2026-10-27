@@ -1,4 +1,6 @@
 """DT/operator exception controls shared by every record-level Excel report."""
+from copy import copy
+
 from openpyxl.styles import PatternFill, Protection, Font
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
@@ -8,6 +10,7 @@ from openpyxl.utils import get_column_letter
 HEADERS = ('Excepción DT', 'Observación DT', 'Excepción operador', 'Observación operador')
 FIELDS = ('excepcion_dt', 'observacion_dt', 'excepcion_operador', 'observacion_operador')
 DEFAULTS = ('No', '', 'No', '')
+EXCEPTION_COLORS = {'Sí': ('C6EFCE', '006100'), 'No': ('FFC7CE', '9C0006')}
 
 
 def yes(value):
@@ -53,20 +56,23 @@ def add_controls(sheet, first_row, last_row, first_column, protect=True):
                     font=Font(color='FFFFFF'), stopIfTrue=True),
     )
     for column in (dt, operator):
-        for value, color in (('Sí', 'C6EFCE'), ('No', 'FFC7CE')):
+        for value, (color, text_color) in EXCEPTION_COLORS.items():
             sheet.conditional_formatting.add(
                 f'{column}{first_row}:{column}{last_row}',
                 FormulaRule(formula=[f'${column}{first_row}="{value}"'],
-                            fill=PatternFill('solid', fgColor=color)),
+                            fill=PatternFill('solid', fgColor=color), font=Font(color=text_color)),
             )
     # Keep initial colors visible even in previews that do not calculate Excel
     # conditional formatting; conditional rules still update subsequent edits.
-    colors = {'Sí': 'C6EFCE', 'No': 'FFC7CE'}
     for row_index in range(first_row, last_row + 1):
         for column_index in (first_column, first_column + 2):
             cell = sheet.cell(row_index, column_index)
-            if cell.value in colors:
-                cell.fill = PatternFill('solid', fgColor=colors[cell.value])
+            if cell.value in EXCEPTION_COLORS:
+                fill_color, text_color = EXCEPTION_COLORS[cell.value]
+                cell.fill = PatternFill('solid', fgColor=fill_color)
+                font = copy(cell.font)
+                font.color = text_color
+                cell.font = font
     for row in sheet.iter_rows(min_row=first_row, max_row=last_row, min_col=first_column, max_col=first_column+3):
         for cell in row:
             cell.protection = Protection(locked=False)

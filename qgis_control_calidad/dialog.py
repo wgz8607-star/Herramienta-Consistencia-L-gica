@@ -1270,15 +1270,23 @@ class ControlCalidadDialog(QDialog):
 
     def recovery_message(self, counts):
         return (
-            f"Revisiones incorporadas: {counts['incorporadas']}\n"
-            f"Sin correspondencia: {counts['sin_correspondencia']}\n"
-            f"Correspondencias ambiguas: {counts['ambiguas']}\n"
-            f"Seguimientos actuales conservados por conflicto: {counts['conflictos']}\n"
-            f"Excepciones sin observación descartadas: {counts['excepciones_invalidas']}\n"
-            f"Excepciones de operador aprobadas por DT: {counts['operador_bloqueado']}\n"
-            f"Datos alterados o no recuperables: {counts['datos_invalidos']}\n"
-            f"Identidad insuficiente: {counts['identidad_insuficiente']}\n"
-            f"Datos o identidad alterados: {counts['identidad_alterada']}"
+            "Resumen de excepciones\n\n"
+            "DT\n"
+            f"• Incorporadas: {counts['dt_incorporadas']}\n"
+            f"• Descartadas sin observación: {counts['dt_sin_observacion']}\n\n"
+            "Operador\n"
+            f"• Incorporadas: {counts['operador_incorporadas']}\n"
+            f"• Descartadas sin observación: {counts['operador_sin_observacion']}\n"
+            f"• Aprobadas por DT: {counts['operador_aprobadas_dt']}\n\n"
+            "Incidencias de carga\n"
+            f"• Sin coincidencia: {counts['sin_correspondencia']}\n"
+            f"• Coincidencias ambiguas: {counts['ambiguas']}\n"
+            f"• Conflictos (se conservó la revisión actual): {counts['conflictos']}\n"
+            f"• Seguimientos del operador omitidos por prioridad DT: {counts['operador_bloqueado']}\n"
+            f"• Registros no recuperables: {counts['datos_invalidos']}\n"
+            f"  — Por identidad insuficiente: {counts['identidad_insuficiente']}\n"
+            f"  — Por datos o identidad alterados: {counts['identidad_alterada']}\n\n"
+            + EXCEPTION_NOTICE
         )
 
     def recover_detail(self, component):
@@ -1299,7 +1307,7 @@ class ControlCalidadDialog(QDialog):
         self.review_dirty = self.review_dirty or previous != [case.tracking() + case.exception_tracking() for case in self.review_cases]
         self.detail_import_errors.pop(component, None)
         self.refresh_detail_review_controls()
-        QMessageBox.information(self, f"Detalle {component}", EXCEPTION_NOTICE + '\n\n' + self.recovery_message(counts))
+        QMessageBox.information(self, f"Detalle {component}", self.recovery_message(counts))
 
     def confirm_review_changes(self):
         if not self.review_dirty:

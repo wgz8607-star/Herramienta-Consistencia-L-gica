@@ -298,6 +298,21 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(self.owner.table.item(0, 4).text(), '1')
         self.assertEqual(self.owner.table.item(0, 5).text(), '2')
 
+    def test_recovery_summary_has_separate_role_counts_and_incidents(self):
+        from qgis_control_calidad.review import restore_review
+        counts = restore_review([], [])
+        counts.update(dt_incorporadas=4, dt_sin_observacion=1,
+                      operador_incorporadas=2, operador_sin_observacion=3,
+                      operador_aprobadas_dt=1, operador_bloqueado=2)
+        message = self.owner.recovery_message(counts)
+        self.assertTrue(message.startswith('Resumen de excepciones'))
+        self.assertIn('DT\n• Incorporadas: 4\n• Descartadas sin observación: 1', message)
+        self.assertIn('Operador\n• Incorporadas: 2\n• Descartadas sin observación: 3', message)
+        self.assertIn('• Aprobadas por DT: 1', message)
+        self.assertIn('Incidencias de carga', message)
+        self.assertIn('omitidos por prioridad DT: 2', message)
+        self.assertTrue(message.endswith(module.EXCEPTION_NOTICE))
+
     def test_help_opens_local_guide_inside_plugin(self):
         self.assertEqual(self.owner.main_tabs.currentIndex(), 0)
         self.owner.help_button.click()

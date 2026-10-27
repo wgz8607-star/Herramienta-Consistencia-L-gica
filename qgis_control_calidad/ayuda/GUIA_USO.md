@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.5.9**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.6.0**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -182,23 +182,29 @@ La gestión se hace exclusivamente por detalle. No hay botones para guardar o re
 
 ### ¿Qué significa el resumen de recuperación?
 
+El mensaje separa **DT**, **Operador** e **Incidencias de carga**.
+
 | Contador | Interpretación |
 |---|---|
-| Revisiones incorporadas | Casos a los que se transfirió seguimiento. Incluye observaciones y marcas; no significa que todos sean excepciones DT. |
-| Sin correspondencia | Filas del archivo cuya clave no aparece en la ejecución actual. Puede cambiar por datos, regla, SQL, contexto o referencias; no prueba por sí solo que el error fue corregido. |
-| Correspondencias ambiguas | No se puede establecer una coincidencia única y segura; no se asigna automáticamente. |
-| Seguimientos actuales conservados por conflicto | Ya había seguimiento diferente en el caso actual y se conservó, sin sobrescribirlo. |
-| Excepciones sin observación descartadas | Marcas de excepción sin justificación válida que no se aceptaron como excepción. Puede contar más de una marca en un caso. |
-| Campos de operador descartados por Excepción DT | Casos con DT en Sí y, además, marca o texto del operador. Se aplicó la prioridad de DT y se omitió el seguimiento del operador. La etiqueta más reciente dice Excepciones de operador aprobadas por DT; el contador no verifica una aprobación independiente ni la identidad de quien diligenció el archivo. |
-| Datos alterados o no recuperables | Total de filas que no superaron la verificación o no tienen identidad suficiente para recuperar con seguridad. |
-| Identidad insuficiente | Parte del total anterior: filas sin identificación recuperable suficiente. |
-| Datos o identidad alterados | Parte del total anterior: la clave, datos o referencias de las hojas no superaron la verificación de consistencia. |
+| DT — Incorporadas | Excepciones DT con observación válida que se incorporaron al caso actual. Incluye las propuestas del operador aprobadas por DT. |
+| DT — Descartadas sin observación | Marcas DT en Sí sin texto válido en su observación; no se aceptan como excepción. |
+| Operador — Incorporadas | Propuestas justificadas del operador incorporadas sin una marca DT prioritaria. No descuentan errores. |
+| Operador — Descartadas sin observación | Marcas del operador en Sí sin texto válido en su observación. |
+| Operador — Aprobadas por DT | Casos incorporados que llegan con ambas marcas en Sí y ambas observaciones válidas. Son un subconjunto de las incorporadas por DT; no son excepciones adicionales. El plugin reconoce lo diligenciado, no verifica la identidad del evaluador ni aprueba casos por sí mismo. |
+| Sin coincidencia | La clave del archivo no aparece en la ejecución actual. Puede cambiar por datos, SQL, contexto o referencias; no prueba por sí solo que el error esté corregido. |
+| Coincidencias ambiguas | No existe una coincidencia única y segura; no se asigna automáticamente. |
+| Conflictos | Se conservó seguimiento actual diferente, sin sobrescribirlo. |
+| Seguimientos del operador omitidos por prioridad DT | Casos incorporados con DT en Sí y, además, una marca o un comentario del operador. Prevalece DT. Un comentario del operador con marca No no se cuenta como excepción aprobada. |
+| Registros no recuperables | Total de filas con identidad insuficiente o que no superaron la verificación de datos. |
+| Por identidad insuficiente | Desglose del total anterior: no hay identificación recuperable suficiente. |
+| Por datos o identidad alterados | Desglose del total anterior: los datos, la clave o las referencias de las hojas no superaron la verificación. |
 
-Los contadores no se suman como un total de errores: algunos se superponen y los
-dos últimos desglosan Datos alterados o no recuperables. Los casos sin seguimiento
-previo pueden no incrementar Revisiones incorporadas. Por ejemplo, 13 revisiones
-incorporadas y 4 con prioridad DT no son 17 revisiones: esos cuatro pueden formar
-parte de los trece. La estadística de errores se calcula por separado.
+Las cifras describen la carga actual, no se acumulan cada vez que recarga el
+mismo archivo. Las incorporadas cuentan solo excepciones efectivamente
+transferidas, no observaciones sin marca ni casos rechazados por conflicto.
+No sume todas las líneas: las aprobadas por DT están incluidas en DT, la omisión
+por prioridad puede describir el mismo caso y los dos últimos contadores son
+desgloses. La estadística de errores se calcula por separado y descuenta solo DT.
 
 ### ¿Cuándo se recupera una excepción?
 

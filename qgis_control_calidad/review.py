@@ -363,7 +363,9 @@ def restore_review(cases, records):
     old_counts = Counter(record.key for record in records)
     current = {case.key: case for case in cases}
     counts = dict(incorporadas=0, sin_correspondencia=0, ambiguas=0, conflictos=0,
-                  excepciones_invalidas=0, estados_invalidos=0, datos_invalidos=0, sin_seguimiento=0, operador_bloqueado=0, identidad_insuficiente=0, identidad_alterada=0)
+                  excepciones_invalidas=0, estados_invalidos=0, datos_invalidos=0, sin_seguimiento=0, operador_bloqueado=0, identidad_insuficiente=0, identidad_alterada=0,
+                  dt_incorporadas=0, dt_sin_observacion=0, operador_incorporadas=0,
+                  operador_sin_observacion=0, operador_aprobadas_dt=0)
     for record in records:
         if not record.valid or not record.recoverable:
             counts['datos_invalidos'] += 1
@@ -388,16 +390,20 @@ def restore_review(cases, records):
             counts['estados_invalidos'] += 1
         dt = 'Sí' if yes(dt) else 'No'
         operator = 'Sí' if yes(operator) else 'No'
+        operator_marked = operator == 'Sí'
+        operator_justified = operator_marked and valid_observation(note_operator)
         if dt == 'Sí' and not valid_observation(note_dt):
             dt = 'No'
+            counts['dt_sin_observacion'] += 1
             counts['excepciones_invalidas'] += 1
-        if dt == 'Sí':
-            if operator == 'Sí' or note_operator:
-                counts['operador_bloqueado'] += 1
-            operator, note_operator = 'No', ''
-        elif operator == 'Sí' and not valid_observation(note_operator):
+        if operator_marked and not operator_justified:
             operator = 'No'
+            counts['operador_sin_observacion'] += 1
             counts['excepciones_invalidas'] += 1
+        operator_approved = dt == 'Sí' and operator_justified
+        operator_omitted = dt == 'Sí' and (operator_marked or bool(note_operator))
+        if dt == 'Sí':
+            operator, note_operator = 'No', ''
         exception_values = (dt, note_dt, operator, note_operator)
         tracking = (state, record.observation, record.timestamp)
         if case.has_tracking():
@@ -412,6 +418,10 @@ def restore_review(cases, records):
         for name, value in zip(EXCEPTION_FIELDS, exception_values):
             setattr(case, name, value)
         counts['incorporadas'] += 1
+        counts['dt_incorporadas'] += int(dt == 'Sí')
+        counts['operador_incorporadas'] += int(operator == 'Sí')
+        counts['operador_aprobadas_dt'] += int(operator_approved)
+        counts['operador_bloqueado'] += int(operator_omitted)
     return counts
 
 

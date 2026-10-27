@@ -414,3 +414,13 @@ un consolidado ni modificar los archivos originales.
 El botón Ayuda cambia a una pestaña de la misma ventana con la guía local, índice
 y buscador. No abre el navegador ni necesita conexión a Internet. Incluye la
 explicación de todos los contadores del resumen de recuperación de detalles.
+
+## Resumen de carga por rol (1.6.0)
+
+El mensaje agrupa los resultados en DT, Operador e Incidencias de carga. Cuenta
+por separado las excepciones incorporadas y las descartadas sin observación de
+cada rol. Aprobadas por DT exige ambas marcas en Sí con sus observaciones válidas
+y una incorporación efectiva: no equivale a encontrar cualquier comentario del
+operador en una fila DT. Las aprobadas son un subconjunto de DT, no se descuentan
+dos veces. Los contadores se recalculan al recargar el archivo y los conflictos
+no incrementan las excepciones incorporadas.

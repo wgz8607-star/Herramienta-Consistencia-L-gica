@@ -26,6 +26,47 @@ class ReviewImportTests(unittest.TestCase):
         self.cases = make_cases()
         self.imports = ReviewImports(self.cases)
 
+    def test_separate_dt_operator_missing_notes_and_real_approvals(self):
+        result = SimpleNamespace(category='Administrativas', rule='r1', status='Correcta',
+                                 criterion_hash=digest('criteria'), identity_safe=True,
+                                 rows=[{'numero_predial': str(i).zfill(5), 'dato': 'valor'} for i in range(7)])
+        current = build_cases([result], {'schema': 'test'})
+        inputs = [
+            ('Sí', 'DT directa', 'No', ''),
+            ('Sí', '  ', 'No', ''),
+            ('No', '', 'Sí', 'Propuesta operador'),
+            ('No', '', 'Sí', '  '),
+            ('Sí', 'DT aprueba', 'Sí', 'Propuesta justificada'),
+            ('Sí', 'DT directa', 'No', 'Solo comentario del operador'),
+            ('Sí', 'DT directa', 'Sí', ''),
+        ]
+        records = [ImportedReview(case.key, PENDING, '', '', True, True, values, case.component)
+                   for case, values in zip(current, inputs)]
+        manager = ReviewImports(current)
+        counts = manager.load('Administrativas', 'detalle.xlsx', records)
+        self.assertEqual(counts['dt_incorporadas'], 4)
+        self.assertEqual(counts['dt_sin_observacion'], 1)
+        self.assertEqual(counts['operador_incorporadas'], 1)
+        self.assertEqual(counts['operador_sin_observacion'], 2)
+        self.assertEqual(counts['operador_aprobadas_dt'], 1)
+        self.assertEqual(counts['operador_bloqueado'], 3)
+        self.assertEqual(counts['excepciones_invalidas'], 3)
+        self.assertEqual(manager.sources['Administrativas']['counts']['operador_aprobadas_dt'], 1)
+        # A recarga is counted again from its file, not accumulated over imports.
+        again = manager.load('Administrativas', 'detalle.xlsx', records)
+        self.assertEqual(again['dt_incorporadas'], 4)
+        self.assertEqual(again['operador_aprobadas_dt'], 1)
+
+    def test_conflicting_proposal_is_not_counted_as_incorporated_or_approved(self):
+        current = self.cases[0]
+        current.observacion_dt = 'Revisión actual'
+        incoming = replace(record(current), exception_values=('Sí', 'DT entrante', 'Sí', 'Propuesta'))
+        counts = self.imports.load('Administrativas', 'a.xlsx', [incoming])
+        self.assertEqual(counts['conflictos'], 1)
+        self.assertEqual(counts['dt_incorporadas'], 0)
+        self.assertEqual(counts['operador_aprobadas_dt'], 0)
+        self.assertEqual(current.observacion_dt, 'Revisión actual')
+
     def test_sources_accumulate_and_release_only_one_detail(self):
         self.imports.load('Administrativas', 'a.xlsx', [record(self.cases[0])])
         self.imports.load('Juridicas', 'j.xlsx', [record(self.cases[1])])

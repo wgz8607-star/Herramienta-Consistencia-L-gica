@@ -24,7 +24,7 @@ from .ingestion import CicaIngestionDialog
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
 from .review_imports import ReviewImports
-from .review import build_cases, digest, save_review, load_review, restore_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS
+from .review import build_cases, digest, save_review, load_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS
 from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews
 
 try:
@@ -508,14 +508,6 @@ class ControlCalidadDialog(QDialog):
                                  "QTableWidget::item:selected { background: #BFEAF0; color: #575756; }")
         self.table.setMinimumHeight(180)
         result_layout.addWidget(self.table)
-        review_actions = QHBoxLayout()
-        self.review_save_button = QPushButton("Guardar revisión en Excel")
-        self.review_save_button.clicked.connect(self.save_review_excel)
-        self.review_recover_button = QPushButton("Cargar revisión consolidada")
-        self.review_recover_button.clicked.connect(self.recover_review)
-        for button in (self.review_save_button, self.review_recover_button):
-            button.setEnabled(False)
-            review_actions.addWidget(button)
         detail_group = QGroupBox("Gestión de Excepciones")
         style_section(detail_group, "#3FA4F5")
         detail_group_layout = QVBoxLayout(detail_group)
@@ -534,7 +526,6 @@ class ControlCalidadDialog(QDialog):
         self.detail_review_table.setStyleSheet('QTableWidget { background: white; font-size: 12px; } QLabel { font-size: 12px; } QPushButton { font-size: 12px; padding: 4px 6px; } QHeaderView::section { background: #068CBB; color: white; padding: 5px; font-size: 12px; }')
         self.detail_filename_labels = {}
         detail_group_layout.addWidget(self.detail_review_table, 1)
-        detail_group_layout.addLayout(review_actions)
         right_layout.addWidget(result_box, 2)
         right_layout.addWidget(detail_group, 3)
         splitter.addWidget(right)
@@ -1090,8 +1081,6 @@ class ControlCalidadDialog(QDialog):
         }
         if self.reference_mode.currentIndex() == 0 and 'R2' in self.temporary_references:
             self.review_context['reference_r2'] = self.temporary_references['R2'].fingerprint
-        for button in (self.review_save_button, self.review_recover_button):
-            button.setEnabled(False)
         self.table.setRowCount(0)
         self.general_report_rows = []
         self.general_report_error = ""
@@ -1149,31 +1138,10 @@ class ControlCalidadDialog(QDialog):
         self.review_import_snapshot = self.review_imports.snapshot()
         self.refresh_detail_review_controls()
         self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
-        self.review_save_button.setEnabled(bool(self.results))
-        self.review_recover_button.setEnabled(bool(self.review_cases))
 
 
     def commit_review_editor(self):
         # Reviews are edited in Excel; no record-review window is created.
-        return True
-
-    def save_review_excel(self):
-        if self.controls_running or not self.results or not self.commit_review_editor():
-            return False
-        path, _ = QFileDialog.getSaveFileName(self, "Guardar revisión en Excel", "revision_catastral.xlsx", "Excel (*.xlsx)")
-        if not path:
-            return False
-        if not path.lower().endswith('.xlsx'):
-            path += '.xlsx'
-        try:
-            save_review(path, self.review_cases, self.results, self.general_report_rows)
-        except Exception as error:
-            QMessageBox.warning(self, "No se guardó la revisión", str(error))
-            return False
-        self.review_dirty = False
-        self.review_snapshot = [case.tracking() + case.exception_tracking() for case in self.review_cases]
-        self.review_import_snapshot = self.review_imports.snapshot()
-        self.status.setText("Revisión completa guardada; los filtros no excluyen registros.")
         return True
 
     def refresh_review_statistics(self):
@@ -1270,46 +1238,13 @@ class ControlCalidadDialog(QDialog):
         self.refresh_detail_review_controls()
         QMessageBox.information(self, f"Detalle {component}", EXCEPTION_NOTICE + '\n\n' + self.recovery_message(counts))
 
-    def recover_review(self):
-        if self.controls_running or not self.review_cases:
-            return
-        path, _ = QFileDialog.getOpenFileName(self, "Cargar revisión consolidada", "", "Excel de revisión (*.xlsx)")
-        if not path:
-            return
-        try:
-            records = load_review(path)
-            groups = sorted({record.component for record in records if record.component})
-            existing = [component for component in groups if component in self.review_imports.sources]
-            if existing:
-                raise ValueError('Ya hay detalles cargados: ' + ', '.join(existing) + '. Use Recargar en la fila del detalle para reemplazar su archivo.')
-            supported = {case.component for case in self.review_cases}
-            messages = []
-            for component in groups:
-                if component not in supported:
-                    messages.append(component + ': sin resultados en la ejecución actual.')
-                    continue
-                subset = [record for record in records if record.component == component]
-                counts = self.review_imports.load(component, path, subset)
-                self.review_dirty = self.review_dirty or bool(counts['incorporadas'])
-                self.detail_import_errors.pop(component, None)
-                messages.append(component + ':\n' + self.recovery_message(counts))
-            if not groups:
-                raise ValueError('El archivo no identifica los componentes de revisión.')
-        except Exception as error:
-            QMessageBox.warning(self, "No se recuperó la revisión", str(error))
-            return
-        self.refresh_detail_review_controls()
-        QMessageBox.information(self, "Recuperación de revisión", EXCEPTION_NOTICE + '\n\n' + '\n\n'.join(messages))
-
     def confirm_review_changes(self):
         if not self.review_dirty:
             return True
         choice = QMessageBox.question(
-            self, "Revisión sin guardar", "Hay modificaciones de revisión sin guardar. ¿Desea guardarlas en Excel?",
-            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Cancel,
+            self, "Revisión de la sesión", "Se descartará el seguimiento cargado en esta sesión. Los archivos de detalle no se modifican y podrá volver a cargarlos. ¿Continuar?",
+            QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Cancel,
         )
-        if choice == QMessageBox.Save:
-            return self.save_review_excel()
         if choice == QMessageBox.Discard:
             for case, tracking in zip(self.review_cases, self.review_snapshot):
                 for name, value in zip(REVIEW_FIELDS + EXCEPTION_FIELDS, tracking):
@@ -1595,7 +1530,8 @@ class ControlCalidadDialog(QDialog):
         for sheet in [detail, *[book[name] for name in rule_sheet_names.values()]]:
             book.remove(sheet)
         advance_report("Guardando reporte Excel…")
-        save_review(None, self.review_cases, self.results, workbook=book)
+        # The executive file remains statistical only; human follow-up lives
+        # exclusively in each detail workbook, not in another editable snapshot.
         book.save(path)
         self.progress.setValue(report_total)
         self.export_button.setEnabled(True)

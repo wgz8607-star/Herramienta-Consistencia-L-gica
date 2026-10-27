@@ -398,3 +398,13 @@ Para modificar revisiones, edite y guarde el Excel y pulse Recargar. Para quitar
 marcas, cámbielas a No en el archivo y recargue. La recarga ya sustituye lo
 aportado por ese mismo detalle y conserva los otros componentes. La limpieza
 de referencias temporales se mantiene internamente al sustituirlas o cerrar.
+
+## Gestión exclusivamente por detalle (1.5.6)
+
+Se retiran Guardar revisión en Excel y Cargar revisión consolidada. El usuario
+diligencia cada detalle, guarda ese mismo Excel y lo recarga desde la fila de su
+componente. El reporte ejecutivo mantiene estadísticas, pero ya no incluye un
+archivo de seguimiento editable o recuperable. Cada detalle conserva su hoja
+interna Revisión y sus metadatos de identidad para el cruce seguro. El aviso de
+cierre permite cancelar o descartar el estado de sesión, sin ofrecer guardar
+un consolidado ni modificar los archivos originales.

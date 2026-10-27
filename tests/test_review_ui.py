@@ -53,6 +53,12 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(len(files), 2)
         for path in files:
             book = load_workbook(path)
+            if 'regla_1' not in book.sheetnames:
+                self.assertNotIn('Revisión', book.sheetnames)
+                self.assertNotIn('_Identidades', book.sheetnames)
+                self.assertIn('Resumen ejecutivo', book.sheetnames)
+                book.close()
+                continue
             self.assertIn('Revisión', book.sheetnames)
             sheet = book['Revisión']
             self.assertEqual(sheet.max_row, 3)
@@ -291,17 +297,6 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(self.owner.table.item(0, 4).text(), '1')
         self.assertEqual(self.owner.table.item(0, 5).text(), '2')
 
-    def test_consolidated_import_includes_dt_notice_once(self):
-        from qgis_control_calidad.review import save_review
-        path = str(Path(self.directory.name) / 'consolidated.xlsx')
-        current = build_cases(self.owner.results, self.owner.review_context)
-        current[0].excepcion_dt = 'Sí'; current[0].observacion_dt = 'DT validada'
-        save_review(path, current)
-        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information') as notice:
-            self.owner.recover_review()
-        self.assertEqual(notice.call_args.args[2].count(module.EXCEPTION_NOTICE), 1)
-        self.assertEqual(self.owner.table.item(0, 5).text(), '1')
-
     def test_help_opens_guide_in_browser(self):
         with patch.object(module.QDesktopServices, 'openUrl', return_value=True) as browser:
             self.owner.help_button.click()
@@ -319,14 +314,29 @@ class ReviewUiTests(unittest.TestCase):
             self.assertIn(load.text(), ('Cargar', 'Recargar'))
             self.assertIn('cargado', status.text().casefold())
 
-    def test_direct_save_has_all_cases(self):
-        path = str(Path(self.directory.name) / 'revision.xlsx')
-        with patch.object(module.QFileDialog, 'getSaveFileName', return_value=(path, 'Excel')):
-            self.assertTrue(self.owner.save_review_excel())
-        book = load_workbook(path)
-        self.assertEqual(book['Revisión'].max_row, 3)
-        self.assertEqual(book['Revisión']['I1'].value, 'Excepción DT')
-        book.close()
+    def test_consolidated_review_controls_and_save_prompt_are_removed(self):
+        labels = [button.text() for button in self.owner.findChildren(QPushButton)]
+        self.assertNotIn('Guardar revisión en Excel', labels)
+        self.assertNotIn('Cargar revisión consolidada', labels)
+        self.assertFalse(hasattr(self.owner, 'save_review_excel'))
+        self.assertFalse(hasattr(self.owner, 'recover_review'))
+        self.owner.review_dirty = True
+        with patch.object(module.QMessageBox, 'question', return_value=QMessageBox.Cancel) as question:
+            self.assertFalse(self.owner.confirm_review_changes())
+        buttons = question.call_args.args[3]
+        self.assertFalse(buttons & QMessageBox.Save)
+        self.assertTrue(buttons & QMessageBox.Cancel)
+
+    def test_statistical_summary_cannot_be_loaded_as_review_detail(self):
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        path = next(Path(self.directory.name).glob('resumen_control_calidad_*.xlsx'))
+        previous = [case.exception_tracking() for case in self.owner.review_cases]
+        with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(str(path), 'Excel')), patch.object(module.QMessageBox, 'warning') as warning:
+            self.owner.recover_detail('Administrativas')
+        warning.assert_called_once()
+        self.assertEqual(self.owner.review_imports.sources, {})
+        self.assertEqual(previous, [case.exception_tracking() for case in self.owner.review_cases])
 
     def test_reselect_same_model_and_switch_model_clear_environment_and_sql(self):
         with patch.object(self.owner, 'open_sql_version_dialog') as chooser:

@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.5.5**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.5.6**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -12,7 +12,7 @@ Guía de la versión **1.5.5**. Las opciones descritas pueden no estar disponibl
 6. [Interpretar las estadísticas](#6-interpretar-las-estadísticas)
 7. [Generar y diligenciar reportes](#7-generar-y-diligenciar-reportes)
 8. [Recuperar y gestionar detalles](#8-recuperar-y-gestionar-detalles)
-9. [Guardar el seguimiento y repetir la validación](#9-guardar-el-seguimiento-y-repetir-la-validación)
+9. [Conservar los detalles y repetir la validación](#9-conservar-los-detalles-y-repetir-la-validación)
 10. [Problemas frecuentes](#10-problemas-frecuentes)
 11. [Administración del repositorio de sentencias](#11-administración-del-repositorio-de-sentencias)
 
@@ -153,7 +153,7 @@ Las observaciones se pueden escribir antes o después de la marca. No están con
 - **Sí**: relleno verde tenue.
 - **DT = Sí**: los valores de los dos campos del operador se ocultan visualmente en esa fila. No se oculta toda la columna ni se borran los datos. No es un mecanismo de seguridad: el contenido puede verse en la barra de fórmulas.
 
-La hoja **Revisión** consolida los valores por clave. En un detalle con hojas de reglas no se editan sus campos consolidados: se alimentan desde las reglas. En el archivo ejecutivo o en el archivo de **Guardar revisión en Excel**, que no contienen esas hojas, se edita directamente **Revisión**.
+Dentro de cada detalle, la hoja **Revisión** refleja los valores por clave y sirve para recuperarlos. No se editan sus campos: se alimentan desde las hojas de reglas del mismo archivo. Esta hoja interna no es un archivo de revisión consolidada separado. El reporte ejecutivo contiene únicamente estadísticas y no se usa para cargar excepciones.
 
 Conserve las claves, las columnas de datos originales y las hojas ocultas. No copie únicamente una hoja suelta a otro libro si luego desea recuperar el seguimiento. La protección evita ediciones accidentales; no es una barrera de seguridad.
 
@@ -178,7 +178,7 @@ Las listas aparecen al seleccionar una **celda de excepción**, no su encabezado
 
 Sitúe el puntero sobre el archivo o estado para ver su ruta y mensajes completos. Los archivos no quedan abiertos después de leerse: puede editarlos en Excel, guardarlos y **Recargar**. No es necesario cerrar ni liberar el archivo desde el plugin. Para quitar una marca, cámbiela a No en el Excel, guarde y recargue el mismo detalle. Se conservan las ediciones posteriores que no sea seguro retirar.
 
-**Cargar revisión consolidada** permite recuperar un archivo que reúne varios componentes. Si ya hay alguno cargado, use su recarga individual o libérelo antes: no se reemplaza silenciosamente.
+La gestión se hace exclusivamente por detalle. No hay botones para guardar o recuperar una revisión consolidada. Recargue cada archivo que haya cambiado; el seguimiento de los otros componentes se conserva.
 
 ### ¿Cuándo se recupera una excepción?
 
@@ -192,13 +192,25 @@ Una excepción sin observación válida se descarta como excepción y se informa
 
 **Un hallazgo ausente no queda automáticamente certificado como corregido.** Compruebe que se ejecutó correctamente la misma validación, con el mismo alcance de datos. Los archivos anteriores sirven como historial.
 
-## 9. Guardar el seguimiento y repetir la validación
+## 9. Conservar los detalles y repetir la validación
 
-**Guardar revisión en Excel** reúne todo el seguimiento actualmente cargado en un único archivo, con datos, claves y estadística. Usted elige la carpeta. No modifica los detalles originales ni PostgreSQL, y no omite filas por filtros de visualización.
+Los **detalles por componente son la fuente principal del seguimiento**. Guarde
+las marcas y observaciones directamente en las hojas de reglas de cada Excel.
+Después de editarlos, pulse **Recargar** en el componente correspondiente para
+que el plugin lea los cambios y recalcule las estadísticas.
 
-La revisión y la asociación de los archivos viven en memoria hasta guardarlas. Al cerrar o iniciar otra ejecución con cambios pendientes, se ofrecen **Guardar**, **Descartar** o **Cancelar**. Minimizar no equivale a cerrar.
+No se generan archivos adicionales de revisión consolidada ni se sincronizan
+archivos automáticamente. La asociación de los detalles y la estadística viven
+en memoria durante la sesión. Al cerrar o iniciar otra ejecución con revisión
+cargada, puede cancelar o descartar ese estado de sesión; los Excel originales
+no se modifican. No se ofrece guardar un consolidado. Minimizar conserva el
+estado de la ventana.
 
-No hay una base central automática de excepciones: conserve el Excel guardado. Para otra ejecución, vuelva a recuperar los detalles o el consolidado. Guarde por separado los reportes de cada entrega para no perder el historial.
+Para otra ejecución, cargue los detalles revisados sobre los resultados nuevos.
+Conserve por separado los reportes de cada entrega para mantener el historial.
+No hay una base central automática de excepciones. **Generar reporte detallado**
+produce una nueva entrega con los datos y seguimiento actuales de la ejecución;
+antes de generarla, recargue los archivos que hayan sido editados.
 
 ## 10. Problemas frecuentes
 

@@ -66,6 +66,8 @@ class ReviewUiTests(unittest.TestCase):
                 detail = book['regla_1']
                 cols = {cell.value: cell.column for cell in detail[4]}
                 self.assertEqual(detail.cell(5, cols[HEADERS[0]]).value, 'Sí')
+                self.assertEqual(detail.cell(5, cols[HEADERS[0]]).fill.fgColor.rgb, '00C6EFCE')
+                self.assertEqual(detail.cell(6, cols[HEADERS[0]]).fill.fgColor.rgb, '00FFC7CE')
                 self.assertEqual(detail.cell(5, cols[HEADERS[1]]).value, 'Documentado por DT')
                 for header in HEADERS:
                     self.assertFalse(detail.cell(5, cols[header]).protection.locked)
@@ -279,7 +281,7 @@ class ReviewUiTests(unittest.TestCase):
         with patch.object(module.QFileDialog, 'getOpenFileName', return_value=(path, 'Excel')), patch.object(module.QMessageBox, 'information') as notice:
             self.owner.recover_detail('Administrativas')
         self.assertIn(module.EXCEPTION_NOTICE, notice.call_args.args[2])
-        self.assertIn('No basta', notice.call_args.args[2])
+        self.assertEqual(module.EXCEPTION_NOTICE, 'Solo las excepciones validadas y marcadas por DT descuentan errores.')
         self.assertEqual(self.owner.table.item(0, 4).text(), '1')
         self.assertEqual(self.owner.table.item(0, 5).text(), '2')
 

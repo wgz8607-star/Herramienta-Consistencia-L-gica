@@ -47,6 +47,8 @@ class ReportExceptionTests(unittest.TestCase):
         book = load_workbook(self.path); sheet = book['Revisión']
         self.assertEqual(tuple(sheet.cell(1, col).value for col in range(9, 13)), HEADERS)
         self.assertEqual(tuple(sheet.cell(2, col).value or '' for col in range(9, 13)), DEFAULTS)
+        self.assertEqual(sheet['I2'].fill.fgColor.rgb, '00FFC7CE')
+        self.assertEqual(sheet['K2'].fill.fgColor.rgb, '00FFC7CE')
         self.assertTrue(sheet.protection.sheet)
         self.assertTrue(sheet['A2'].protection.locked)
         for col in ('I', 'J', 'K', 'L'):

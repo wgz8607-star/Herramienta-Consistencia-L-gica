@@ -39,11 +39,8 @@ DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
 MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db"}
 SNC_CATEGORY = "Cargue SNC"
 SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
-EXCEPTION_NOTICE = (
-    "Importante: las excepciones solo descuentan errores cuando fueron validadas por la DT "
-    "y marcadas como Excepción DT = Sí, con observación válida. "
-    "No basta con marcarlas como excepción del operador."
-)
+EXCEPTION_NOTICE = "Solo las excepciones validadas y marcadas por DT descuentan errores."
+
 SNC_REPOSITORY_TABLES = {
     "CICA": "reglas_cargue_snc_cica",
     "Modelo Interno de Levantamiento 1.0": "reglas_cargue_snc_xtf",
@@ -515,7 +512,7 @@ class ControlCalidadDialog(QDialog):
         detail_group = QGroupBox("Gestión de Excepciones")
         style_section(detail_group, "#3FA4F5")
         detail_group_layout = QVBoxLayout(detail_group)
-        detail_note = QLabel("Solo las excepciones validadas por DT descuentan errores. Las marcas del operador son propuestas.")
+        detail_note = QLabel(EXCEPTION_NOTICE)
         detail_note.setToolTip(EXCEPTION_NOTICE)
         detail_note.setWordWrap(True)
         detail_group_layout.addWidget(detail_note)

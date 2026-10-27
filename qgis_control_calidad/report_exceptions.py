@@ -59,6 +59,14 @@ def add_controls(sheet, first_row, last_row, first_column, protect=True):
                 FormulaRule(formula=[f'${column}{first_row}="{value}"'],
                             fill=PatternFill('solid', fgColor=color)),
             )
+    # Keep initial colors visible even in previews that do not calculate Excel
+    # conditional formatting; conditional rules still update subsequent edits.
+    colors = {'Sí': 'C6EFCE', 'No': 'FFC7CE'}
+    for row_index in range(first_row, last_row + 1):
+        for column_index in (first_column, first_column + 2):
+            cell = sheet.cell(row_index, column_index)
+            if cell.value in colors:
+                cell.fill = PatternFill('solid', fgColor=colors[cell.value])
     for row in sheet.iter_rows(min_row=first_row, max_row=last_row, min_col=first_column, max_col=first_column+3):
         for cell in row:
             cell.protection = Protection(locked=False)

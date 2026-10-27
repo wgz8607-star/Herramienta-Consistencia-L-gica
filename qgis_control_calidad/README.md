@@ -377,3 +377,10 @@ de resultado recuerda que solo cuentan para descontar errores las excepciones
 validadas por DT y marcadas en **Excepción DT = Sí**, con observación válida.
 La marca del operador no basta. Gestión de Excepciones conserva también este
 aviso visible, sin alterar las estadísticas ni agregar aprobaciones automáticas.
+
+En 1.5.3 los campos de excepción del detalle se exportan con relleno inicial
+rojo tenue (`FFC7CE`) para No y verde tenue (`C6EFCE`) para Sí. Se conserva el
+formato condicional para actualizar el color al editar la marca en Excel.
+La ocultación visual de los campos del operador sigue teniendo prioridad cuando
+DT es Sí. El aviso de carga se unifica en: «Solo las excepciones validadas y
+marcadas por DT descuentan errores».

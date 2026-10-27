@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from qgis.PyQt.QtCore import QObject, QSize, QThread, Qt, pyqtSignal
+from qgis.PyQt.QtCore import QObject, QSize, QThread, QTimer, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
@@ -615,10 +615,18 @@ class ControlCalidadDialog(QDialog):
         self.resize_connection_stack()
 
     def resize_connection_stack(self):
+        self.update_connection_height()
+        # Reparented fields receive style/font metrics in the next Qt layout pass.
+        QTimer.singleShot(0, self.update_connection_height)
+
+    def update_connection_height(self):
         page = self.connection_stack.currentWidget()
         if page is not None:
+            page.ensurePolished()
             page.layout().activate()
-            self.connection_stack.setFixedHeight(page.sizeHint().height() + 4)
+            required = max(page.sizeHint().height(), page.layout().minimumSize().height(),
+                           page.layout().totalHeightForWidth(max(1, page.width())))
+            self.connection_stack.setFixedHeight(required + 4)
 
     def update_ingestion_button(self, *_):
         supports_snc = self.model.currentText() in SNC_REPOSITORY_TABLES

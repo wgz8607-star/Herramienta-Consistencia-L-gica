@@ -231,6 +231,20 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(self.owner.table.item(0, 3).text(), '0')
         self.assertEqual(self.owner.table.item(0, 6).text(), '0')
 
+    def test_manual_connection_fields_are_not_clipped_after_mode_changes(self):
+        self.owner.show()
+        app.processEvents()
+        for mode in (1, 0, 1):
+            self.owner.connection_mode.setCurrentIndex(mode)
+            app.processEvents()
+            app.processEvents()
+            page = self.owner.connection_stack.currentWidget()
+            self.assertGreaterEqual(page.height(), page.layout().minimumSize().height())
+            controls = self.owner.schema_controls
+            self.assertGreaterEqual(controls.height(), controls.minimumSizeHint().height())
+            self.assertLessEqual(controls.y() + controls.height(), page.height())
+            self.assertTrue(self.owner.schema.isVisible())
+
     def test_direct_save_has_all_cases(self):
         path = str(Path(self.directory.name) / 'revision.xlsx')
         with patch.object(module.QFileDialog, 'getSaveFileName', return_value=(path, 'Excel')):

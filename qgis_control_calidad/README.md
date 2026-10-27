@@ -360,3 +360,8 @@ de archivos y los mensajes completos se pueden consultar en los textos de ayuda
 al situar el puntero sobre la celda. Los botones Guardar revisión en Excel y
 Cargar revisión consolidada se agrupan bajo esa tabla. Las pestañas de conexión
 y referencias permanecen a la izquierda, con Ejecutar validación debajo.
+
+En 1.5.1, la altura del formulario de conexión se recalcula después de aplicar
+el estilo y completar la distribución de Qt al cambiar entre conexión manual
+y guardada. Se considera la altura mínima real del formulario y su ancho para
+evitar recortar Listar Esquemas y Esquema a validar.

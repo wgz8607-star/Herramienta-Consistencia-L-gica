@@ -125,12 +125,13 @@ def link_rule_reviews(book):
         if 'clave_caso' not in headers or not all(name in headers for name in HEADERS):
             continue
         key_col, role_col = headers['clave_caso'], headers[HEADERS[0]]
-        origins.append([sheet.title, key_col, 5, sheet.max_row, role_col])
+        last_row = sheet.max_row
+        origins.append([sheet.title, key_col, 5, last_row, role_col])
         sheet.column_dimensions[get_column_letter(key_col)].hidden = True
-        add_controls(sheet, 5, sheet.max_row, role_col)
-        for row in range(5, sheet.max_row+1):
+        add_controls(sheet, 5, last_row, role_col)
+        for row in range(5, last_row+1):
             key = sheet.cell(row, key_col).value
-            lookup.setdefault(key, []).append((sheet.title, key_col, 5, sheet.max_row, role_col))
+            lookup.setdefault(key, []).append((sheet.title, key_col, 5, last_row, role_col))
     origins.sheet_state = 'hidden'
     for row in range(2, summary.max_row+1):
         key = summary.cell(row, 1).value

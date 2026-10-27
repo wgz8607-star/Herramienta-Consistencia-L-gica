@@ -39,6 +39,32 @@ class ReviewUiTests(unittest.TestCase):
         self.owner.review_dirty = False
         self.owner.close()
 
+    def test_excel_task_keeps_event_loop_alive(self):
+        from threading import Event
+        from qgis.PyQt.QtCore import QTimer
+        released = Event()
+        QTimer.singleShot(20, released.set)
+        self.assertTrue(self.owner.report_task(released.wait, 1))
+
+    def test_export_failure_restores_controls_and_retains_diagnostic(self):
+        partial = Path(self.directory.name) / 'incompleto.xlsx'
+        def fail():
+            self.owner.exporting = True
+            self.owner.left_tabs.setEnabled(False)
+            self.owner.export_button.setEnabled(False)
+            partial.write_bytes(b'partial')
+            self.owner.export_created_paths.append(partial)
+            raise PermissionError('Archivo bloqueado por Excel')
+        with patch.object(self.owner, 'build_detail_reports', side_effect=fail), patch.object(QMessageBox, 'exec_', return_value=QMessageBox.Ok):
+            self.owner.export_excel()
+        self.assertFalse(self.owner.exporting)
+        self.assertTrue(self.owner.left_tabs.isEnabled())
+        self.assertTrue(self.owner.export_button.isEnabled())
+        self.assertIn('Archivo bloqueado por Excel', self.owner.incidents_browser.toPlainText())
+        self.assertIn('No se generó', self.owner.status.text())
+        self.assertFalse(partial.exists())
+        self.assertEqual(len(self.owner.review_cases), 2)
+
     def test_record_review_window_is_removed(self):
         self.assertFalse(hasattr(self.owner, 'review_viewer'))
         self.assertFalse(hasattr(self.owner, 'open_review_viewer'))

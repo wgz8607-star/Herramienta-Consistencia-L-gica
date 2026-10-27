@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **2.0.0**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **2.0.1**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -284,3 +284,7 @@ Internet. Use el índice o el buscador para localizar una sección y vuelva a
 - Antes de ejecutar, se comprueba que existan las referencias R1/R2 requeridas por las sentencias seleccionadas.
 - Los reportes incluyen identificador y fecha de ejecución, versión del plugin, modelo, ambiente, versión SQL, base y esquema. Estos datos de trazabilidad no modifican la clave estable de cada caso ni incluyen contraseñas.
 - Las marcas y observaciones del operador se conservan cuando DT aprueba una excepción; su ocultación visual en el detalle no elimina esos datos.
+
+### Corrección de generación de reportes (2.0.1)
+
+Las operaciones intensivas de preparación y guardado de Excel permiten que la ventana continúe atendiendo eventos. Se eliminaron recorridos repetidos de hojas completas al vincular las revisiones. Si ocurre un error, se oculta el progreso, se restablecen los controles y el diagnóstico queda disponible en Incidencias. Los resultados y revisiones permanecen en la sesión. Si un archivo cargado figura como no disponible, use Recargar y seleccione nuevamente el Excel guardado antes de generar una entrega.

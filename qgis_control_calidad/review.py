@@ -183,10 +183,12 @@ def save_review(path, cases, results=(), general_rows=(), workbook=None):
     meta = book.create_sheet("_Identidades")
     meta.append([FORMAT, "fragmento", "contenido"])
     identities = {case.key: case.identity for case in cases}
+    meta_row = 1
     for key, identity in identities.items():
         for part, offset in enumerate(range(0, len(identity), 30000)):
             meta.append([key, part, identity[offset:offset+30000]])
-            for cell in (meta.cell(meta.max_row, 1), meta.cell(meta.max_row, 3)):
+            meta_row += 1
+            for cell in (meta.cell(meta_row, 1), meta.cell(meta_row, 3)):
                 cell.data_type = 's'
     meta.sheet_state = "hidden"
     context_sheet = book.create_sheet("Contexto")

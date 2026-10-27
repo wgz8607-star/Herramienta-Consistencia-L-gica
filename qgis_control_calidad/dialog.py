@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import re
 from collections import defaultdict
@@ -11,7 +13,7 @@ from uuid import uuid4
 from configparser import ConfigParser
 from pathlib import Path
 
-from qgis.PyQt.QtCore import QObject, QSize, QThread, QTimer, QUrl, Qt, pyqtSignal
+from qgis.PyQt.QtCore import QObject, QEventLoop, QSize, QThread, QTimer, QUrl, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon, QTextCursor, QColor
 from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
@@ -1473,20 +1475,57 @@ class ControlCalidadDialog(QDialog):
     def reject(self):
         self.close()
 
+    def report_task(self, function, *args, **kwargs):
+        """Run a workbook-only operation without blocking Qt's event loop."""
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(function, *args, **kwargs)
+            loop = QEventLoop()
+            timer = QTimer()
+            timer.setInterval(50)
+            timer.timeout.connect(lambda: loop.quit() if future.done() else None)
+            timer.start()
+            if not future.done():
+                loop.exec_()
+            timer.stop()
+            return future.result()
+
     def export_excel(self):
         if self.exporting:
             return
         self.export_created_paths = []
+        failure = None
         try:
             self.build_detail_reports()
         except Exception as error:
+            failure = str(error) or type(error).__name__
+            details = traceback.format_exc()
+            cleanup_errors = []
             for path in self.export_created_paths:
-                path.unlink(missing_ok=True)
-            QMessageBox.warning(self, 'No se generó el reporte', str(error))
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    cleanup_errors.append(str(path))
+            if cleanup_errors:
+                details += '\nNo se pudieron retirar archivos incompletos:\n' + '\n'.join(cleanup_errors)
+            self.incidents_browser.setPlainText('Error al generar el reporte: ' + failure + '\n\n' + details)
+            self.incidents_toggle.setChecked(True)
         finally:
             self.exporting = False
+            self.left_tabs.setEnabled(True)
+            self.category_button.setEnabled(bool(self.category_checks))
             self.update_run_availability()
             self.refresh_detail_review_controls()
+            self.check_review_files()
+            self.progress.hide()
+        if failure is not None:
+            self.status.setText('No se generó el reporte: ' + failure + '. Consulte las incidencias.')
+            message = QMessageBox(self)
+            message.setIcon(QMessageBox.Warning)
+            message.setWindowTitle('No se generó el reporte')
+            message.setText('La generación se interrumpió. Los resultados y revisiones siguen disponibles.')
+            message.setInformativeText(failure)
+            message.setDetailedText(self.incidents_browser.toPlainText())
+            message.exec_()
 
     def save_generated_report(self, workbook, filename):
         if self.check_review_files(force=True):
@@ -1495,7 +1534,8 @@ class ControlCalidadDialog(QDialog):
         if path.exists():
             raise FileExistsError('El archivo de destino ya existe; no se sobrescribe: ' + path.name)
         self.export_created_paths.append(path)
-        workbook.save(path)
+        self.status.setText("Guardando " + path.name + "… Espere; puede minimizar la ventana.")
+        self.report_task(workbook.save, path)
 
     def build_detail_reports(self):
         if self.controls_running:
@@ -1512,6 +1552,8 @@ class ControlCalidadDialog(QDialog):
         if not directory:
             return
         self.exporting = True
+        self.left_tabs.setEnabled(False)
+        self.category_button.setEnabled(False)
         self.run_button.setEnabled(False)
         self.refresh_detail_review_controls()
         rule_sheet_count = len({(result.category, result.rule) for result in self.results if result.rows})
@@ -1640,6 +1682,9 @@ class ControlCalidadDialog(QDialog):
             for column, header in enumerate(rule_headers, start=1):
                 rule_sheet.cell(4, column, header)
             for index, (predio, row) in enumerate(rows_by_rule[(category, rule)], start=5):
+                if index % 250 == 0:
+                    self.status.setText(f"Preparando {rule}: {index - 4} registros…")
+                    QApplication.processEvents()
                 for column, value in enumerate([
                     predio or "Sin identificador", *[row.get(key, "") for key in fields],
                     review_by_row[id(row)].key if id(row) in review_by_row else "",
@@ -1663,11 +1708,13 @@ class ControlCalidadDialog(QDialog):
             rule_sheet.freeze_panes = "A5"; rule_sheet.auto_filter.ref = f"A4:{rule_sheet.cell(4, last_column).coordinate[:-1]}{rule_sheet.max_row}"
             for column_index, column in enumerate(rule_sheet.iter_cols(), start=1):
                 rule_sheet.column_dimensions[get_column_letter(column_index)].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 42)
-            for row_index in range(5, rule_sheet.max_row + 1):
+            for row_index, cells in enumerate(rule_sheet.iter_rows(min_row=5), 5):
+                if row_index % 250 == 0:
+                    QApplication.processEvents()
                 if row_index % 2 == 0:
-                    for cell in rule_sheet[row_index]:
+                    for cell in cells:
                         cell.fill = soft_gray
-            add_controls(rule_sheet, 5, rule_sheet.max_row, rule_sheet.max_column - 3)
+            self.report_task(add_controls, rule_sheet, 5, rule_sheet.max_row, rule_sheet.max_column - 3)
             advance_report(f"Generando detalle de {rule}…")
         by_predio = book.create_sheet("Hallazgos por predio")
         by_predio.append(["Número predial", "Componentes", "Reglas incumplidas", "Total hallazgos", "Observación"])
@@ -1687,9 +1734,11 @@ class ControlCalidadDialog(QDialog):
         by_predio.freeze_panes = "A2"; by_predio.auto_filter.ref = by_predio.dimensions
         for column in by_predio.columns:
             by_predio.column_dimensions[column[0].column_letter].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 45)
-        for row_index in range(2, by_predio.max_row + 1):
+        for row_index, cells in enumerate(by_predio.iter_rows(min_row=2), 2):
+            if row_index % 250 == 0:
+                QApplication.processEvents()
             if row_index % 2 == 0:
-                for cell in by_predio[row_index]:
+                for cell in cells:
                     cell.fill = soft_blue
         advance_report("Generando resumen por predio…")
         technical = book.create_sheet("Errores técnicos")
@@ -1734,6 +1783,8 @@ class ControlCalidadDialog(QDialog):
                 package_index.append([category, rule, len(rows_by_rule[(category, rule)]), source.title])
                 package_index.cell(package_index.max_row, 4).hyperlink = f"#{source.title}!A1"
                 for source_row in source.iter_rows():
+                    if source_row[0].row % 250 == 0:
+                        QApplication.processEvents()
                     for cell in source_row:
                         copied = target.cell(cell.row, cell.column, cell.value)
                         copied.data_type = cell.data_type
@@ -1754,9 +1805,11 @@ class ControlCalidadDialog(QDialog):
                 for cell in target[4]:
                     cell.fill = green; cell.font = Font(color="FFFFFF", bold=True)
                     cell.alignment = Alignment(wrap_text=True, vertical="center")
-                for row_index in range(5, target.max_row + 1):
+                for row_index, cells in enumerate(target.iter_rows(min_row=5), 5):
+                    if row_index % 250 == 0:
+                        QApplication.processEvents()
                     if row_index % 2 == 0:
-                        for cell in target[row_index]:
+                        for cell in cells:
                             cell.fill = soft_gray
                 for column_index, column in enumerate(target.iter_cols(), start=1):
                     target.column_dimensions[get_column_letter(column_index)].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 42)
@@ -1765,9 +1818,9 @@ class ControlCalidadDialog(QDialog):
             for column in package_index.columns:
                 package_index.column_dimensions[column[0].column_letter].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 36)
             safe_category = re.sub(r"[^A-Za-z0-9_-]+", "_", category).strip("_") or "paquete"
-            save_review(None, [case for case in self.review_cases if case.component == category],
+            self.report_task(save_review, None, [case for case in self.review_cases if case.component == category],
                         [result for result in self.results if result.category == category], workbook=package)
-            link_rule_reviews(package)
+            self.report_task(link_rule_reviews, package)
             self.save_generated_report(package, Path(directory) / f"detalle_{safe_category}_{stamp}.xlsx")
             advance_report(f"Guardando paquete {category}…")
         for sheet in [detail, *[book[name] for name in rule_sheet_names.values()]]:

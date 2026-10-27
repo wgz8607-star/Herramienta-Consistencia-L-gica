@@ -408,3 +408,9 @@ archivo de seguimiento editable o recuperable. Cada detalle conserva su hoja
 interna Revisión y sus metadatos de identidad para el cruce seguro. El aviso de
 cierre permite cancelar o descartar el estado de sesión, sin ofrecer guardar
 un consolidado ni modificar los archivos originales.
+
+## Ayuda integrada (1.5.9)
+
+El botón Ayuda cambia a una pestaña de la misma ventana con la guía local, índice
+y buscador. No abre el navegador ni necesita conexión a Internet. Incluye la
+explicación de todos los contadores del resumen de recuperación de detalles.

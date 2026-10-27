@@ -298,15 +298,28 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(self.owner.table.item(0, 4).text(), '1')
         self.assertEqual(self.owner.table.item(0, 5).text(), '2')
 
-    def test_help_opens_guide_in_browser(self):
-        with patch.object(module.QDesktopServices, 'openUrl', return_value=True) as browser:
-            self.owner.help_button.click()
-        self.assertEqual(browser.call_args.args[0].toString(), module.HELP_URL)
+    def test_help_opens_local_guide_inside_plugin(self):
+        self.assertEqual(self.owner.main_tabs.currentIndex(), 0)
+        self.owner.help_button.click()
+        self.assertEqual(self.owner.main_tabs.currentIndex(), 1)
+        self.assertEqual(self.owner.main_tabs.tabText(1), 'Ayuda')
+        self.assertIn('Validador Consistencia Lógica Alfanumérica', self.owner.help_browser.toPlainText())
+        self.assertFalse(self.owner.help_browser.openExternalLinks())
+        self.assertFalse(self.owner.help_browser.openLinks())
+        self.assertTrue(self.owner.help_browser.isReadOnly())
+        self.assertFalse(hasattr(module, 'QDesktopServices'))
 
-    def test_help_shows_link_when_browser_is_unavailable(self):
-        with patch.object(module.QDesktopServices, 'openUrl', return_value=False), patch.object(module.QMessageBox, 'information') as message:
-            self.owner.open_help()
-        self.assertIn(module.HELP_URL, message.call_args.args[2])
+    def test_help_missing_guide_stays_inside_plugin(self):
+        with patch.object(module.Path, 'read_text', side_effect=OSError('missing')):
+            self.owner.load_help_content()
+        self.assertIn('Reinstale el ZIP', self.owner.help_browser.toPlainText())
+
+    def test_help_search_and_contents_navigation(self):
+        self.owner.help_search.setText('TEMP')
+        self.owner.find_help_text()
+        self.assertEqual(self.owner.help_browser.textCursor().selectedText().casefold(), 'temp')
+        self.owner.navigate_help(module.QUrl('#6-interpretar-las-estadísticas'))
+        self.assertIn('Interpretar las estadísticas', self.owner.help_browser.textCursor().selectedText())
 
     def test_release_buttons_are_not_present_in_details_or_references(self):
         self.assertNotIn('Liberar', [button.text() for button in self.owner.findChildren(QPushButton)])

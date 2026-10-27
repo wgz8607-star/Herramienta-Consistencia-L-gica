@@ -1,6 +1,6 @@
 # Guía de uso — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **1.5.8**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Guía de la versión **1.5.9**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
 
 ## Contenido
 
@@ -180,6 +180,26 @@ Sitúe el puntero sobre el archivo o estado para ver su ruta y mensajes completo
 
 La gestión se hace exclusivamente por detalle. No hay botones para guardar o recuperar una revisión consolidada. Recargue cada archivo que haya cambiado; el seguimiento de los otros componentes se conserva.
 
+### ¿Qué significa el resumen de recuperación?
+
+| Contador | Interpretación |
+|---|---|
+| Revisiones incorporadas | Casos a los que se transfirió seguimiento. Incluye observaciones y marcas; no significa que todos sean excepciones DT. |
+| Sin correspondencia | Filas del archivo cuya clave no aparece en la ejecución actual. Puede cambiar por datos, regla, SQL, contexto o referencias; no prueba por sí solo que el error fue corregido. |
+| Correspondencias ambiguas | No se puede establecer una coincidencia única y segura; no se asigna automáticamente. |
+| Seguimientos actuales conservados por conflicto | Ya había seguimiento diferente en el caso actual y se conservó, sin sobrescribirlo. |
+| Excepciones sin observación descartadas | Marcas de excepción sin justificación válida que no se aceptaron como excepción. Puede contar más de una marca en un caso. |
+| Campos de operador descartados por Excepción DT | Casos con DT en Sí y, además, marca o texto del operador. Se aplicó la prioridad de DT y se omitió el seguimiento del operador. La etiqueta más reciente dice Excepciones de operador aprobadas por DT; el contador no verifica una aprobación independiente ni la identidad de quien diligenció el archivo. |
+| Datos alterados o no recuperables | Total de filas que no superaron la verificación o no tienen identidad suficiente para recuperar con seguridad. |
+| Identidad insuficiente | Parte del total anterior: filas sin identificación recuperable suficiente. |
+| Datos o identidad alterados | Parte del total anterior: la clave, datos o referencias de las hojas no superaron la verificación de consistencia. |
+
+Los contadores no se suman como un total de errores: algunos se superponen y los
+dos últimos desglosan Datos alterados o no recuperables. Los casos sin seguimiento
+previo pueden no incrementar Revisiones incorporadas. Por ejemplo, 13 revisiones
+incorporadas y 4 con prioridad DT no son 17 revisiones: esos cuatro pueden formar
+parte de los trece. La estadística de errores se calcula por separado.
+
 ### ¿Cuándo se recupera una excepción?
 
 La columna `clave_caso` identifica cada hallazgo, no la regla completa. Combina contexto de origen, modelo y ambiente, componente y regla, huella del SQL e identificadores y valores devueltos por el caso. Puede usar NPN, documento, identificador del objeto o matrícula/FMI, según el resultado. No depende del número de fila ni del archivo.
@@ -226,7 +246,7 @@ antes de generarla, recargue los archivos que hayan sido editados.
 | Una regla exige R1/R2 | Prepare la referencia correspondiente o seleccione el R1 de public; no se sustituye por otra tabla automáticamente. |
 | No aparece Sí/No | Seleccione una celda en la hoja de la regla. Use un reporte generado con una versión reciente, no solo un plugin actualizado. |
 | Cero revisiones incorporadas | Consulte los conteos: sin correspondencia, ambiguas, datos alterados o identidad insuficiente. Compruebe que eligió el componente, versión y esquema correctos. |
-| No se puede abrir la ayuda | Compruebe acceso a Internet y al repositorio GitHub; el enlace puede abrirse manualmente en su navegador. |
+| No se puede abrir la ayuda | Reinstale el ZIP completo para recuperar la guía local incluida. La ayuda interna no requiere Internet. |
 
 Si necesita soporte, conserve versión de QGIS, versión del plugin, modelo, ambiente, versión SQL, componente, código de regla y mensaje completo. No incluya contraseñas. Si comparte un Excel para diagnóstico, use datos autorizados para compartir.
 
@@ -243,3 +263,10 @@ Esta sección corresponde al administrador del repositorio, no al operador que d
 - Publique únicamente SQL revisado y compatible con el modelo, el esquema y los permisos de las cuentas que validan.
 
 El script `sql/agregar_metadatos_version.sql` incluido en el paquete prepara las columnas de metadatos en las tablas existentes. No se ejecuta automáticamente desde la ayuda ni al instalar el plugin.
+
+## Consultar esta guía dentro del plugin
+
+El botón **Ayuda** abre la pestaña principal **Ayuda** de la misma ventana.
+La guía se lee del paquete instalado y no necesita navegador ni conexión a
+Internet. Use el índice o el buscador para localizar una sección y vuelva a
+**Validación** para continuar trabajando.

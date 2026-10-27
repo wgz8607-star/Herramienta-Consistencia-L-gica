@@ -9,12 +9,12 @@ from datetime import datetime
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QObject, QSize, QThread, QTimer, QUrl, Qt, pyqtSignal
-from qgis.PyQt.QtGui import QIcon, QDesktopServices
+from qgis.PyQt.QtGui import QIcon, QTextCursor
 from qgis.PyQt.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
     QMessageBox, QPushButton, QProgressBar, QScrollArea, QSplitter,
-    QHeaderView, QMenu, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QToolButton, QVBoxLayout, QWidget,
+    QHeaderView, QMenu, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QToolButton, QVBoxLayout, QWidget,
 )
 from qgis.core import QgsApplication, QgsAuthMethodConfig, QgsSettings
 from openpyxl import Workbook, load_workbook
@@ -305,7 +305,13 @@ class ControlCalidadDialog(QDialog):
         self.refresh_categories()
 
     def _build(self):
-        layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_tabs = QTabWidget()
+        root_layout.addWidget(self.main_tabs)
+        validation_page = QWidget()
+        self.main_tabs.addTab(validation_page, "Validación")
+        layout = QVBoxLayout(validation_page)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
         self.setStyleSheet("QDialog { background: #F5F7F8; } QLabel { color: #575756; } "
@@ -609,13 +615,70 @@ class ControlCalidadDialog(QDialog):
         tab_bar.setMinimumWidth(tab_width * self.left_tabs.count())
         tab_bar.setMinimumHeight(metrics.height() + 20)
         self.left_tabs.setMinimumWidth(max(250, tab_width * self.left_tabs.count() + 4))
+        help_page = QWidget()
+        help_layout = QVBoxLayout(help_page)
+        search_row = QHBoxLayout()
+        self.help_search = QLineEdit()
+        self.help_search.setPlaceholderText("Buscar en la ayuda…")
+        help_search_button = QPushButton("Buscar siguiente")
+        self.help_search.returnPressed.connect(self.find_help_text)
+        help_search_button.clicked.connect(self.find_help_text)
+        search_row.addWidget(self.help_search, 1)
+        search_row.addWidget(help_search_button)
+        help_layout.addLayout(search_row)
+        self.help_browser = QTextBrowser()
+        self.help_browser.setOpenExternalLinks(False)
+        self.help_browser.setOpenLinks(False)
+        self.help_browser.anchorClicked.connect(self.navigate_help)
+        help_layout.addWidget(self.help_browser, 1)
+        self.main_tabs.addTab(help_page, "Ayuda")
+        self.load_help_content()
         self.load_qgis_connections()
         self.update_ingestion_button()
         self.resize_connection_stack()
 
+    def load_help_content(self):
+        guide = PLUGIN_DIR / 'ayuda' / 'GUIA_USO.md'
+        try:
+            text = guide.read_text(encoding='utf-8')
+        except OSError:
+            self.help_browser.setPlainText('No se pudo cargar la guía incluida en el plugin. Reinstale el ZIP completo para recuperar la ayuda local.')
+            return
+        self.help_source = text
+        self.help_browser.document().setBaseUrl(QUrl.fromLocalFile(str(guide.parent) + '/'))
+        if hasattr(self.help_browser, 'setMarkdown'):
+            self.help_browser.setMarkdown(text)
+        else:
+            self.help_browser.setPlainText(text)
+        self.help_browser.moveCursor(QTextCursor.Start)
+
     def open_help(self):
-        if not QDesktopServices.openUrl(QUrl(HELP_URL)):
-            QMessageBox.information(self, "Guía de uso", "Abra este enlace en su navegador:\n" + HELP_URL)
+        self.main_tabs.setCurrentIndex(1)
+        self.help_search.setFocus()
+
+    def find_help_text(self):
+        text = self.help_search.text().strip()
+        if text and not self.help_browser.find(text):
+            self.help_browser.moveCursor(QTextCursor.Start)
+            self.help_browser.find(text)
+
+    def navigate_help(self, url):
+        fragment = url.fragment()
+        if not fragment:
+            return  # Never launch an external browser from embedded help.
+        # Resolve the guide's table of contents without network access.
+        for line in getattr(self, 'help_source', '').splitlines():
+            if line.startswith('#'):
+                title = line.lstrip('#').strip()
+                slug = re.sub(r'[^\w\s-]', '', title.lower()).replace(' ', '-')
+                if slug == fragment:
+                    self.help_browser.moveCursor(QTextCursor.Start)
+                    while self.help_browser.find(title):
+                        block = self.help_browser.textCursor().block()
+                        if block.blockFormat().headingLevel() > 0:
+                            break
+                    self.help_browser.ensureCursorVisible()
+                    return
 
     def resize_connection_stack(self):
         self.update_connection_height()

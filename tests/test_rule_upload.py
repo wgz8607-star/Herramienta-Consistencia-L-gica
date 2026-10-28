@@ -9,10 +9,10 @@ from openpyxl import load_workbook
 from psycopg2 import sql
 from qgis.core import QgsApplication
 from qgis.PyQt.QtWidgets import QMessageBox
-from qgis_control_calidad.rule_upload import (
+from cargador_reglas.repositorio import (
     COLUMNS, create_template, read_rules, make_plan, insert_import, RuleUpload,
 )
-from qgis_control_calidad import rule_upload_ui as ui
+from cargador_reglas import servicio as ui
 from qgis_control_calidad.dialog import ControlCalidadDialog
 
 app = QgsApplication.instance() or QgsApplication([], False)
@@ -204,21 +204,7 @@ class RuleUploadTests(unittest.TestCase):
         self.assertIn({'readonly': True}, connection.events)
         self.assertTrue(connection.closed)
 
-    def test_page_previews_before_insertion_and_cancellation_writes_nothing(self):
+    def test_plugin_has_no_administration_tab(self):
         owner = ControlCalidadDialog(); self.addCleanup(owner.close)
-        page = owner.rule_upload_page
-        self.assertEqual(owner.main_tabs.tabText(2), 'Administrar reglas')
-        self.assertFalse(page.insert_button.isEnabled())
-        create_template(self.path, [values()])
-        connection = RepositoryConnection()
-        with patch.object(ui.QFileDialog, 'getOpenFileName', return_value=(str(self.path), '')), patch.object(ui.psycopg2, 'connect', return_value=connection):
-            page.preview()
-        self.assertTrue(page.insert_button.isEnabled())
-        self.assertIn('1 nuevas', page.summary.text())
-        self.assertEqual(page.sql_text.toPlainText(), values()[4])
-        with patch.object(QMessageBox, 'question', return_value=QMessageBox.Cancel), patch.object(ui, 'apply_plan') as apply:
-            page.incorporate()
-        apply.assert_not_called()
-        page.destination.setCurrentIndex(1)
-        self.assertFalse(page.insert_button.isEnabled())
-        self.assertIsNone(page.plan)
+        self.assertEqual([owner.main_tabs.tabText(index) for index in range(owner.main_tabs.count())], ['Validación', 'Ayuda'])
+        self.assertFalse(hasattr(owner, 'rule_upload_page'))

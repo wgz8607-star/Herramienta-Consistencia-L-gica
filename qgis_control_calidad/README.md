@@ -438,6 +438,6 @@ Consulte la guía integrada para los tipos de datos de los CSV, la consulta de t
 
 La geodatabase también se utiliza temporalmente, conservando atributos, geometría y EPSG. Sus tablas de trabajo desaparecen al finalizar la ejecución.
 
-## Administración de reglas mediante Excel (2.2.0)
+## Administración externa de reglas
 
-La plantilla `resources/plantillas/plantilla_reglas.xlsx` contiene todos los campos definidos de una regla, con una hoja de instrucciones y un ejemplo separado. La pestaña Administrar reglas permite exportar todos los registros de la tabla seleccionada, revisar un Excel e incorporar únicamente reglas nuevas en una transacción. Conserva registros y metadatos de versiones existentes, detecta duplicados y no ejecuta las sentencias importadas. Consulte la guía para los permisos y condiciones de publicación.
+La carga de sentencias se realiza con el programa independiente [Administrador del repositorio de reglas](../cargador_reglas/README.md), con las credenciales del administrador. El código del plugin ya no incluye la pestaña Administrar reglas; consulta y ejecuta las sentencias publicadas. La eliminación se incluirá en el próximo ZIP del complemento. El paquete 2.2.0 publicado anteriormente conserva la función antigua.

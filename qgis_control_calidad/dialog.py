@@ -30,7 +30,6 @@ from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
 from .cica_gdb import install_gdb
 from .templates import validation_format
-from .rule_upload_ui import RuleUploadPage
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
 from .review_imports import ReviewImports
@@ -322,7 +321,6 @@ class ControlCalidadDialog(QDialog):
         self.category_checks = {}
         self.controls_running = False
         self.exporting = False
-        self.repository_upload_busy = False
         self.export_created_paths = []
         self._repository_password = None
         self.references_ready = False
@@ -708,8 +706,6 @@ class ControlCalidadDialog(QDialog):
         self.help_browser.anchorClicked.connect(self.navigate_help)
         help_layout.addWidget(self.help_browser, 1)
         self.main_tabs.addTab(help_page, "Ayuda")
-        self.rule_upload_page = RuleUploadPage(self)
-        self.main_tabs.addTab(self.rule_upload_page, "Administrar reglas")
         self.load_help_content()
         self.load_qgis_connections()
         self.update_ingestion_button()
@@ -1543,7 +1539,7 @@ class ControlCalidadDialog(QDialog):
         return False
 
     def closeEvent(self, event):
-        if self.controls_running or self.exporting or self.repository_upload_busy:
+        if self.controls_running or self.exporting:
             QMessageBox.information(self, "Proceso en curso", "Espere a que termine el proceso actual antes de cerrar.")
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():

@@ -20,7 +20,7 @@ COLUMNS = ('version', 'componente', 'codigo_regla', 'tipo', 'sentencia_sql',
 TABLES = ('reglas_cargue_snc_cica', 'reglas_cargue_snc_xtf',
           'reglas_cica_v2_29_07_2024', 'reglas_cica_v3_07_09_2026',
           'reglas_interno_v2_29_07_2024', 'reglas_interno_v3_07_09_2026')
-TEMPLATE = Path(__file__).parent / 'resources' / 'plantillas' / 'plantilla_reglas.xlsx'
+TEMPLATE = Path(__file__).parent / 'plantilla_reglas.xlsx'
 
 
 @dataclass(frozen=True)
@@ -106,10 +106,10 @@ def create_template(filename, existing=()):
         'descripcion_version y version_publicada son opcionales. Para una versión nueva, complete ambos en al menos una fila.',
         'Una versión nueva se guarda sin publicar si version_publicada está vacío. Si se repiten metadatos de una versión, deben coincidir.',
         'En una versión existente se conservan su descripción y publicación actuales; esta carga no las modifica.',
-        'Elija el destino en Administrar reglas. El archivo no contiene credenciales ni decide el esquema de destino.',
+        'Elija el destino en el programa externo Administrador de reglas. El archivo no contiene credenciales ni decide el esquema de destino.',
         'Se detectan duplicados por version + componente + codigo_regla. Dentro del archivo se rechazan.',
         'Las reglas que ya existen no se sobrescriben. La vista previa distingue coincidencias y contenido diferente.',
-        'Revise la vista previa y pulse Incorporar reglas nuevas. Una falla revierte toda la operación.',
+        'Revise la vista previa y pulse Cargar reglas nuevas. Una falla revierte toda la operación.',
         'Cargue SNC permite una sola versión publicada con reglas activas. No se despublican versiones automáticamente.',
         'Se requieren permisos de administración de la tabla elegida: consulta, inserción y bloqueo de escritura durante la carga. El plugin no concede permisos.',
         'No utilice fórmulas de Excel. El límite por celda es de 32.767 caracteres; no exceda ese tamaño al pegar SQL.',

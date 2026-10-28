@@ -323,20 +323,10 @@ Al validar, las copias se instalan como tablas temporales en la conexión de esa
 
 Las reglas deben consultar las tablas por el parámetro `{esquema}` (o por el esquema a validar seleccionado). La herramienta redirige únicamente las tablas seleccionadas a sus copias temporales. Una referencia fija a otro esquema no se sustituye automáticamente. Una vista materializada conserva sus propios datos y no se recalcula contra estas fuentes: su definición debe adaptarse como consulta o cálculo temporal para validar los archivos nuevos. El esquema a validar de la conexión identifica las consultas existentes; no es un nuevo destino de carga.
 
-## Administración de reglas mediante Excel
+## Administración externa del repositorio de reglas
 
-La pestaña **Administrar reglas** trabaja con el repositorio de sentencias, no con los datos catastrales que se validan. Seleccione una de las tablas de reglas admitidas en `public` de la base `sentencias`.
+La carga de sentencias SQL corresponde a los administradores y se realiza con el **Administrador del repositorio de reglas**, un programa independiente. Su plantilla contiene todos los campos definidos de una regla; permite exportar los registros de la tabla, revisar el Excel y confirmar la incorporación de registros nuevos. La cuenta del administrador se introduce en ese programa y no se comparte con los usuarios del validador.
 
-1. Use **Descargar plantilla Excel** para un libro vacío, o **Exportar todas las reglas** para incluir todos los registros de la tabla seleccionada, sin filtrar reglas inactivas ni versiones no publicadas.
-2. Diligencie la hoja **Reglas**, una fila por registro. Incluye `version`, `componente`, `codigo_regla`, `tipo`, `sentencia_sql`, `descripcion_regla`, `activa`, `orden`, `descripcion_version` y `version_publicada`. La hoja **Ejemplo** es orientativa y no se importa.
-3. Pegue cada consulta completa en una sola celda, conservando sus saltos de línea y `{esquema}`. No agregue un `INSERT INTO` ni delimitadores `$regla$` alrededor de la consulta. No use fórmulas de Excel.
-4. Use **Leer Excel y revisar carga**. La vista previa muestra todas las filas, distingue las nuevas de las existentes y permite consultar el SQL de cada registro.
-5. Pulse **Incorporar reglas nuevas** y confirme el destino y la cantidad. La cuenta debe tener permisos de administración de la tabla: consulta, inserción y bloqueo de escritura durante la transacción. La herramienta no crea tablas ni concede permisos.
+El plugin consulta las versiones publicadas y ejecuta las validaciones. No incorpora un cargador administrativo de Excel. La retirada de la pestaña Administrar reglas queda aplicada al código para el próximo paquete del complemento; el ZIP 2.2.0 publicado anteriormente todavía contiene esa pestaña.
 
-La clave de coincidencia es `version + componente + codigo_regla`. Los duplicados dentro del archivo o los campos inválidos impiden preparar la carga completa. Las reglas que ya están en la tabla se conservan, incluso si el Excel propone otros datos: esta función no actualiza ni elimina registros existentes.
-
-Las versiones existentes conservan su descripción y estado de publicación. Una versión nueva queda sin publicar si no se indica lo contrario. Cargue SNC debe conservar una sola versión publicada con reglas activas. Para las tablas identificadas como V2 o V3, la versión del archivo debe corresponder a la del destino.
-
-La operación incorpora todas las reglas nuevas válidas, incluidas las marcadas como inactivas. Usa una transacción: si falla alguna inserción, se revierte la carga completa. Si el repositorio cambia después de revisar el Excel, se exige una nueva vista previa. Las sentencias se almacenan como texto y no se ejecutan durante la importación; su sintaxis y resultados se comprueban posteriormente al validar.
-
-Conserve como texto los códigos y las versiones. Excel admite hasta 32.767 caracteres por celda. Para reutilizar las reglas recién incorporadas, vuelva a seleccionar su versión de sentencias en Validación. Los permisos de carga son distintos de los de lectura; esta opción es para quienes administran el repositorio.
+Una vez incorporadas las reglas con el programa externo, vuelva a consultar la versión de sentencias en el validador. Consulte el README del programa para la instalación y los permisos del repositorio.

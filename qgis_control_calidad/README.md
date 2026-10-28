@@ -437,3 +437,7 @@ Interfaz compacta con indicadores y totales, seguimiento de archivos modificados
 Consulte la guía integrada para los tipos de datos de los CSV, la consulta de tablas no seleccionadas y las condiciones de habilitación de los formatos.
 
 La geodatabase también se utiliza temporalmente, conservando atributos, geometría y EPSG. Sus tablas de trabajo desaparecen al finalizar la ejecución.
+
+## Administración de reglas mediante Excel (preparado para la siguiente versión)
+
+La plantilla `resources/plantillas/plantilla_reglas.xlsx` contiene todos los campos definidos de una regla, con una hoja de instrucciones y un ejemplo separado. La pestaña Administrar reglas permite exportar todos los registros de la tabla seleccionada, revisar un Excel e incorporar únicamente reglas nuevas en una transacción. Conserva registros y metadatos de versiones existentes, detecta duplicados y no ejecuta las sentencias importadas. Consulte la guía para los permisos y condiciones de publicación.

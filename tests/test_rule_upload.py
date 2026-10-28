@@ -41,6 +41,7 @@ def render(query):
 class RepositoryCursor:
     def __init__(self, connection):
         self.connection = connection
+        self.rowcount = 0
 
     def __enter__(self):
         return self
@@ -56,8 +57,10 @@ class RepositoryCursor:
 
     def executemany(self, query, records):
         self.connection.events.append(render(query))
+        self.rowcount = 0
         for index, record in enumerate(records):
             self.connection.pending.append(record)
+            self.rowcount += 1
             if self.connection.fail_insert and index == 0:
                 raise RuntimeError('Fallo de inserción')
 

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<title>Administrador de Reglas SQL</title>
+<path d="M7 15v31c0 7 36 7 36 0V15" fill="#0468A3"/>
+<ellipse cx="25" cy="15" rx="18" ry="8" fill="#068CBB" stroke="#FFF" stroke-width="3"/>
+<path d="M7 28c0 7 36 7 36 0M7 40c0 7 36 7 36 0" fill="none" stroke="#FFF" stroke-width="3"/>
+<circle cx="46" cy="45" r="16" fill="#068CBB" stroke="#FFF" stroke-width="3"/>
+<path d="M46 54V36m-7 7 7-7 7 7" fill="none" stroke="#FFF" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

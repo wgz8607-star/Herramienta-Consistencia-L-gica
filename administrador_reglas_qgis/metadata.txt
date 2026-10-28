@@ -1,0 +1,12 @@
+[general]
+name=Administrador de Reglas SQL
+description=Carga administrativa de reglas desde Excel a PostgreSQL con conexiones de QGIS o parámetros manuales.
+version=1.0.0
+qgisMinimumVersion=3.28
+author=Equipo de Calidad Catastral
+email=
+about=Complemento independiente para revisar, incorporar y reemplazar reglas por versión, componente y orden al esquema y tabla seleccionados. Requiere openpyxl y psycopg2 en el Python de QGIS.
+category=Database
+icon=icon.svg
+tags=reglas,sql,excel,postgresql,administracion
+hasProcessingProvider=no

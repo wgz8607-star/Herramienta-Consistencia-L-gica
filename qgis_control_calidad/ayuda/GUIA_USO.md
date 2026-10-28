@@ -325,8 +325,8 @@ Las reglas deben consultar las tablas por el parámetro `{esquema}` (o por el es
 
 ## Administración externa del repositorio de reglas
 
-La carga de sentencias SQL corresponde a los administradores y se realiza con el **Administrador del repositorio de reglas**, un programa independiente. Su plantilla contiene todos los campos definidos de una regla; permite exportar los registros de la tabla, revisar el Excel y confirmar la incorporación de registros nuevos. La cuenta del administrador se introduce en ese programa y no se comparte con los usuarios del validador.
+La carga de sentencias SQL corresponde a los administradores y se realiza con el **Administrador de Reglas SQL**, un complemento de QGIS independiente. Su plantilla contiene todos los campos definidos de una regla; permite exportar los registros de la tabla, revisar el Excel y confirmar la incorporación de registros nuevos o los reemplazos por versión, componente y orden. Se utiliza una conexión de QGIS o la cuenta indicada por el administrador en ese complemento; el validador no realiza esta carga.
 
 El plugin consulta las versiones publicadas y ejecuta las validaciones. No incorpora un cargador administrativo de Excel. La retirada de la pestaña Administrar reglas queda aplicada al código para el próximo paquete del complemento; el ZIP 2.2.0 publicado anteriormente todavía contiene esa pestaña.
 
-Una vez incorporadas las reglas con el programa externo, vuelva a consultar la versión de sentencias en el validador. Consulte el README del programa para la instalación y los permisos del repositorio.
+Una vez incorporadas las reglas con el programa externo, vuelva a consultar la versión de sentencias en el validador. Consulte el README del complemento Administrador de Reglas SQL para la instalación y los permisos del repositorio.

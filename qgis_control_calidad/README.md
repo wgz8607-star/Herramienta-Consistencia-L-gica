@@ -440,4 +440,4 @@ La geodatabase también se utiliza temporalmente, conservando atributos, geometr
 
 ## Administración externa de reglas
 
-La carga de sentencias se realiza con el programa independiente [Administrador del repositorio de reglas](../cargador_reglas/README.md), con las credenciales del administrador. El código del plugin ya no incluye la pestaña Administrar reglas; consulta y ejecuta las sentencias publicadas. La eliminación se incluirá en el próximo ZIP del complemento. El paquete 2.2.0 publicado anteriormente conserva la función antigua.
+La carga de sentencias se realiza con el complemento independiente de QGIS [Administrador de Reglas SQL](../administrador_reglas_qgis/README.md), usando una conexión guardada en QGIS o los parámetros del administrador. El código del plugin ya no incluye la pestaña Administrar reglas; consulta y ejecuta las sentencias publicadas. La eliminación se incluirá en el próximo ZIP del complemento. El paquete 2.2.0 publicado anteriormente conserva la función antigua.

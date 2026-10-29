@@ -32,14 +32,14 @@ from .territorial_scope import SCOPES, install_scope, resolve_scope
 from .territorial_filter import TerritorialFilterDialog, TerritorialOverview
 from .territorial_statistics import read_filter_statistics
 from .templates import validation_format, DOWNLOAD_NAMES
-from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value, rule_sheet_label, rule_sort_key
+from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value, rule_sheet_label, rule_sort_key, CONDITION_HEADER, condition_text
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
 from .current_references import read_catalog, needed_references, prepare_current_references
 from .review_imports import ReviewImports
 from .review_files import fingerprint_file
 from .review import build_cases, digest, save_review, load_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS, model_component_number, model_component_sort_key
-from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews, configure_report_workbook, internal_detail_link
+from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, add_controls, link_rule_reviews, configure_report_workbook, internal_detail_link, prepare_validation_index
 
 try:
     import psycopg2
@@ -1918,7 +1918,7 @@ class ControlCalidadDialog(QDialog):
                 ])
         else:
             general.append(["", "No fue posible generar el reporte general", "", self.general_report_error or "No se recibieron resultados."])
-        detail = book.create_sheet("Detalle de errores")
+        detail = book.create_sheet("Detalle Validación")
         detail.append(["Componente", "Regla incumplida", "Hallazgos", "Hoja de detalle"])
         error_rows = []
         review_by_row = {
@@ -1956,6 +1956,19 @@ class ControlCalidadDialog(QDialog):
                 if row_index % 2 == 0:
                     for cell in sheet[row_index]:
                         cell.fill = soft_blue
+        plugin_version = self.execution_info.get('Versión plugin')
+        if not plugin_version:
+            plugin_metadata = ConfigParser()
+            plugin_metadata.read(PLUGIN_DIR / 'metadata.txt', encoding='utf-8')
+            plugin_version = plugin_metadata.get('general', 'version', fallback='No disponible')
+        version_row = summary.max_row + 2
+        summary.cell(version_row, 1, 'Versión plugin')
+        version_cell = summary.cell(version_row, 2, str(plugin_version)); version_cell.data_type = 's'
+        for cell in (summary.cell(version_row, 1), version_cell):
+            cell.fill = PatternFill('solid', fgColor='EAF3F8')
+            cell.font = Font(color='0468A3', bold=True)
+            cell.alignment = Alignment(vertical='center')
+        summary.row_dimensions[version_row].height = 24
         used_sheet_names = set(book.sheetnames)
         rule_sheet_names = {}
         for category, rule in sorted(rows_by_rule, key=lambda item: (item[0], rule_sort_key(item[1]))):
@@ -1970,14 +1983,7 @@ class ControlCalidadDialog(QDialog):
             detail.append([category, rule, len(rows_by_rule[(category, rule)]), sheet_name])
             detail.cell(detail.max_row, 4).hyperlink = f"#{sheet_name}!A1"
             rule_sheet = book.create_sheet(sheet_name)
-            fields = sorted({
-                key for _predio, row in rows_by_rule[(category, rule)] for key in row if not is_predio_field(key)
-            })
-            condition_fields = [key for key in fields if str(key).lower().startswith("cond_")]
-            fields = [key for key in fields if key not in condition_fields] + condition_fields
-            rule_headers = [
-                PREDIO_HEADER, *fields, "clave_caso", *EXCEPTION_HEADERS,
-            ]
+            rule_headers = [CONDITION_HEADER, "clave_caso", *EXCEPTION_HEADERS]
             last_column = len(rule_headers)
             rule_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
             rule_sheet.cell(1, 1, f"Regla incumplida: {rule}")
@@ -1994,7 +2000,7 @@ class ControlCalidadDialog(QDialog):
                     self.status.setText(f"Preparando {rule}: {index - 4} registros…")
                     QApplication.processEvents()
                 for column, value in enumerate([
-                    predio or "Sin identificador", *[row.get(key, "") for key in fields],
+                    condition_text(row, display),
                     review_by_row[id(row)].key if id(row) in review_by_row else "",
                     *(review_by_row[id(row)].exception_tracking() if id(row) in review_by_row else EXCEPTION_DEFAULTS),
                 ], start=1):
@@ -2067,11 +2073,11 @@ class ControlCalidadDialog(QDialog):
         for category in sorted({category for category, _rule in rows_by_rule}):
             package = Workbook()
             package_index = package.active
-            package_index.title = "Detalle de errores"
-            package_index.append(["Componente", "Regla incumplida", "Hallazgos", "Hoja de detalle"])
-            for cell in package_index[1]:
-                cell.fill = green; cell.font = Font(color="FFFFFF", bold=True)
-                cell.alignment = Alignment(wrap_text=True, vertical="center")
+            validation_metadata = dict(self.execution_info)
+            validation_metadata.setdefault('Modelo', self.review_context.get('model', self.model.currentText()))
+            validation_metadata.setdefault('Ambiente', self.review_context.get('environment', self.environment.currentText()))
+            validation_metadata.setdefault('Esquema', self.review_context.get('schema', ''))
+            index_header_row = prepare_validation_index(package_index, validation_metadata, self.validation_context, category)
             for rule in sorted((rule for item_category, rule in rows_by_rule if item_category == category), key=rule_sort_key):
                 source = book[rule_sheet_names[(category, rule)]]
                 # Each component workbook owns its sheet namespace; a matching
@@ -2112,9 +2118,7 @@ class ControlCalidadDialog(QDialog):
                 for column_index, column in enumerate(target.iter_cols(), start=1):
                     target.column_dimensions[get_column_letter(column_index)].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 42)
                 target.freeze_panes = "A5"; target.auto_filter.ref = f"A4:{target.cell(4, target.max_column).coordinate[:-1]}{target.max_row}"
-            package_index.freeze_panes = "A2"; package_index.auto_filter.ref = package_index.dimensions
-            for column in package_index.columns:
-                package_index.column_dimensions[column[0].column_letter].width = min(max(len(str(cell.value or "")) for cell in column) + 2, 36)
+            package_index.auto_filter.ref = f'A{index_header_row}:D{package_index.max_row}'
             safe_category = re.sub(r"[^A-Za-z0-9_-]+", "_", category).strip("_") or "paquete"
             self.report_task(save_review, None, [case for case in self.review_cases if case.component == category],
                         [result for result in self.results if result.category == category], workbook=package)

@@ -33,3 +33,16 @@ def rule_sheet_label(rule):
 def rule_sort_key(rule):
     return tuple((0, int(part)) if part.isdigit() else (1, part.casefold())
                  for part in re.split(r'(\d+)', rule_sheet_label(rule)) if part)
+
+
+CONDITION_HEADER = 'Resultado de la condición'
+
+
+def condition_text(row, formatter=None):
+    fields = sorted(key for key in row if str(key).lower().startswith('cond_'))
+    def value(key):
+        raw = row.get(key)
+        return '' if raw is None else str(formatter(raw) if formatter else raw)
+    if not fields:
+        return 'Incumple'
+    return value(fields[0]) if len(fields) == 1 else '\n'.join(str(key) + ': ' + value(key) for key in fields)

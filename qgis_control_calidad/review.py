@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
-from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value
+from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value, CONDITION_HEADER, condition_text
 from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, yes, validate, add_controls, link_formula, configure_report_workbook
 
 PENDING = "Revisión pendiente"
@@ -367,7 +367,12 @@ def load_review(path):
                 if unified:
                     valid = valid and ('' if row[PREDIO_HEADER] is None else str(row[PREDIO_HEADER])) == predio_value(expected)
                 valid = valid and [row['componente'], row['validacion']] == payload['validation'] and row['resultado_automatico'] == payload['automatic']
-                if source_data is not None:
+                if source_data is not None and CONDITION_HEADER in source_data:
+                    # The compact detail omits object attributes. Their immutable
+                    # snapshot and case key are still checked in hidden Revisión.
+                    value = source_data.get(CONDITION_HEADER)
+                    valid = valid and ('' if value is None else str(value)) == condition_text(expected)
+                elif source_data is not None:
                     if PREDIO_HEADER in source_data:
                         value = source_data[PREDIO_HEADER]
                         valid = valid and ('' if value is None else str(value)) == (predio_value(expected) or 'Sin identificador')

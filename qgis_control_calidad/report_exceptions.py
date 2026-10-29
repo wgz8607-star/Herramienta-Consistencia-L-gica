@@ -3,7 +3,7 @@ from copy import copy
 import math
 import unicodedata
 
-from openpyxl.styles import PatternFill, Protection, Font
+from openpyxl.styles import PatternFill, Protection, Font, Alignment
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
@@ -185,3 +185,44 @@ def internal_detail_link(cell, sheet_name):
     alignment.vertical = 'center'; alignment.wrap_text = True; alignment.indent = 1
     cell.alignment = alignment
     cell.parent.row_dimensions[cell.row].height = max(26, cell.parent.row_dimensions[cell.row].height or 0)
+
+
+def prepare_validation_index(sheet, metadata, location, component):
+    """Validation metadata above the per-rule navigation table, without a context tab."""
+    sheet.title = 'Detalle Validación'
+    sheet.merge_cells('A1:D1')
+    title = sheet.cell(1, 1, 'Detalle Validación — ' + str(component))
+    title.data_type = 's'
+    title.fill = PatternFill('solid', fgColor='0468A3')
+    title.font = Font(name='Calibri', size=14, bold=True, color='FFFFFF')
+    title.alignment = Alignment(vertical='center', wrap_text=True)
+    sheet.row_dimensions[1].height = 36
+    fields = [(key, metadata.get(key) or 'No disponible') for key in (
+        'Fecha de ejecución', 'Modelo', 'Ambiente', 'Versión SQL', 'Alcance territorial',
+        'Manzanas / veredas (NPN 1–17)', 'Base de datos', 'Esquema')]
+    fields.append(('Ubicación territorial', location or 'No disponible'))
+    for key in ('R1 y R2 Vigente',):
+        if metadata.get(key):
+            fields.append((key, metadata[key]))
+    for row, (label, value) in enumerate(fields, 2):
+        sheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        name = sheet.cell(row, 1, label); name.data_type = 's'
+        cell = sheet.cell(row, 2, str(value)); cell.data_type = 's'
+        name.font = Font(name='Calibri', size=11, bold=True, color='0468A3')
+        name.fill = PatternFill('solid', fgColor='EAF3F8')
+        cell.font = Font(name='Calibri', size=11, color='344054')
+        name.alignment = cell.alignment = Alignment(wrap_text=True, vertical='center')
+        sheet.row_dimensions[row].height = min(105, max(28, math.ceil(len(str(value)) / 75) * 15 + 8))
+    header_row = len(fields) + 3
+    headers = ('Componente', 'Regla incumplida', 'Hallazgos', 'Hoja de detalle')
+    for column, label in enumerate(headers, 1):
+        cell = sheet.cell(header_row, column, label)
+        cell.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='068CBB')
+        cell.alignment = Alignment(wrap_text=True, vertical='center')
+    sheet.row_dimensions[header_row].height = 30
+    for column, width in {'A': 30, 'B': 28, 'C': 16, 'D': 28}.items():
+        sheet.column_dimensions[column].width = width
+    sheet.freeze_panes = 'B' + str(header_row + 1)
+    sheet.sheet_view.showGridLines = False
+    return header_row

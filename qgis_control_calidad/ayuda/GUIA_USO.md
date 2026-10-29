@@ -371,4 +371,17 @@ Esta hoja presenta encabezados azules, filas alternadas y descripciones con text
 
 ### Vínculos a las reglas
 
-En **Detalle de errores**, la columna **Hoja de detalle** muestra un vínculo azul subrayado, por ejemplo **↪ Ir a 1_12**. Al pulsarlo se abre la hoja de esa regla dentro del mismo archivo. El mensaje al pasar el cursor identifica el destino como vínculo interno.
+En **Detalle Validación**, la columna **Hoja de detalle** muestra un vínculo azul subrayado, por ejemplo **↪ Ir a 1_12**. Al pulsarlo se abre la hoja de esa regla dentro del mismo archivo. El mensaje al pasar el cursor identifica el destino como vínculo interno.
+
+
+### Metadatos en Detalle Validación
+
+La hoja **Detalle Validación** sustituye Detalle de errores. Su parte superior muestra el componente, fecha de ejecución, modelo, ambiente, versión SQL, alcance, códigos de manzana/vereda seleccionados, base de datos, esquema y ubicación territorial disponibles. No se crea una hoja de contexto adicional ni se incluye Identificador de entrega. La tabla de reglas y sus vínculos internos aparece debajo; el filtro se aplica solo a esa tabla y se mantienen fijos los encabezados y la primera columna.
+
+
+La **versión del plugin** se informa únicamente en el archivo **resumen_control_calidad**, al pie de la hoja **Resumen ejecutivo**. No aparece entre los metadatos de Detalle Validación.
+
+
+### Vista compacta de cada regla
+
+Las hojas numeradas de reglas muestran el título, descripción y ubicación territorial. Sus únicas columnas visibles son **Resultado de la condición**, **Excepción DT**, **Observación DT**, **Excepción operador** y **Observación operador**. Los identificadores y atributos del caso permanecen en metadatos ocultos para recuperar revisiones. Las consultas sin columna cond_ muestran **Incumple** por cada hallazgo; varias condiciones se reúnen en la misma celda. La versión del plugin aparece solo al pie de Resumen ejecutivo.

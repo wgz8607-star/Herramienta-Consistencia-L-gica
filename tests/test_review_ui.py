@@ -74,6 +74,7 @@ class ReviewUiTests(unittest.TestCase):
         self.owner.review_cases[0].excepcion_dt = 'Sí'
         self.owner.review_cases[0].observacion_dt = 'Documentado por DT'
         self.owner.execution_info['Identificador de entrega'] = 'no_exportar'
+        self.owner.execution_info['Versión plugin'] = 'version-ejecucion'
         with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
             self.owner.export_excel()
         files = list(Path(self.directory.name).glob('*.xlsx'))
@@ -96,11 +97,15 @@ class ReviewUiTests(unittest.TestCase):
             self.assertNotIn('Contexto de validación', book.sheetnames)
             self.assertNotIn('Contexto', book.sheetnames)
             if 'regla_1' in book.sheetnames:
-                self.assertEqual(book['Detalle de errores']['A1'].value, 'Componente')
+                self.assertTrue(book['Detalle Validación']['A1'].value.startswith('Detalle Validación'))
+                self.assertNotIn('Versión plugin', [cell.value for cell in book['Detalle Validación']['A']])
             if 'regla_1' not in book.sheetnames:
                 self.assertNotIn('Revisión', book.sheetnames)
                 self.assertNotIn('_Identidades', book.sheetnames)
                 self.assertIn('Resumen ejecutivo', book.sheetnames)
+                summary = book['Resumen ejecutivo']
+                version_row = next(cell.row for cell in summary['A'] if cell.value == 'Versión plugin')
+                self.assertEqual(summary.cell(version_row, 2).value, 'version-ejecucion')
                 book.close()
                 continue
             self.assertIn('Revisión', book.sheetnames)
@@ -180,7 +185,7 @@ class ReviewUiTests(unittest.TestCase):
         columns = {cell.value: cell.column for cell in sheet[4]}
         sheet.cell(5, columns['Excepción DT'], 'Sí')
         sheet.cell(5, columns['Observación DT'], 'Justificado DT')
-        sheet.cell(5, columns['Numero_Predial_Nacional'], '99999')
+        sheet.cell(5, columns['Resultado de la condición'], 'Alterado')
         book.save(path); book.close()
         current = build_cases(self.owner.results, self.owner.review_context)
         counts = restore_review(current, load_review(path))
@@ -564,11 +569,14 @@ class ReviewUiTests(unittest.TestCase):
         path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
         book = load_workbook(path)
         headers = [cell.value for cell in book['unificada'][4]]
-        self.assertEqual(headers.count('Numero_Predial_Nacional'), 1)
+        self.assertNotIn('Numero_Predial_Nacional', headers)
         self.assertNotIn('Predio', headers)
         self.assertNotIn('numero_predial', headers)
         self.assertNotIn('numero_predial_nacional', headers)
-        self.assertEqual(book['unificada'].cell(5, 1).value, npn)
+        self.assertNotIn('valor', headers)
+        visible = [cell.value for cell in book['unificada'][4] if not book['unificada'].column_dimensions[cell.column_letter].hidden]
+        self.assertEqual(visible, ['Resultado de la condición', *HEADERS])
+        self.assertEqual(book['unificada'].cell(5, 1).value, 'Incumple')
         self.assertEqual(book['unificada'].cell(5, 1).data_type, 's')
         review_headers = [cell.value for cell in book['Revisión'][1]]
         self.assertIn('Numero_Predial_Nacional', review_headers)
@@ -597,12 +605,20 @@ class ReviewUiTests(unittest.TestCase):
         book = load_workbook(path)
         expected = ['1_1', '1_2', '1_9', '1_10', '1_52']
         self.assertEqual([name for name in book.sheetnames if name in expected], expected)
-        index = book['Detalle de errores']
-        self.assertEqual([index.cell(row, 4).value for row in range(2, 7)], ['↪ Ir a ' + name for name in expected])
-        self.assertEqual(index.cell(6, 4).hyperlink.location, "'1_52'!A1")
-        self.assertIsNone(index.cell(6, 4).hyperlink.target)
-        self.assertEqual(index.cell(6, 4).font.underline, 'single')
-        self.assertEqual(index.cell(6, 4).font.color.rgb, '000066B3')
+        index = book['Detalle Validación']
+        header = next(row[0].row for row in index if row[0].value == 'Componente')
+        self.assertEqual([index.cell(row, 4).value for row in range(header + 1, header + 6)], ['↪ Ir a ' + name for name in expected])
+        link = index.cell(header + 5, 4)
+        self.assertEqual(link.hyperlink.location, "'1_52'!A1")
+        self.assertIsNone(link.hyperlink.target)
+        self.assertEqual(link.font.underline, 'single')
+        self.assertEqual(link.font.color.rgb, '000066B3')
+        self.assertEqual(index.freeze_panes, 'B' + str(header + 1))
+        self.assertEqual(index.auto_filter.ref, f'A{header}:D{header + 5}')
+        metadata = {row[0].value: row[1].value for row in index.iter_rows(min_row=2, max_row=header-1)}
+        self.assertEqual(metadata['Modelo'], 'CICA')
+        self.assertEqual(metadata['Esquema'], 'test')
+        self.assertNotIn('Identificador de entrega', metadata)
         self.assertNotIn('1_3', book.sheetnames)
         book.close()
         other = next(Path(self.directory.name).glob('detalle_Juridicas_*.xlsx'))

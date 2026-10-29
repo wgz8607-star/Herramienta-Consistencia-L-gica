@@ -470,3 +470,9 @@ Las hojas de reglas toman el identificador definido en las sentencias: regla_1_1
 - Reglas & Componente sustituye Ejecución automática, sin Resultado automático, con encabezados y filas formateados.
 - Reportes protegidos con anchos de columna ajustables, primera columna y encabezados inmovilizados. Se mantienen editables excepciones y observaciones.
 - Descargas de formatos: fo_gct_pc01_07_v2.xlsx y cons_log_cica_v2.xlsx.
+
+## Detalle de validación y hojas de regla (2.9.0)
+
+La hoja de navegación se denomina **Detalle Validación** y presenta arriba los metadatos de la ejecución: componente, fecha, modelo, ambiente, versión SQL, alcance, manzanas/veredas, base de datos, esquema y ubicación territorial. R1/R2 vigente se muestra cuando corresponde. Los filtros y vínculos internos de las reglas aparecen debajo. La versión del plugin se informa únicamente al pie de **Resumen ejecutivo**, en resumen_control_calidad.
+
+Las hojas de regla muestran únicamente título de regla, descripción, ubicación territorial y cinco columnas visibles: Resultado de la condición, Excepción DT, Observación DT, Excepción operador y Observación operador. Si la consulta no devuelve campos cond_, el resultado se presenta como Incumple, pues cada fila corresponde a un hallazgo del control. Si devuelve varias condiciones, se reúnen con sus nombres en la misma celda. Los identificadores y atributos originales se mantienen en metadatos ocultos para preservar las claves de recuperación, sin mostrarlos como columnas del detalle. Cambiar el resultado visible invalida la recuperación de esa revisión.

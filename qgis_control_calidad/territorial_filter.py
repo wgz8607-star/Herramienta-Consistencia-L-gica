@@ -12,8 +12,8 @@ from .territorial_scope import SCOPES, NPN_COLUMNS, normalize_prefixes
 
 
 def prefixes_from_values(values):
-    return sorted({str(value).strip()[:13] for value in values
-                   if value is not None and re.fullmatch(r'[0-9]{13}', str(value).strip()[:13])})
+    return sorted({str(value).strip()[:17] for value in values
+                   if value is not None and re.fullmatch(r'[0-9]{17}', str(value).strip()[:17])})
 
 
 def read_prefixes(params, schema, model, snapshot=None):
@@ -37,7 +37,7 @@ def read_prefixes(params, schema, model, snapshot=None):
             column = next((name for name in NPN_COLUMNS if name in columns), None)
             if not column:
                 raise ValueError(f'{table}: no se encontró una columna NPN en la fuente seleccionada.')
-            cursor.execute(sql.SQL("SELECT DISTINCT substring(btrim({}::text), 1, 13) FROM {} WHERE substring(btrim({}::text), 1, 13) ~ '^[0-9]{{13}}$' ORDER BY 1").format(
+            cursor.execute(sql.SQL("SELECT DISTINCT substring(btrim({}::text), 1, 17) FROM {} WHERE substring(btrim({}::text), 1, 17) ~ '^[0-9]{{17}}$' ORDER BY 1").format(
                 sql.Identifier(column), sql.Identifier(schema, table), sql.Identifier(column)))
             return [row[0] for row in cursor.fetchall()]
 
@@ -56,11 +56,11 @@ class TerritorialFilterDialog(QDialog):
         self.scope.setCurrentIndex(max(0, self.scope.findData(scope)))
         form.addRow('Ámbito', self.scope)
         layout.addLayout(form)
-        text = QLabel('Opcional: seleccione manzanas o veredas por los primeros 13 dígitos del NPN.\nSin códigos marcados se incluyen todos los del ámbito elegido.\nEl mismo filtro se aplicará a la fuente y a R1/R2.')
+        text = QLabel('Opcional: seleccione manzanas o veredas por los primeros 17 dígitos del NPN.\nSin códigos marcados se incluyen todos los del ámbito elegido.\nEl mismo filtro se aplicará a la fuente y a R1/R2.')
         text.setWordWrap(True); layout.addWidget(text)
         self.read_button = QPushButton('Leer manzanas / veredas de la fuente')
         self.read_button.clicked.connect(self.load_codes); layout.addWidget(self.read_button)
-        self.search = QLineEdit(); self.search.setPlaceholderText('Buscar código de 13 dígitos…')
+        self.search = QLineEdit(); self.search.setPlaceholderText('Buscar código de 17 dígitos…')
         self.search.textChanged.connect(self.filter_codes); layout.addWidget(self.search)
         self.codes = QListWidget(); layout.addWidget(self.codes)
         self.populate(prefixes, prefixes)
@@ -103,7 +103,7 @@ class TerritorialFilterDialog(QDialog):
             self.populate(sorted(set(codes) | set(selected)), selected)
             self.update_summary()
             if not codes:
-                QMessageBox.information(self, 'Sin códigos', 'No se encontraron prefijos NPN válidos de 13 dígitos en la fuente.')
+                QMessageBox.information(self, 'Sin códigos', 'No se encontraron prefijos NPN válidos de 17 dígitos en la fuente.')
         except Exception as error:
             QMessageBox.warning(self, 'No fue posible leer la fuente', str(error))
         finally:

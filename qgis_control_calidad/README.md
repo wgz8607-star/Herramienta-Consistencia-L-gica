@@ -266,14 +266,14 @@ Servidor es de solo lectura y la conexión usa esa misma constante, incluso si
 el texto se altera por código. Puerto, base de datos y credenciales de la
 conexión manual conservan sus campos de configuración.
 
-## Referencias R1/R2 y filtro avanzado (2.3.0)
+## Referencias R1/R2 y filtro avanzado (2.3.1)
 
 La pestaña **Referencias R1/R2** ofrece dos opciones:
 
 1. **Archivos R1 y R2 temporales**: prepare las referencias Excel como copias locales de trabajo. Durante la validación se cargan únicamente en la sesión temporal de PostgreSQL.
 2. **R1 y R2 Vigente**: consulta el esquema `r1_r2` de la base de sentencias, identifica los municipios por DIVIPOLA y muestra la fecha y las tablas disponibles. Se usa la fecha más reciente del municipio, sin mezclar R1/R2 de fechas distintas. Las referencias requeridas se copian a la sesión temporal de validación.
 
-**Filtro avanzado…**, debajo de **Esquema a validar**, se habilita al seleccionar un esquema o cargar la fuente de predios CICA. Aplica al Modelo Interno/XTF, CICA y sus referencias R1/R2. Por defecto incluye Todos. Permite elegir Urbano (01), Rural (00) o Centro poblado (>01) según las posiciones 6–7 del NPN y seleccionar opcionalmente manzanas/veredas por las posiciones 1–13, leyendo los códigos de la fuente. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).
+**Filtro avanzado…**, debajo de **Esquema a validar**, se habilita al seleccionar un esquema o cargar la fuente de predios CICA. Aplica al Modelo Interno/XTF, CICA y sus referencias R1/R2. Por defecto incluye Todos. Permite elegir Urbano (01), Rural (00) o Centro poblado (>01) según las posiciones 6–7 del NPN y seleccionar opcionalmente manzanas/veredas por las posiciones 1–17, leyendo los códigos de la fuente. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).
 
 En el modo temporal, al iniciar la validación, el worker crea `reference_r1` y
 `reference_r2` como **TEMP TABLE** y carga sus datos con COPY en la misma conexión

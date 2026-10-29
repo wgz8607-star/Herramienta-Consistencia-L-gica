@@ -1394,7 +1394,7 @@ class ControlCalidadDialog(QDialog):
             'Base de datos': params.get('dbname', ''), 'Esquema': schema,
         }
         self.execution_info["Ámbito territorial"] = SCOPES[scope]
-        self.execution_info["Manzanas / veredas (NPN 1–13)"] = ", ".join(self.scope_prefixes) or "Todas"
+        self.execution_info["Manzanas / veredas (NPN 1–17)"] = ", ".join(self.scope_prefixes) or "Todas"
         self.results.clear()
         self.review_cases = []
         self.review_imports = ReviewImports(self.review_cases)

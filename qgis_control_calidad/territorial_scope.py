@@ -18,14 +18,14 @@ def predicate(column, scope, prefixes=()):
         result = sector + (sql.SQL(condition).format(sector) if scope == 'center' else sql.SQL(condition))
     if prefixes:
         values = sql.SQL(', ').join(sql.Literal(value) for value in prefixes)
-        result = sql.SQL('({}) AND substring(btrim({}::text), 1, 13) IN ({})').format(result, sql.Identifier(column), values)
+        result = sql.SQL('({}) AND substring(btrim({}::text), 1, 17) IN ({})').format(result, sql.Identifier(column), values)
     return result
 
 
 def normalize_prefixes(prefixes):
     values = tuple(sorted(set(prefixes)))
-    if any(not isinstance(value, str) or not re.fullmatch(r'[0-9]{13}', value) for value in values):
-        raise ValueError('Los códigos de manzana/vereda deben contener exactamente 13 dígitos.')
+    if any(not isinstance(value, str) or not re.fullmatch(r'[0-9]{17}', value) for value in values):
+        raise ValueError('Los códigos de manzana/vereda deben contener exactamente 17 dígitos.')
     return values
 
 

@@ -76,10 +76,10 @@ class ScopeTests(unittest.TestCase):
             self.assertEqual(widget.scope_prefixes, ())
             self.assertEqual(widget.advanced_filter_button.text(), 'Filtro avanzado…')
 
-    def test_13_digit_prefixes_are_validated_and_combined_with_scope(self):
+    def test_17_digit_prefixes_are_validated_and_combined_with_scope(self):
         from qgis_control_calidad.territorial_scope import normalize_prefixes
-        self.assertEqual(normalize_prefixes(['0842101000001', '0842101000001']), ('0842101000001',))
-        for invalid in ('08421', '08421010000012', "084210100000'"):
+        self.assertEqual(normalize_prefixes(['08421010000010000', '08421010000010000']), ('08421010000010000',))
+        for invalid in ('08421', '0842101000001', '084210100000100000', "084210100000'"):
             with self.assertRaises(ValueError):
                 normalize_prefixes([invalid])
 
@@ -93,15 +93,15 @@ class ScopeTests(unittest.TestCase):
             path.write_text('"0842101000001000000000000000000"\n"0842100000001000000000000000000"\n"invalid"\n')
             snapshot = SimpleNamespace(columns=('numero_predial',), csv_path=path)
             with patch('qgis_control_calidad.territorial_filter.psycopg2.connect') as connect:
-                self.assertEqual(read_prefixes({}, '', 'CICA', snapshot), ['0842100000001', '0842101000001'])
+                self.assertEqual(read_prefixes({}, '', 'CICA', snapshot), ['08421000000010000', '08421010000010000'])
             connect.assert_not_called()
 
     def test_editor_defaults_to_all_and_retains_selection_across_search(self):
         from qgis_control_calidad.territorial_filter import TerritorialFilterDialog
-        dialog = TerritorialFilterDialog('all', ('0842101000001',), lambda: [])
+        dialog = TerritorialFilterDialog('all', ('08421010000010000',), lambda: [])
         self.addCleanup(dialog.close)
         self.assertEqual(dialog.scope.currentData(), 'all')
         dialog.search.setText('not-found')
-        self.assertEqual(dialog.selected_prefixes(), ('0842101000001',))
+        self.assertEqual(dialog.selected_prefixes(), ('08421010000010000',))
         dialog.clear_codes()
         self.assertEqual(dialog.selected_prefixes(), ())

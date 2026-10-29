@@ -1,387 +1,207 @@
-# Guía de uso — Validador Consistencia Lógica Alfanumérica
+# Ayuda operativa — Validador Consistencia Lógica Alfanumérica
 
-Guía de la versión **2.2.0**. Las opciones descritas pueden no estar disponibles en paquetes anteriores.
+Siga los pasos en orden para preparar la validación, revisar sus resultados y gestionar las excepciones. La ayuda permanece dentro del plugin; use el buscador para localizar una opción.
 
 ## Contenido
 
-1. [Instalación y requisitos](#1-instalación-y-requisitos)
-2. [Preparar una validación](#2-preparar-una-validación)
-3. [Conectar la base de datos](#3-conectar-la-base-de-datos)
-4. [Referencias R1 y R2](#4-referencias-r1-y-r2)
-5. [Seleccionar y ejecutar controles](#5-seleccionar-y-ejecutar-controles)
-6. [Interpretar las estadísticas](#6-interpretar-las-estadísticas)
-7. [Generar y diligenciar reportes](#7-generar-y-diligenciar-reportes)
-8. [Recuperar y gestionar detalles](#8-recuperar-y-gestionar-detalles)
-9. [Conservar los detalles y repetir la validación](#9-conservar-los-detalles-y-repetir-la-validación)
-10. [Problemas frecuentes](#10-problemas-frecuentes)
-11. [Administración del repositorio de sentencias](#11-administración-del-repositorio-de-sentencias)
+1. [Abrir el plugin](#1-abrir-el-plugin)
+2. [Seleccionar modelo y ambiente](#2-seleccionar-modelo-y-ambiente)
+3. [Conectar la Base catastral a validar](#3-conectar-la-base-catastral-a-validar)
+4. [Cargar archivos CICA](#4-cargar-archivos-cica)
+5. [Seleccionar R1 y R2](#5-seleccionar-r1-y-r2)
+6. [Consultar estadísticas y aplicar filtros](#6-consultar-estadísticas-y-aplicar-filtros)
+7. [Confirmar y ejecutar la validación](#7-confirmar-y-ejecutar-la-validación)
+8. [Interpretar los resultados](#8-interpretar-los-resultados)
+9. [Generar y consultar los reportes](#9-generar-y-consultar-los-reportes)
+10. [Diligenciar excepciones en Excel](#10-diligenciar-excepciones-en-excel)
+11. [Cargar o recargar detalles revisados](#11-cargar-o-recargar-detalles-revisados)
+12. [Descargar el formato homologado](#12-descargar-el-formato-homologado)
+13. [Resolver situaciones frecuentes](#13-resolver-situaciones-frecuentes)
 
-## 1. Instalación y requisitos
+## 1. Abrir el plugin
 
-- QGIS **3.28 o superior**. Las pruebas automatizadas de desarrollo se ejecutan con QGIS 3.40; esto no equivale a probar todas las versiones o equipos.
-- Instale el ZIP **del plugin**, no el ZIP completo del repositorio. No necesita descomprimirlo.
-- En QGIS: **Complementos → Administrar e instalar complementos → Instalar desde ZIP**. Seleccione el paquete y active **Validador Consistencia Lógica Alfanumérica**.
-- Reinicie QGIS después de actualizar. Abra la herramienta desde **Base de datos** o su icono en la barra de herramientas.
-- Se requieren `openpyxl` para Excel y `psycopg2` para PostgreSQL, disponibles en el Python que utiliza QGIS. Instalar bibliotecas en otro Python no las incorpora automáticamente a QGIS.
-- El equipo debe poder llegar al servidor PostgreSQL/PostGIS y al repositorio de sentencias. La instalación del plugin no configura la red ni una VPN.
-- La cuenta de datos necesita acceso a la base y permisos de consulta sobre el esquema y sus tablas. Para referencias temporales también necesita permiso **TEMP** sobre la base.
+1. En QGIS, abra **Base de datos → Validador Consistencia Lógica Alfanumérica**, o pulse su icono.
+2. Si todavía no está instalado, vaya a **Complementos → Administrar e instalar complementos → Instalar desde ZIP** y seleccione el ZIP del plugin sin descomprimirlo.
+3. Después de actualizar el plugin, reinicie QGIS.
 
-La herramienta usa dos conexiones distintas: una al **repositorio de sentencias** y otra a la **base de datos que se validará**. Que una funcione no confirma la otra.
+Tenga disponibles la conexión a la Base catastral a validar y los archivos que utilizará. Para Modelo Interno/XTF, la base debe estar previamente preparada en PostgreSQL. Para CICA puede consultar una base existente o utilizar archivos durante la sesión.
 
-## 2. Preparar una validación
+## 2. Seleccionar modelo y ambiente
 
-1. En **Conexión**, seleccione **Modelo Interno de Levantamiento 1.0** o **CICA**. XTF se considera parte del Modelo Interno; no aparece como modelo separado.
-2. Seleccione un ambiente:
-   - **Validaciones del modelo**: busque y seleccione la versión SQL publicada correspondiente.
-   - **Validaciones para cargue a SNC**: se carga automáticamente su única versión publicada con reglas activas. El selector manual se deshabilita.
-3. Configure la conexión de datos y seleccione el esquema que se evaluará.
-4. Si las reglas lo requieren, prepare R1/R2 en la pestaña de referencias.
-5. Abra **Seleccionar grupos**, compruebe los controles marcados y pulse **Ejecutar validación**, debajo de las pestañas.
+1. En **Conexión**, seleccione **Modelo Interno de Levantamiento 1.0** o **CICA**. Para datos XTF, elija Modelo Interno.
+2. Seleccione el ambiente:
+   - **Validaciones del modelo:** pulse **Buscar versión de sentencias…** y seleccione la versión publicada que corresponda.
+   - **Validaciones para cargue a SNC:** espere la carga de su versión disponible; no requiere escoger otra versión manualmente.
+3. Compruebe la versión y la cantidad de sentencias mostradas.
 
-**Reseleccionar el modelo limpia el ambiente y la versión SQL.** Vuelva a elegirlos antes de ejecutar. Los resultados de una ejecución previa conservan su propio contexto hasta que inicie otra ejecución.
+Volver a seleccionar el modelo limpia el ambiente y la versión SQL. Si lo hace, elija nuevamente ambas opciones.
 
-Sin sentencias activas y ejecutables no se habilita la ejecución. El plugin no sustituye una consulta fallida al repositorio por reglas locales.
-
-## 3. Conectar la base de datos
+## 3. Conectar la Base catastral a validar
 
 ### Conexión guardada en QGIS
 
-1. Seleccione **Conexión guardada en QGIS**.
+1. Elija **Conexión guardada en QGIS**.
 2. Pulse **Actualizar** si agregó o cambió conexiones en QGIS.
-3. Elija la conexión. Debajo se muestra su base de datos y servidor.
-4. Pulse **Listar Esquemas** y seleccione **Esquema a validar**.
+3. Seleccione la conexión y compruebe la base de datos indicada.
+4. Pulse **Listar Esquemas** y elija **Esquema a validar**.
 
-Se reutilizan las credenciales guardadas en la conexión o en el gestor de autenticación de QGIS. Si QGIS conecta pero el plugin no, revise cómo está configurada la autenticación y copie el mensaje de error completo.
+### Conexión manual
 
-### Conexión manual a PostgreSQL
+1. Elija **Conexión manual a PostgreSQL**.
+2. Conserve el servidor establecido y complete puerto, base de datos, usuario y contraseña.
+3. Pulse **Listar Esquemas** y seleccione el esquema.
 
-1. Seleccione **Conexión manual a PostgreSQL**.
-2. El servidor preestablecido es **172.19.3.225** y no es editable.
-3. Revise el puerto —por defecto **5432**— e ingrese base de datos, usuario y contraseña de la cuenta de datos.
-4. Pulse **Listar Esquemas** y seleccione el esquema.
+Si la conexión falla, revise los datos de acceso y su conexión de red antes de continuar.
 
-La contraseña de datos no se muestra y se usa durante la sesión. No debe confundirse con el acceso interno al repositorio de sentencias.
+## 4. Cargar archivos CICA
 
-## 4. Referencias R1 y R2
+Use esta función únicamente si validará archivos CICA. Si consultará las tablas de una base CICA existente, continúe con R1/R2.
 
-Estas opciones están en la pestaña **Referencias R1/R2**, junto a **Conexión**.
+1. Seleccione **CICA** y pulse **Cargue archivos CICA…**.
+2. Para CSV, pulse **Cargar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
+3. Si utilizará una geodatabase, pulse **Seleccionar geodatabase…** y elija una carpeta `.gdb` o un ZIP que contenga una sola geodatabase.
+4. Revise los nombres y cantidades informados.
+5. Pulse **Usar archivos temporales** para aplicar la selección.
 
-### A. Archivos R1 y R2 cargados por usuario
+Puede reemplazar un archivo sin volver a seleccionar los demás. Si hay un CSV y una geodatabase para la misma tabla, se utiliza el CSV. Los archivos no seleccionados se consultan en el esquema elegido.
 
-1. Elija **Archivos R1 y R2 cargados por usuario** y pulse **Cargar R1 / R2…**.
-2. Seleccione un Excel R1. Puede seleccionar también un Excel R2; R2 es opcional.
+Los originales no se modifican. Los archivos preparados están disponibles durante la sesión; al cerrar el plugin deberá cargarlos nuevamente. **Cancelar** conserva la selección anterior.
+
+## 5. Seleccionar R1 y R2
+
+Abra **Referencias R1/R2** y elija una opción.
+
+### Archivos R1 y R2 cargados por usuario
+
+1. Pulse **Cargar R1 / R2…**.
+2. Seleccione el Excel R1 y el Excel R2 cuando lo requieran las reglas.
 3. Pulse **Preparar referencias temporales** y después **Aceptar**.
-4. Compruebe los nombres y cantidades de registros preparados.
+4. Compruebe los archivos y cantidades que aparecen en la pestaña.
 
-Se lee la hoja activa del Excel. La primera fila debe contener los encabezados. Se admiten columnas adicionales; no deben quedar encabezados duplicados al normalizarlos.
+El Excel debe tener los encabezados en la primera fila de la hoja activa. Conserve los identificadores como texto para evitar pérdida de ceros iniciales o dígitos.
 
-| Referencia | Columnas requeridas |
+| Archivo | Encabezados requeridos |
 |---|---|
 | R1 | `NUMERO_PREDIAL`, `DESTINO_ECONOMICO`, `AREA_TERRENO`, `AREA_CONSTRUIDA`, `AVALUO`, `VIGENCIA` |
 | R2 | `NUMERO_PREDIAL`, `MATRICULA_INMOBILIARIA`, `AREA_TERRENO_1`, `AREA_CONSTRUIDA_1`, `VIGENCIA` |
 
-Los encabezados se normalizan a minúsculas, sin tildes y con separadores convertidos en guiones bajos. Mantenga los identificadores como **texto desde el archivo original**: Excel puede perder precisión en números largos y no se pueden reconstruir dígitos que ya se perdieron.
+### R1 y R2 Vigente
 
-**Duración de los datos:**
+1. Elija **R1 y R2 Vigente** y pulse **Consultar R1 y R2 Vigente** si necesita actualizar el listado.
+2. Busque y seleccione el municipio por nombre o DIVIPOLA.
+3. Verifique la fecha y las tablas R1/R2 disponibles para ese municipio.
+4. Compruebe que la selección corresponde a la Base catastral a validar.
 
-- Preparar los archivos crea una copia local temporal; todavía no los publica en PostgreSQL.
-- Al validar, se crean tablas **TEMP** en `pg_temp` dentro de la misma conexión que ejecuta las reglas.
-- Las tablas temporales desaparecen al cerrar esa conexión, tanto al terminar como al fallar.
-- La copia local permite repetir una ejecución con el mismo contenido. Se elimina automáticamente al reemplazar la referencia o cerrar la herramienta.
-- El archivo original no se modifica. Este modo evita guardar tablas permanentes, pero los datos sí se envían al servidor durante la validación.
+Si una referencia requerida no está disponible, selecciónela o cárguela antes de ejecutar.
 
-Los TXT de ancho fijo no están implementados. Una regla que requiera R2 dará un error si no se preparó R2.
+## 6. Consultar estadísticas y aplicar filtros
 
-### B. R1 existente en public
+La pestaña **Estadística y filtro avanzado** se habilita cuando estén seleccionadas la Base catastral a validar y la referencia R1.
 
-Elija **R1 existente en public**, pulse **Actualizar listado** y seleccione una tabla accesible en la conexión de datos actual. El listado busca nombres de tablas R1; no supone que cualquier tabla tenga la estructura requerida.
+1. Abra la pestaña y revise la distribución de Urbano, Rural y Centro poblado.
+2. Identifique los datos por color: **verde para la Base catastral a validar** y **azul para R1**.
+3. Revise los predios activos y cancelados de la base, cuando se puedan determinar. En R1 cada NPN completo cuenta una sola vez, aunque esté repetido.
+4. Pulse **Ver estadísticas y seleccionar filtros…** para abrir la ventana de selección.
+5. En **Alcance**, marque una o varias opciones: Urbano (`01`), Rural (`00`) o Centro poblado (`>01`). **Todos** no restringe el alcance.
+6. Opcionalmente, busque y marque manzanas/veredas usando los primeros **17 dígitos del NPN**.
+7. Revise la cantidad y el porcentaje incluidos para cada origen.
+8. Pulse **Aplicar filtro**. **Cancelar** mantiene la selección anterior.
 
-La herramienta consulta la tabla seleccionada: **no la elimina ni sobrescribe**. Esta opción no utiliza el R2 temporal. Las tablas permanentes de versiones anteriores no se borran automáticamente.
+**Seleccionar todo** y **Deseleccionar todo** actúan sobre los códigos visibles según la búsqueda y el alcance. Las marcas de códigos ocultos se conservan; revise el contador antes de aplicar. Sin códigos marcados se incluyen todos los del alcance elegido.
 
-### C. Consulta de R1 por municipio
+El filtro se aplica a la Base catastral a validar y a R1/R2. Al cambiar de origen se limpian los códigos seleccionados y las estadísticas anteriores. Use **Actualizar estadísticas** para volver a consultar los datos.
 
-**Consulta de R1 por municipio (próximamente)** está visible pero deshabilitada. El catálogo centralizado y sus consultas todavía no están desarrollados.
+## 7. Confirmar y ejecutar la validación
 
-## 5. Seleccionar y ejecutar controles
+1. En **Controles a ejecutar**, abra **Seleccionar grupos** y marque los componentes que necesita. Puede usar **Seleccionar todos** o **Desmarcar todos**.
+2. Para SNC, compruebe que esté seleccionado **+ Cargue SNC**.
+3. Pulse **Ejecutar validación**.
+4. Revise el resumen: modelo, ambiente, versión SQL, base, esquema, alcance, manzanas/veredas, archivos CICA, R1/R2 y cantidad de reglas por componente.
+5. Si algo no corresponde, pulse **Cancelar** y ajuste la selección. Los resultados y revisiones anteriores se conservan.
+6. Para iniciar, pulse **Ejecutar validación** dentro de la confirmación y atienda cualquier aviso de revisión pendiente.
+7. Espere a que finalice el proceso y revise los resultados.
 
-**Controles a ejecutar** ocupa una sola línea. **Seleccionar grupos** abre la lista con casillas y conteos; puede seleccionar varios grupos. También dispone de **Seleccionar todos** y **Desmarcar todos**.
+Puede minimizar la ventana y restaurarla desde el icono del plugin. No cierre QGIS durante la validación o la generación de reportes.
 
-- Se ofrecen los grupos que tienen SQL ejecutable en la versión cargada.
-- En SNC solo se ofrece **+ Cargue SNC**; se selecciona cuando se carga su versión válida.
-- Sin grupos seleccionados, durante una ejecución o sin reglas válidas, el botón de ejecución permanece deshabilitado.
-- Durante la ejecución no se permite sustituir las referencias que está utilizando el proceso.
-- **Minimizar (−)** conserva el estado. Al abrir otra vez el plugin desde QGIS se restaura la ventana.
+## 8. Interpretar los resultados
 
-Las reglas se ejecutan tal como están publicadas. Si una falla, se registra un error técnico y se intenta continuar con las siguientes. Un estado automático **Correcta** indica que la consulta se ejecutó correctamente; no significa que devolviera cero hallazgos.
-
-## 6. Interpretar las estadísticas
-
-| Columna | Significado |
+| Columna | Qué significa |
 |---|---|
-| Componente | Grupo al que pertenecen las reglas ejecutadas. |
-| Reglas ejecutadas | Número de reglas procesadas en ese componente. |
-| Hallazgos | Filas de inconsistencia devueltas por las validaciones. No necesariamente son predios distintos. |
-| Excepciones DT | Hallazgos con excepción DT reconocida y observación válida. |
-| Excepciones operador | Marcas justificadas del operador. Se muestran separadas y no descuentan errores. |
-| Errores | **Hallazgos − Excepciones DT**. |
-| Errores técnicos | Fallos de conexión, SQL u otros fallos técnicos; son independientes de las excepciones. |
+| Reglas ejecutadas | Controles procesados por componente. |
+| Hallazgos | Inconsistencias encontradas; no necesariamente corresponden a predios distintos. |
+| Excepciones DT | Excepciones marcadas por DT con observación válida. |
+| Excepciones operador | Propuestas justificadas del operador; no descuentan errores. |
+| Errores | Hallazgos menos excepciones DT. |
+| Errores técnicos | Controles que no pudieron completarse por un problema técnico. |
 
-**Solo las excepciones validadas y marcadas por DT descuentan errores.**
+**Solo las excepciones validadas y marcadas por DT descuentan errores.** Por ejemplo, 100 hallazgos y 10 excepciones DT dejan 90 errores, aunque existan otras marcas del operador.
 
-Ejemplo: 100 hallazgos, 10 excepciones DT y 8 del operador dejan **90 errores**, no 82. Un caso puede conservar ambas marcas y aparecer en los conteos de ambos roles. Solo su marca DT descuenta el hallazgo, una única vez.
+Si aparecen errores técnicos, consulte el mensaje antes de considerar completa la validación. La ausencia de hallazgos en una regla que falló no significa que los datos estén correctos.
 
-La estadística se actualiza al cargar, recargar o descartar revisiones. No borra ni cambia el resultado automático original.
+## 9. Generar y consultar los reportes
 
-## 7. Generar y diligenciar reportes
+1. Al finalizar, pulse **Generar reporte detallado**.
+2. Seleccione la carpeta donde guardará los Excel y espere el mensaje de finalización.
+3. Abra `resumen_control_calidad_<fecha>.xlsx` para consultar el resumen ejecutivo, los metadatos de la validación, el reporte general, los hallazgos por predio y los errores técnicos. La versión del plugin aparece únicamente en este archivo.
+4. Abra `detalle_<componente>_<fecha>.xlsx` para revisar los hallazgos de cada componente.
+5. En **Detalle Validación**, compruebe los metadatos superiores y pulse un vínculo azul, por ejemplo **↪ Ir a 1_12**, para abrir la regla en el mismo archivo.
+6. Revise las columnas y valores devueltos por la regla. El NPN se presenta como **Numero_Predial_Nacional**, sin duplicar sus alias.
+7. Consulte **Reglas & Componente** si necesita ver las reglas, hallazgos, descripciones y mensajes técnicos del componente.
 
-Pulse **Generar reporte detallado** y elija una carpeta. Se genera un archivo ejecutivo y archivos `detalle_<componente>_….xlsx` para los componentes con hallazgos. El nombre exacto incluye fecha y hora.
+Las hojas de reglas conservan sus identificadores y se ordenan numéricamente. Solo se generan detalles para los componentes con hallazgos.
 
-### ¿Dónde editar?
+Los reportes están protegidos. Puede ajustar anchos de columna y utilizar los filtros existentes. La primera columna y los encabezados permanecen fijos. No cambie nombres de hojas, encabezados ni datos automáticos; conserve el archivo completo para recuperar revisiones.
 
-En un **detalle por componente**, abra la hoja de la regla que desea revisar y diligencie los campos por hallazgo:
+## 10. Diligenciar excepciones en Excel
 
-| Campo | Uso |
+1. Abra el detalle del componente y entre en la hoja de la regla.
+2. Para una excepción validada por DT, marque **Excepción DT = Sí** y diligencie **Observación DT**.
+3. Para una propuesta del operador, marque **Excepción operador = Sí** y diligencie **Observación operador**.
+4. Para retirar una marca, cambie su valor a **No**.
+5. Guarde el archivo Excel.
+
+Las marcas usan el desplegable **Sí / No**: Sí se muestra en verde tenue y No en rojo tenue. Puede escribir la observación antes o después de marcar la excepción, pero una excepción sin justificación válida no se incorporará al cargar el archivo. Los espacios no cuentan como justificación.
+
+Las marcas del operador permanecen visibles cuando DT aprueba el caso. Solo DT descuenta errores. La hoja **Revisión** está oculta y se calcula desde los detalles; no necesita editarla ni mostrarla.
+
+## 11. Cargar o recargar detalles revisados
+
+1. Si ajustaron la Base catastral, ejecute nuevamente las validaciones con la configuración correspondiente.
+2. En **Gestión de Excepciones**, pulse **Cargar** en la fila del componente que va a revisar.
+3. Seleccione su archivo `detalle_<componente>_….xlsx`. No seleccione el resumen ejecutivo ni un formato homologado.
+4. Lea el mensaje de carga: excepciones incorporadas, descartadas y casos sin correspondencia o con conflicto.
+5. Repita la carga para cada componente revisado y compruebe las estadísticas actualizadas.
+6. Si vuelve a editar un detalle, guárdelo y pulse **Recargar** en su fila.
+7. Antes de generar otra entrega, recargue todos los archivos que hayan cambiado.
+
+Las revisiones solo se recuperan para el mismo caso sin cambios relevantes. Un caso nuevo, modificado o ambiguo queda pendiente. Una excepción sin observación no se incorpora como excepción. La carga no sobrescribe silenciosamente una revisión en conflicto.
+
+Puede editar y volver a cargar el Excel; no hay que liberar el archivo desde el plugin. Si figura como no disponible, guárdelo en una ubicación accesible y selecciónelo otra vez con **Recargar**.
+
+Conserve los Excel revisados en su carpeta de trabajo. Después de cerrar el plugin o iniciar una nueva ejecución, cargue nuevamente los detalles sobre los resultados que corresponda. No se guardan automáticamente las revisiones en una base central.
+
+## 12. Descargar el formato homologado
+
+1. Ejecute **Validaciones del modelo** con una versión V2 de CICA o Modelo Interno.
+2. Al finalizar, pulse el enlace de descarga del formato correspondiente.
+3. Seleccione la carpeta y guarde el Excel:
+   - Modelo Interno V2: **fo_gct_pc01_07_v2.xlsx**.
+   - CICA V2: **cons_log_cica_v2.xlsx**.
+
+El formato se entrega para diligenciarlo; no se completa automáticamente. El enlace no está disponible para SNC, V3 o una ejecución en la que todas las reglas terminaron con error técnico.
+
+## 13. Resolver situaciones frecuentes
+
+| Situación | Qué hacer |
 |---|---|
-| Excepción DT | Dominio desplegable **Sí / No**. DT debe validar el caso antes de marcar Sí. |
-| Observación DT | Justificación de DT. |
-| Excepción operador | Dominio **Sí / No** para la propuesta del operador. |
-| Observación operador | Justificación o comentario del operador. |
-
-Las observaciones se pueden escribir antes o después de la marca. No están condicionadas por un orden de edición. Para **recuperar una excepción como válida** debe existir una observación con texto: vacíos, espacios o caracteres invisibles no bastan.
-
-- **No**: relleno rojo tenue (`#FFC7CE`) y texto rojo oscuro (`#9C0006`).
-- **Sí**: relleno verde tenue (`#C6EFCE`) y texto verde oscuro (`#006100`).
-- **DT = Sí**: las marcas y observaciones del operador permanecen visibles y editables. Solo la excepción validada por DT descuenta errores.
-
-Dentro de cada detalle, la hoja **Revisión** refleja los valores por clave y sirve para recuperarlos. No se editan sus campos: se alimentan desde las hojas de reglas del mismo archivo. Esta hoja interna no es un archivo de revisión consolidada separado. El reporte ejecutivo contiene únicamente estadísticas y no se usa para cargar excepciones.
-
-Conserve las claves, las columnas de datos originales y las hojas ocultas. No copie únicamente una hoja suelta a otro libro si luego desea recuperar el seguimiento. La protección evita ediciones accidentales; no es una barrera de seguridad.
-
-Las listas aparecen al seleccionar una **celda de excepción**, no su encabezado. Los reportes antiguos no se actualizan al instalar un plugin nuevo: deben regenerarse para incorporar nuevos dominios y formatos.
-
-## 8. Recuperar y gestionar detalles
-
-1. Reciba el Excel diligenciado y la información fuente que haya ajustado el operador.
-2. Ejecute las nuevas validaciones sobre el esquema correspondiente.
-3. En **Gestión de Excepciones**, use **Cargar** en la fila del componente correspondiente.
-4. Seleccione su archivo `.xlsx` y revise el resumen de importación.
-5. Repita con los demás componentes. Sus revisiones se acumulan en la misma ejecución.
-
-| Estado o acción | Significado |
-|---|---|
-| No cargado | No hay un archivo asociado a ese detalle. |
-| Cargado | Se leyó el archivo y se encontraron casos del detalle. No significa que todas las filas sean excepciones. |
-| Cargado con observaciones | Hay advertencias, casos no coincidentes, ambiguos o conflictos. Consulte el resumen. |
-| Sin coincidencias | El archivo se leyó, pero no se encontraron casos coincidentes. |
-| Error de carga | No pudo cargarse. Una carga anterior válida se conserva. |
-| Recargar | Reemplaza explícitamente el seguimiento importado de ese mismo detalle. |
-
-Sitúe el puntero sobre el archivo o estado para ver su ruta y mensajes completos. Los archivos no quedan abiertos después de leerse: puede editarlos en Excel, guardarlos y **Recargar**. No es necesario cerrar ni liberar el archivo desde el plugin. Para quitar una marca, cámbiela a No en el Excel, guarde y recargue el mismo detalle. Se conservan las ediciones posteriores que no sea seguro retirar.
-
-La gestión se hace exclusivamente por detalle. No hay botones para guardar o recuperar una revisión consolidada. Recargue cada archivo que haya cambiado; el seguimiento de los otros componentes se conserva.
-
-### ¿Qué significa el resumen de recuperación?
-
-El mensaje separa **DT**, **Operador** e **Incidencias de carga**.
-
-| Contador | Interpretación |
-|---|---|
-| DT — Incorporadas | Excepciones DT con observación válida que se incorporaron al caso actual. Incluye las propuestas del operador aprobadas por DT. |
-| DT — Descartadas sin observación | Marcas DT en Sí sin texto válido en su observación; no se aceptan como excepción. |
-| Operador — Incorporadas | Marcas justificadas del operador incorporadas, incluso si DT también está en Sí. No descuentan errores. |
-| Operador — Descartadas sin observación | Marcas del operador en Sí sin texto válido en su observación. |
-| Operador — Aprobadas por DT | Casos incorporados que llegan con ambas marcas en Sí y ambas observaciones válidas. Son un subconjunto de las incorporadas por DT; no son excepciones adicionales. El plugin reconoce lo diligenciado, no verifica la identidad del evaluador ni aprueba casos por sí mismo. |
-| Sin coincidencia | La clave del archivo no aparece en la ejecución actual. Puede cambiar por datos, SQL, contexto o referencias; no prueba por sí solo que el error esté corregido. |
-| Coincidencias ambiguas | No existe una coincidencia única y segura; no se asigna automáticamente. |
-| Conflictos | Se conservó seguimiento actual diferente, sin sobrescribirlo. |
-| Registros no recuperables | Total de filas con identidad insuficiente o que no superaron la verificación de datos. |
-| Por identidad insuficiente | Desglose del total anterior: no hay identificación recuperable suficiente. |
-| Por datos o identidad alterados | Desglose del total anterior: los datos, la clave o las referencias de las hojas no superaron la verificación. |
-
-Las cifras describen la carga actual, no se acumulan cada vez que recarga el
-mismo archivo. Las incorporadas cuentan solo excepciones efectivamente
-transferidas, no observaciones sin marca ni casos rechazados por conflicto.
-No sume todas las líneas: las aprobadas por DT están incluidas en ambos roles y los dos últimos contadores son
-desgloses. La estadística de errores se calcula por separado y descuenta solo DT.
-
-### ¿Cuándo se recupera una excepción?
-
-La columna `clave_caso` identifica cada hallazgo, no la regla completa. Combina contexto de origen, modelo y ambiente, componente y regla, huella del SQL e identificadores y valores devueltos por el caso. Puede usar NPN, documento, identificador del objeto o matrícula/FMI, según el resultado. No depende del número de fila ni del archivo.
-
-Solo se recupera el seguimiento de una coincidencia única que siga igual. Si cambia el SQL, el caso o la referencia relevante, puede cambiar su clave. No se hacen cruces aproximados por NPN o por orden. Los casos duplicados o sin identificación suficiente no se asignan automáticamente.
-
-Si la regla no devuelve los datos que determinan la inconsistencia, el reporte no puede detectar cambios en esos datos no expuestos. La regla 1.12 por matrícula, por ejemplo, identifica el grupo con matrícula y conteo; no entrega la lista de predios integrantes.
-
-Una excepción sin observación válida se descarta como excepción y se informa. El seguimiento actual no se sobrescribe silenciosamente en un conflicto. Si DT es Sí con justificación, se conserva el seguimiento del operador y permanece visible en el detalle. No se borra al recuperar ni al generar otra entrega.
-
-**Un hallazgo ausente no queda automáticamente certificado como corregido.** Compruebe que se ejecutó correctamente la misma validación, con el mismo alcance de datos. Los archivos anteriores sirven como historial.
-
-## 9. Conservar los detalles y repetir la validación
-
-Los **detalles por componente son la fuente principal del seguimiento**. Guarde
-las marcas y observaciones directamente en las hojas de reglas de cada Excel.
-Después de editarlos, pulse **Recargar** en el componente correspondiente para
-que el plugin lea los cambios y recalcule las estadísticas.
-
-No se generan archivos adicionales de revisión consolidada ni se sincronizan
-archivos automáticamente. La asociación de los detalles y la estadística viven
-en memoria durante la sesión. Al cerrar o iniciar otra ejecución con revisión
-cargada, puede cancelar o descartar ese estado de sesión; los Excel originales
-no se modifican. No se ofrece guardar un consolidado. Minimizar conserva el
-estado de la ventana.
-
-Para otra ejecución, cargue los detalles revisados sobre los resultados nuevos.
-Conserve por separado los reportes de cada entrega para mantener el historial.
-No hay una base central automática de excepciones. **Generar reporte detallado**
-produce una nueva entrega con los datos y seguimiento actuales de la ejecución;
-antes de generarla, recargue los archivos que hayan sido editados.
-
-## 10. Problemas frecuentes
-
-| Situación | Qué revisar |
-|---|---|
-| No aparece el complemento | Busque su nombre completo, active la casilla y compruebe el resultado de Instalar desde ZIP. Reinicie QGIS tras actualizar. |
-| `No module named openpyxl` o `psycopg2` | Instale la dependencia en el Python de QGIS; consulte al administrador de su instalación. |
-| `no password supplied` | Distinga si falla el repositorio de sentencias o la conexión de datos. Revise las credenciales de esa conexión y su autenticación en QGIS. |
-| `connection refused` o tiempo agotado | Revise servidor, puerto, disponibilidad y acceso de red. No es un fallo que se resuelva cambiando las excepciones. |
-| Ejecutar validación está deshabilitado | Seleccione modelo y ambiente, cargue reglas activas y marque al menos un grupo. |
-| SNC no carga automáticamente | Debe existir exactamente una versión publicada con reglas activas para el modelo. Cero o varias versiones bloquean la ejecución. |
-| R1/R2 temporal no carga | Revise los encabezados, el archivo Excel y el permiso TEMP de la cuenta de datos. |
-| Una regla exige R1/R2 | Prepare la referencia correspondiente o seleccione el R1 de public; no se sustituye por otra tabla automáticamente. |
-| No aparece Sí/No | Seleccione una celda en la hoja de la regla. Use un reporte generado con una versión reciente, no solo un plugin actualizado. |
-| Cero revisiones incorporadas | Consulte los conteos: sin correspondencia, ambiguas, datos alterados o identidad insuficiente. Compruebe que eligió el componente, versión y esquema correctos. |
-| No se puede abrir la ayuda | Reinstale el ZIP completo para recuperar la guía local incluida. La ayuda interna no requiere Internet. |
-
-Si necesita soporte, conserve versión de QGIS, versión del plugin, modelo, ambiente, versión SQL, componente, código de regla y mensaje completo. No incluya contraseñas. Si comparte un Excel para diagnóstico, use datos autorizados para compartir.
-
-## 11. Administración del repositorio de sentencias
-
-Esta sección corresponde al administrador del repositorio, no al operador que diligencia reportes.
-
-- Las reglas individuales usan `activa`: solo se cargan las activas.
-- Las tablas de versiones en `public` usan `descripcion_version` y `version_publicada`. El plugin lee ambos valores del primer registro de cada versión según `orden NULLS LAST`, `componente` y `codigo_regla`, incluyendo reglas inactivas.
-- `version_publicada = FALSE` retira la versión del selector sin borrar las reglas. Mantenga estables el orden y la fila que contiene los metadatos.
-- Una versión publicada debe tener reglas activas. Retirarla no revoca automáticamente las sentencias ya cargadas en otras sesiones.
-- SNC consulta `public.reglas_cargue_snc_cica` o `public.reglas_cargue_snc_xtf`, según el modelo. Debe mantener una única versión publicada con reglas activas.
-- Las referencias temporales necesitan marcadores como `{esquema_r1}.{tabla_r1}` y su equivalente R2. También se admiten las variantes con `{punto}` y sin separador. Un nombre permanente escrito literalmente en el SQL no se convierte automáticamente en una referencia temporal.
-- Publique únicamente SQL revisado y compatible con el modelo, el esquema y los permisos de las cuentas que validan.
-
-El script `sql/agregar_metadatos_version.sql` incluido en el paquete prepara las columnas de metadatos en las tablas existentes. No se ejecuta automáticamente desde la ayuda ni al instalar el plugin.
-
-## Consultar esta guía dentro del plugin
-
-El botón **Ayuda** abre la pestaña principal **Ayuda** de la misma ventana.
-La guía se lee del paquete instalado y no necesita navegador ni conexión a
-Internet. Use el índice o el buscador para localizar una sección y vuelva a
-**Validación** para continuar trabajando.
-
-## Mejoras de presentación y seguimiento en 2.0.0
-
-- La pantalla muestra indicadores de hallazgos, excepciones DT y errores pendientes, además de una fila TOTAL por ejecución. Las excepciones del operador se muestran por separado; solo las de DT descuentan errores.
-- Cada detalle muestra su archivo, última carga (hora de Colombia) y estado. Las incidencias de la última carga pueden desplegarse sin ocupar permanentemente el área de resultados.
-- Si un detalle cargado cambia o deja de estar disponible, aparece un aviso y se bloquea la generación de reportes hasta volver a cargarlo. Se comprueba periódicamente mientras la ventana está visible y se verifica su contenido antes de exportar. Solo se detectan cambios guardados en el archivo; guarde primero en Excel.
-- Los campos de observación se ensanchan según el contenido hasta el límite de Excel (255 caracteres de ancho); los textos extensos se ajustan en varias líneas. Las observaciones que comienzan con = se conservan como texto.
-- Antes de ejecutar, se comprueba que existan las referencias R1/R2 requeridas por las sentencias seleccionadas.
-- Los reportes incluyen identificador y fecha de ejecución, versión del plugin, modelo, ambiente, versión SQL, base y esquema. Estos datos de trazabilidad no modifican la clave estable de cada caso ni incluyen contraseñas.
-- Las marcas y observaciones del operador se conservan cuando DT aprueba una excepción; ambas permanecen visibles en el detalle.
-
-### Corrección de generación de reportes (2.0.1)
-
-Las operaciones intensivas de preparación y guardado de Excel permiten que la ventana continúe atendiendo eventos. Se eliminaron recorridos repetidos de hojas completas al vincular las revisiones. Si ocurre un error, se oculta el progreso, se restablecen los controles y el diagnóstico queda disponible en Incidencias. Los resultados y revisiones permanecen en la sesión. Si un archivo cargado figura como no disponible, use Recargar y seleccione nuevamente el Excel guardado antes de generar una entrega.
-
-### Presentación (2.0.2)
-
-La ventana permite maximizar y restaurar su tamaño. El icono Revisión catastral identifica el plugin. Se ajustaron las reglas de formato condicional de las excepciones: Sí en verde tenue y No en rojo tenue, manteniendo independientes las marcas de DT y operador. Los cambios de formato se incorporan en los reportes nuevos.
-
-## Cargue archivos CICA temporales
-
-En Conexión, seleccione CICA y abra **Cargue archivos CICA**. Cargue cada CSV por separado y pulse **Usar archivos temporales**. No es obligatorio seleccionar los siete archivos juntos. Un archivo incorrecto no reemplaza la copia anterior; Cancelar conserva los insumos que ya estaban aplicados.
-
-Los siete destinos son cica_contacto, cica_predio_derecho, cica_predio, cica_propietario, cica_justificacion, cica_seguimiento_control y cica_unidad_construccion. Se aceptan separadores coma, punto y coma, tabulación o barra vertical, y codificación UTF-8 o Windows-1252. Los encabezados se normalizan a minúsculas sin tildes, con guion bajo. No se interpretan como números los identificadores del CSV.
-
-La selección prepara una copia temporal local. Al ejecutar, las tablas seleccionadas se crean en **pg_temp de la misma conexión de validación**, con permiso TEMP sobre la base. Sus nombres se redirigen en las sentencias al destino temporal. Las tablas no seleccionadas se siguen consultando en el esquema elegido.
-
-Si ya existe una tabla de igual nombre en el esquema seleccionado, la temporal utiliza sus tipos y restricciones. Las celdas vacías se cargan como NULL; datos incompatibles o columnas faltantes obligatorias producen un error de carga. Si no existe esa tabla, se crean columnas TEXT: las reglas que necesiten tipos numéricos o fechas deben convertirlos explícitamente. No se copian los valores por defecto que podrían utilizar secuencias persistentes.
-
-No se escriben filas en public ni en el esquema de origen. Las tablas temporales desaparecen al cerrar la conexión al terminar la ejecución. Las copias locales permanecen disponibles para repetir la validación durante la sesión del plugin y se limpian al cerrar la ventana.
-
-## Descargar formatos homologados V2
-
-Después de ejecutar una validación de **Validaciones del modelo**, el enlace de descarga muestra el formato correspondiente a **CICA V2** o **Modelo interno V2**. V2 corresponde a la versión de reglas seleccionada (por ejemplo, V2_29_07_2024), no al número de versión del plugin. Se prefiere la versión explícita de la tabla del repositorio, si está disponible. El enlace no se habilita en V3, en cargue SNC ni si todas las reglas terminaron con error técnico.
-
-Elija dónde guardar el Excel desde el enlace. Los dos formatos son los archivos aportados por el usuario y se entregan sin modificarlos ni diligenciarlos automáticamente; funcionan sin descargar desde un servidor externo. Cambiar la selección de modelo, ambiente o versión requiere una nueva ejecución para habilitar el formato correspondiente.
-
-### Geodatabase temporal
-
-**Cargue archivos CICA** permite seleccionar una carpeta `.gdb` o un ZIP con una sola geodatabase. No hay un campo de nuevo esquema de destino. La lectura es de solo consulta: se preparan copias locales de las capas y tablas, con sus atributos, identificadores, geometrías y código EPSG. No se transforman las coordenadas. Si una capa espacial no permite identificar su EPSG, se informa y no se sustituye el archivo anterior.
-
-Los nombres de tablas y columnas se normalizan a minúsculas, sin tildes y con guion bajo. La lista de capas y sus nombres de consulta está en el texto de ayuda del campo de geodatabase. Se conserva el nombre normalizado del campo geométrico original (por ejemplo, shape); las reglas deben usar ese nombre. Si hay un CSV seleccionado para la misma tabla, prevalece el CSV, utilizando los tipos definidos por la geodatabase.
-
-Al validar, las copias se instalan como tablas temporales en la conexión de esa ejecución. Se eliminan al cerrarla, incluso ante un error. Las copias locales sirven para repetir la validación durante la sesión y se limpian al cerrar la herramienta. Cancelar la selección conserva la geodatabase anterior; los archivos originales nunca se modifican. Se requiere PostGIS en la base que ejecuta las consultas espaciales.
-
-### Sentencias y fuentes temporales
-
-Las reglas deben consultar las tablas por el parámetro `{esquema}` (o por el esquema a validar seleccionado). La herramienta redirige únicamente las tablas seleccionadas a sus copias temporales. Una referencia fija a otro esquema no se sustituye automáticamente. Una vista materializada conserva sus propios datos y no se recalcula contra estas fuentes: su definición debe adaptarse como consulta o cálculo temporal para validar los archivos nuevos. El esquema a validar de la conexión identifica las consultas existentes; no es un nuevo destino de carga.
-
-## Administración externa del repositorio de reglas
-
-La carga de sentencias SQL corresponde a los administradores y se realiza con el **Administrador de Reglas SQL**, un complemento de QGIS independiente. Su plantilla contiene todos los campos definidos de una regla; permite exportar los registros de la tabla, revisar el Excel y confirmar la incorporación de registros nuevos o los reemplazos por versión, componente y orden. Se utiliza una conexión de QGIS o la cuenta indicada por el administrador en ese complemento; el validador no realiza esta carga.
-
-El plugin consulta las versiones publicadas y ejecuta las validaciones. No incorpora un cargador administrativo de Excel. La retirada de la pestaña Administrar reglas queda aplicada al código para el próximo paquete del complemento; el ZIP 2.2.0 publicado anteriormente todavía contiene esa pestaña.
-
-Una vez incorporadas las reglas con el programa externo, vuelva a consultar la versión de sentencias en el validador. Consulte el README del complemento Administrador de Reglas SQL para la instalación y los permisos del repositorio.
-
-
-## Filtro avanzado: pestaña y estadísticas de R1
-
-Abra **Estadística y filtro avanzado**, después de **Referencias R1/R2**. Se habilita al elegir la base catastral a validar y cargar R1 temporal o seleccionar un municipio con R1 vigente. La pestaña muestra solo estadísticas de R1: cada NPN completo cuenta una vez, sin sumar duplicados; las filas sin NPN se informan por separado y se excluyen del conteo.
-
-Combine Urbano, Rural y Centro poblado mediante casillas. Todos no restringe el alcance. Opcionalmente marque códigos NPN de manzana/vereda de 17 dígitos; sin códigos marcados se incluyen todos los del alcance elegido. Seleccionar todo y Deseleccionar todo actúan sobre códigos visibles. Use **Aplicar filtro** antes de ejecutar o **Restablecer** para recuperar la selección aplicada. El filtro también se aplica a la base catastral a validar y a R2, aunque sus estadísticas no se muestran aquí.
-
-
-### Resumen y ventana de selección
-
-En **Estadística y filtro avanzado** se muestran las estadísticas generales de Urbano, Rural y Centro poblado para la base catastral a validar y para R1, en columnas separadas. La base catastral a validar cuenta registros y R1 cuenta NPN únicos, sin sumar duplicados. Pulse **Ver estadísticas y seleccionar filtros…** para abrir la ventana ampliable de estadísticas detalladas y selección de filtros. **Aplicar filtro** guarda la selección; **Cancelar** mantiene la selección anterior. La pestaña continúa requiriendo la base catastral a validar y R1 seleccionados.
-
-
-### Nombres de los formatos descargados
-
-El formato de Modelo Interno V2 se guarda con el nombre sugerido **fo_gct_pc01_07_v2.xlsx**. El formato de CICA V2 se guarda como **cons_log_cica_v2.xlsx**. El contenido de los formatos homologados se conserva.
-
-
-### Identificador y orden de hojas
-
-Cada reporte utiliza la columna **Numero_Predial_Nacional**, sin duplicarla como Predio o numero_predial_nacional. Se conservan los ceros iniciales. Las hojas de reglas se nombran con el identificador definido en las sentencias (1_1, 1_2, 1_10, …, 1_52) y se ordenan numéricamente, sin renumerar los controles.
-
-
-### Protección y navegación del Excel
-
-Los reportes se entregan protegidos, conservando editables los campos habilitados de excepciones y observaciones. Se permite ajustar el ancho de columnas y utilizar los filtros existentes; las filas, celdas automáticas y la estructura del libro permanecen protegidas. La primera columna queda inmovilizada en todas las hojas visibles, junto con los encabezados: B5 en las hojas de reglas y B2 en las hojas de resumen.
-
-
-### Hojas automáticas y contexto
-
-La hoja **Revisión** permanece oculta: consolida automáticamente las excepciones diligenciadas en las hojas de reglas y permite recuperar el seguimiento. Las excepciones y observaciones se editan en cada detalle. Los reportes no muestran el campo **Identificador de entrega** ni incluyen hojas **Contexto** o **Contexto de validación**. La ubicación territorial se conserva en el encabezado de cada hoja de regla.
-
-
-### Reglas & Componente
-
-Esta hoja presenta encabezados azules, filas alternadas y descripciones con texto ajustado. Hallazgos destaca las cantidades positivas y los ceros; Detalle técnico resalta los mensajes de error cuando existen. Incluye filtros, primera columna inmovilizada y protección, permitiendo ajustar anchos de columna.
-
-
-### Vínculos a las reglas
-
-En **Detalle Validación**, la columna **Hoja de detalle** muestra un vínculo azul subrayado, por ejemplo **↪ Ir a 1_12**. Al pulsarlo se abre la hoja de esa regla dentro del mismo archivo. El mensaje al pasar el cursor identifica el destino como vínculo interno.
-
-
-### Metadatos en Detalle Validación
-
-La hoja **Detalle Validación** sustituye Detalle de errores. Su parte superior muestra el componente, fecha de ejecución, modelo, ambiente, versión SQL, alcance, códigos de manzana/vereda seleccionados, base de datos, esquema y ubicación territorial disponibles. No se crea una hoja de contexto adicional ni se incluye Identificador de entrega. La tabla de reglas y sus vínculos internos aparece debajo; el filtro se aplica solo a esa tabla y se mantienen fijos los encabezados y la primera columna.
-
-
-La **versión del plugin** se informa únicamente en el archivo **resumen_control_calidad**, al pie de la hoja **Resumen ejecutivo**. No aparece entre los metadatos de Detalle Validación.
-
-
-### Vista compacta de cada regla
-
-Las hojas numeradas de reglas muestran el título, descripción y ubicación territorial. Sus únicas columnas visibles son **Resultado de la condición**, **Excepción DT**, **Observación DT**, **Excepción operador** y **Observación operador**. Los identificadores y atributos del caso permanecen en metadatos ocultos para recuperar revisiones. Las consultas sin columna cond_ muestran **Incumple** por cada hallazgo; varias condiciones se reúnen en la misma celda. La versión del plugin aparece solo al pie de Resumen ejecutivo.
+| No aparecen versiones de reglas | Compruebe el acceso al repositorio y consulte al responsable de publicar las reglas. |
+| Ejecutar validación está deshabilitado | Seleccione ambiente, versión con reglas disponibles y al menos un grupo de controles. |
+| Estadística y filtro avanzado está deshabilitada | Seleccione la Base catastral a validar y cargue R1, o seleccione un municipio con R1 vigente. |
+| No aparecen esquemas | Revise la conexión y pulse Listar Esquemas. |
+| Un archivo CICA o R1/R2 no se acepta | Revise que eligió el tipo correcto y que los encabezados y datos cumplen lo indicado en el mensaje. |
+| Aparece un error de permisos | Solicite al responsable acceso de consulta y permiso para usar datos temporales en la base. |
+| Una estadística figura como no disponible | Actualice los datos y consulte el mensaje del origen; no la interprete como cero. |
+| No se reconocen excepciones | Compruebe el componente, los valores Sí/No, las observaciones y que el caso corresponda a la ejecución actual. |
+| Un Excel editado no cambia las cifras | Guárdelo y pulse Recargar en el componente correspondiente. |
+| No se puede generar el reporte | Revise los avisos, cierre archivos de salida abiertos en Excel y recargue los detalles modificados o no disponibles. |
+| La generación termina con error | Consulte Incidencias y entregue el mensaje completo al responsable de soporte. |

@@ -5,6 +5,7 @@ import shutil
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from html import escape
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ from .territorial_scope import SCOPES, install_scope, resolve_scope
 from .territorial_filter import TerritorialFilterDialog, TerritorialOverview
 from .territorial_statistics import read_filter_statistics
 from .templates import validation_format, DOWNLOAD_NAMES
-from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value, rule_sheet_label, rule_sort_key, CONDITION_HEADER, condition_text
+from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value, rule_sheet_label, rule_sort_key, sql_report_fields
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
 from .current_references import read_catalog, needed_references, prepare_current_references
@@ -1412,6 +1413,65 @@ class ControlCalidadDialog(QDialog):
         except Exception as error:
             QMessageBox.critical(self, "No fue posible conectar", str(error))
 
+    def validation_confirmation_metadata(self, params, schema, rules, current_reference, general_report_path=None):
+        """Only display selected validation inputs, never credentials or SQL text."""
+        rows = [
+            ('Modelo', self.model.currentText()), ('Ambiente', self.environment.currentText()),
+            ('Versión SQL', (self.selected_sql_version or {}).get('codigo', 'No seleccionada')),
+            ('Base catastral a validar', params.get('dbname', '') or 'No disponible'),
+            ('Esquema', schema), ('Alcance territorial', SCOPES[self.scope_selection]),
+            ('Manzanas / veredas (NPN 1–17)', ', '.join(self.scope_prefixes) or 'Todas las del alcance seleccionado'),
+        ]
+        if self.model.currentText() == 'CICA':
+            if self.cica_gdb:
+                rows.append(('Geodatabase CICA', self.cica_gdb.filename))
+            if self.cica_references:
+                rows.append(('Archivos CICA', '\n'.join(table + ': ' + reference.filename for table, reference in sorted(self.cica_references.items()))))
+        rows.append(('Origen de R1/R2', self.reference_mode.currentText()))
+        required = needed_references(rules, general_report_path)
+        for kind in ('R1', 'R2'):
+            if self.reference_mode.currentIndex() == 0:
+                reference = self.temporary_references.get(kind)
+                value = (reference.filename + f' · {reference.row_count:,} registros cargados') if reference else 'No cargado'
+            else:
+                table = current_reference.get('tables', {}).get(kind) if current_reference else None
+                value = 'r1_r2.' + table if table else 'No seleccionado o no disponible'
+            rows.append((kind, value + (' · requerido' if kind in required else ' · no requerido por las reglas seleccionadas')))
+        if current_reference:
+            rows.extend([('Municipio de R1/R2', current_reference['divipola'] + ' · ' + current_reference.get('municipality', '')),
+                         ('Fecha R1/R2 vigente', current_reference['date'])])
+        counts = defaultdict(int)
+        for component, _name, _sql, _description in rules:
+            counts[component] += 1
+        rows.append(('Controles a ejecutar', '\n'.join(f'{name}: {count} reglas' for name, count in sorted(counts.items(), key=lambda item: model_component_sort_key(item[0])))))
+        rows.append(('Total de reglas', str(len(rules))))
+        rows.append(('Reporte general', 'Sí' if general_report_path else 'No disponible en la versión seleccionada'))
+        return rows
+
+    def confirm_validation(self, params, schema, rules, current_reference, general_report_path=None):
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Confirmar validación')
+        dialog.resize(760, 650)
+        layout = QVBoxLayout(dialog)
+        title = QLabel('Revise los metadatos antes de ejecutar la validación')
+        title.setWordWrap(True)
+        title.setStyleSheet('font-size: 15px; font-weight: 700; color: #0468A3;')
+        layout.addWidget(title)
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(False); browser.setOpenLinks(False)
+        rows = self.validation_confirmation_metadata(params, schema, rules, current_reference, general_report_path)
+        html = '<table width="100%" cellspacing="0" cellpadding="8">' + ''.join(
+            '<tr><td width="32%" bgcolor="#EAF3F8"><b>' + escape(str(name)) + '</b></td><td>' +
+            escape(str(value)).replace('\n', '<br>') + '</td></tr>' for name, value in rows) + '</table>'
+        browser.setHtml(html); layout.addWidget(browser, 1)
+        buttons = QHBoxLayout(); buttons.addStretch()
+        cancel = QPushButton('Cancelar'); cancel.clicked.connect(dialog.reject)
+        execute = QPushButton('Ejecutar validación'); execute.clicked.connect(dialog.accept)
+        execute.setStyleSheet('background: #0468A3; color: white; padding: 8px 14px; font-weight: 700;')
+        buttons.addWidget(cancel); buttons.addWidget(execute); layout.addLayout(buttons)
+        cancel.setDefault(True); cancel.setFocus()
+        return dialog.exec_() == QDialog.Accepted
+
     def run_rules(self):
         scope = self.scope_selection
         if scope not in SCOPES:
@@ -1453,8 +1513,6 @@ class ControlCalidadDialog(QDialog):
         if missing:
             QMessageBox.warning(self, 'Faltan referencias', 'Prepare o seleccione antes de ejecutar: ' + ', '.join(missing))
             return
-        if not self.commit_review_editor() or not self.confirm_review_changes():
-            return
         current_reference = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
         repository_params = self.repository_connection_params() if current_reference else None
         if current_reference and repository_params is None:
@@ -1464,6 +1522,10 @@ class ControlCalidadDialog(QDialog):
             if len(schema_codes) == 1 and current_reference['divipola'] not in schema_codes:
                 QMessageBox.warning(self, 'Municipio diferente', 'El DIVIPOLA seleccionado para R1 y R2 Vigente no coincide con el código del esquema a validar.')
                 return
+        if not self.confirm_validation(params, schema, rules, current_reference, general_report_path):
+            return
+        if not self.commit_review_editor() or not self.confirm_review_changes():
+            return
         metadata = ConfigParser()
         metadata.read(PLUGIN_DIR / 'metadata.txt', encoding='utf-8')
         self.pending_format = validation_format(self.model.currentText(), self.environment.currentText(), self.selected_sql_version)
@@ -1899,14 +1961,20 @@ class ControlCalidadDialog(QDialog):
         path = str(Path(directory) / f"resumen_control_calidad_{stamp}.xlsx")
         book = Workbook()
         summary = book.active
-        summary.title = "Resumen ejecutivo"
-        summary.append(STAT_HEADERS)
+        validation_metadata = dict(self.execution_info)
+        validation_metadata.setdefault('Modelo', self.review_context.get('model', self.model.currentText()))
+        validation_metadata.setdefault('Ambiente', self.review_context.get('environment', self.environment.currentText()))
+        validation_metadata.setdefault('Esquema', self.review_context.get('schema', ''))
+        summary_header_row = prepare_validation_index(
+            summary, validation_metadata, self.validation_context, title='Resumen ejecutivo', headers=STAT_HEADERS,
+            widths={'A': 30, 'B': 20, 'C': 18, 'D': 20, 'E': 23, 'F': 18, 'G': 20})
         groups, totals = review_statistics(self.results, self.review_cases)
         for result in self.results:
             advance_report("Organizando resumen ejecutivo…")
         for category, values in self.ordered_result_groups(groups):
             summary.append(statistics_row(category, values))
         summary.append(statistics_row('TOTAL', totals))
+        summary.auto_filter.ref = f'A{summary_header_row}:G{summary.max_row}'
         general = book.create_sheet("Reporte general")
         general.append(["ID", "Ítem evaluado", "Cantidad", "Reglas asociadas"])
         if self.general_report_rows:
@@ -1944,7 +2012,7 @@ class ControlCalidadDialog(QDialog):
         success = PatternFill("solid", fgColor="D9EAD3")
         exception = PatternFill("solid", fgColor="FCE4D6")
         category_fills = {category: green for category, _rule in rows_by_rule}
-        for sheet, header_fill in ((summary, green), (general, green), (detail, navy)):
+        for sheet, header_fill in ((general, green), (detail, navy)):
             for cell in sheet[1]:
                 cell.fill = header_fill; cell.font = Font(color="FFFFFF", bold=True)
                 cell.alignment = Alignment(wrap_text=True, vertical="center")
@@ -1956,6 +2024,14 @@ class ControlCalidadDialog(QDialog):
                 if row_index % 2 == 0:
                     for cell in sheet[row_index]:
                         cell.fill = soft_blue
+        for row in summary.iter_rows(min_row=summary_header_row + 1):
+            total_row = row[0].value == 'TOTAL'
+            for cell in row:
+                cell.alignment = Alignment(vertical='center', horizontal='left' if cell.column == 1 else 'right')
+                cell.font = Font(name='Calibri', size=11, color='344054', bold=total_row)
+                if total_row or cell.row % 2 == 0:
+                    cell.fill = PatternFill('solid', fgColor='DCECF9' if total_row else 'F0F6FB')
+            summary.row_dimensions[row[0].row].height = 26
         plugin_version = self.execution_info.get('Versión plugin')
         if not plugin_version:
             plugin_metadata = ConfigParser()
@@ -1983,7 +2059,8 @@ class ControlCalidadDialog(QDialog):
             detail.append([category, rule, len(rows_by_rule[(category, rule)]), sheet_name])
             detail.cell(detail.max_row, 4).hyperlink = f"#{sheet_name}!A1"
             rule_sheet = book.create_sheet(sheet_name)
-            rule_headers = [CONDITION_HEADER, "clave_caso", *EXCEPTION_HEADERS]
+            fields = sql_report_fields(row for _predio, row in rows_by_rule[(category, rule)])
+            rule_headers = [*fields, "clave_caso", *EXCEPTION_HEADERS]
             last_column = len(rule_headers)
             rule_sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
             rule_sheet.cell(1, 1, f"Regla incumplida: {rule}")
@@ -2000,7 +2077,7 @@ class ControlCalidadDialog(QDialog):
                     self.status.setText(f"Preparando {rule}: {index - 4} registros…")
                     QApplication.processEvents()
                 for column, value in enumerate([
-                    condition_text(row, display),
+                    *[predio_value(row) if key == PREDIO_HEADER else row.get(key, "") for key in fields],
                     review_by_row[id(row)].key if id(row) in review_by_row else "",
                     *(review_by_row[id(row)].exception_tracking() if id(row) in review_by_row else EXCEPTION_DEFAULTS),
                 ], start=1):
@@ -2073,10 +2150,6 @@ class ControlCalidadDialog(QDialog):
         for category in sorted({category for category, _rule in rows_by_rule}):
             package = Workbook()
             package_index = package.active
-            validation_metadata = dict(self.execution_info)
-            validation_metadata.setdefault('Modelo', self.review_context.get('model', self.model.currentText()))
-            validation_metadata.setdefault('Ambiente', self.review_context.get('environment', self.environment.currentText()))
-            validation_metadata.setdefault('Esquema', self.review_context.get('schema', ''))
             index_header_row = prepare_validation_index(package_index, validation_metadata, self.validation_context, category)
             for rule in sorted((rule for item_category, rule in rows_by_rule if item_category == category), key=rule_sort_key):
                 source = book[rule_sheet_names[(category, rule)]]

@@ -476,3 +476,15 @@ Las hojas de reglas toman el identificador definido en las sentencias: regla_1_1
 La hoja de navegación se denomina **Detalle Validación** y presenta arriba los metadatos de la ejecución: componente, fecha, modelo, ambiente, versión SQL, alcance, manzanas/veredas, base de datos, esquema y ubicación territorial. R1/R2 vigente se muestra cuando corresponde. Los filtros y vínculos internos de las reglas aparecen debajo. La versión del plugin se informa únicamente al pie de **Resumen ejecutivo**, en resumen_control_calidad.
 
 Las hojas de regla muestran únicamente título de regla, descripción, ubicación territorial y cinco columnas visibles: Resultado de la condición, Excepción DT, Observación DT, Excepción operador y Observación operador. Si la consulta no devuelve campos cond_, el resultado se presenta como Incumple, pues cada fila corresponde a un hallazgo del control. Si devuelve varias condiciones, se reúnen con sus nombres en la misma celda. Los identificadores y atributos originales se mantienen en metadatos ocultos para preservar las claves de recuperación, sin mostrarlos como columnas del detalle. Cambiar el resultado visible invalida la recuperación de esa revisión.
+
+## Resultado completo de la sentencia y confirmación
+
+Las hojas de regla vuelven a mostrar todas las columnas devueltas por la sentencia SQL, en su orden original, seguidas de las excepciones y observaciones. El identificador predial conserva el encabezado unificado Numero_Predial_Nacional. Se mantienen título, descripción y ubicación territorial, protección, inmovilización y recuperación segura del seguimiento.
+
+Antes de iniciar una validación se solicita confirmar los metadatos seleccionados. Cancelar conserva resultados y seguimientos de la ejecución anterior.
+
+## Flujo operativo y reportes completos (2.10.0)
+
+Resumen ejecutivo incorpora los metadatos de la validación sobre la tabla de resultados. Las hojas de reglas muestran de nuevo las columnas devueltas por SQL, en su orden original y con el identificador predial unificado, además de las excepciones y observaciones. Se conserva la recuperación de revisiones anteriores, incluidos los detalles compactos.
+
+Ejecutar validación presenta los metadatos seleccionados para confirmar antes de iniciar controles o descartar resultados anteriores. Cancelar conserva los resultados y seguimientos existentes. La ayuda se reorganiza como una guía operativa por función, sin historial de cambios ni administración del repositorio.

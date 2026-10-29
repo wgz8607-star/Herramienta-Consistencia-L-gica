@@ -367,7 +367,8 @@ def load_review(path):
                 if unified:
                     valid = valid and ('' if row[PREDIO_HEADER] is None else str(row[PREDIO_HEADER])) == predio_value(expected)
                 valid = valid and [row['componente'], row['validacion']] == payload['validation'] and row['resultado_automatico'] == payload['automatic']
-                if source_data is not None and CONDITION_HEADER in source_data:
+                if (source_data is not None and CONDITION_HEADER in source_data and CONDITION_HEADER not in expected
+                        and set(source_data).issubset({CONDITION_HEADER, "clave_caso", *EXCEPTION_HEADERS})):
                     # The compact detail omits object attributes. Their immutable
                     # snapshot and case key are still checked in hidden Revisión.
                     value = source_data.get(CONDITION_HEADER)

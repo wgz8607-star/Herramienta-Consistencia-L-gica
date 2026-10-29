@@ -106,6 +106,15 @@ class ReviewUiTests(unittest.TestCase):
                 summary = book['Resumen ejecutivo']
                 version_row = next(cell.row for cell in summary['A'] if cell.value == 'Versión plugin')
                 self.assertEqual(summary.cell(version_row, 2).value, 'version-ejecucion')
+                header = next(cell.row for cell in summary['A'] if cell.value == 'Componente')
+                metadata = {summary.cell(row, 1).value: summary.cell(row, 2).value for row in range(2, header)}
+                self.assertEqual(metadata['Modelo'], 'CICA')
+                self.assertEqual(metadata['Esquema'], 'test')
+                self.assertIn('Ubicación territorial', metadata)
+                self.assertNotIn('Identificador de entrega', metadata)
+                self.assertEqual(summary.freeze_panes, 'B' + str(header + 1))
+                self.assertTrue(summary.auto_filter.ref.startswith('A' + str(header) + ':'))
+                self.assertGreater(version_row, header)
                 book.close()
                 continue
             self.assertIn('Revisión', book.sheetnames)
@@ -185,7 +194,7 @@ class ReviewUiTests(unittest.TestCase):
         columns = {cell.value: cell.column for cell in sheet[4]}
         sheet.cell(5, columns['Excepción DT'], 'Sí')
         sheet.cell(5, columns['Observación DT'], 'Justificado DT')
-        sheet.cell(5, columns['Resultado de la condición'], 'Alterado')
+        sheet.cell(5, columns['Numero_Predial_Nacional'], 'Alterado')
         book.save(path); book.close()
         current = build_cases(self.owner.results, self.owner.review_context)
         counts = restore_review(current, load_review(path))
@@ -479,11 +488,11 @@ class ReviewUiTests(unittest.TestCase):
         self.assertIn('Reinstale el ZIP', self.owner.help_browser.toPlainText())
 
     def test_help_search_and_contents_navigation(self):
-        self.owner.help_search.setText('TEMP')
+        self.owner.help_search.setText('Alcance')
         self.owner.find_help_text()
-        self.assertEqual(self.owner.help_browser.textCursor().selectedText().casefold(), 'temp')
-        self.owner.navigate_help(module.QUrl('#6-interpretar-las-estadísticas'))
-        self.assertIn('Interpretar las estadísticas', self.owner.help_browser.textCursor().selectedText())
+        self.assertEqual(self.owner.help_browser.textCursor().selectedText().casefold(), 'alcance')
+        self.owner.navigate_help(module.QUrl('#8-interpretar-los-resultados'))
+        self.assertIn('Interpretar los resultados', self.owner.help_browser.textCursor().selectedText())
 
     def test_release_buttons_are_not_present_in_details_or_references(self):
         self.assertNotIn('Liberar', [button.text() for button in self.owner.findChildren(QPushButton)])
@@ -569,14 +578,14 @@ class ReviewUiTests(unittest.TestCase):
         path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
         book = load_workbook(path)
         headers = [cell.value for cell in book['unificada'][4]]
-        self.assertNotIn('Numero_Predial_Nacional', headers)
+        self.assertEqual(headers.count('Numero_Predial_Nacional'), 1)
         self.assertNotIn('Predio', headers)
         self.assertNotIn('numero_predial', headers)
         self.assertNotIn('numero_predial_nacional', headers)
-        self.assertNotIn('valor', headers)
+        self.assertIn('valor', headers)
         visible = [cell.value for cell in book['unificada'][4] if not book['unificada'].column_dimensions[cell.column_letter].hidden]
-        self.assertEqual(visible, ['Resultado de la condición', *HEADERS])
-        self.assertEqual(book['unificada'].cell(5, 1).value, 'Incumple')
+        self.assertEqual(visible, ['Numero_Predial_Nacional', 'valor', *HEADERS])
+        self.assertEqual(book['unificada'].cell(5, 1).value, npn)
         self.assertEqual(book['unificada'].cell(5, 1).data_type, 's')
         review_headers = [cell.value for cell in book['Revisión'][1]]
         self.assertIn('Numero_Predial_Nacional', review_headers)
@@ -626,6 +635,30 @@ class ReviewUiTests(unittest.TestCase):
         self.assertIn('1_1', book.sheetnames)
         self.assertNotIn('1_1_2', book.sheetnames)
         book.close()
+
+
+    def test_rule_details_show_sql_columns_in_order_and_detect_changed_attributes(self):
+        from qgis_control_calidad.review import load_review, restore_review
+        npn = '000000000000000000000000000001'
+        data = {'matricula': '00123', 'numero_predial_nacional': npn, 'cantidad': 2, 'cond_1_12': 'Fail'}
+        result = module.RuleResult('regla_1_12', 'Administrativas', 'Correcta', 1,
+                                   rows=[data], criterion_hash=digest('criterio completo'))
+        self.owner.results = [result]
+        self.owner.review_cases = build_cases([result], self.owner.review_context)
+        self.owner.review_cases[0].excepcion_dt = 'Sí'
+        self.owner.review_cases[0].observacion_dt = 'Justificación'
+        self.owner.finished()
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
+        book = load_workbook(path); sheet = book['1_12']
+        visible = [cell.value for cell in sheet[4] if not sheet.column_dimensions[cell.column_letter].hidden]
+        self.assertEqual(visible, ['matricula', 'Numero_Predial_Nacional', 'cantidad', 'cond_1_12', *HEADERS])
+        self.assertEqual([sheet.cell(5, column).value for column in range(1, 5)], ['00123', npn, '2', 'Fail'])
+        book.close()
+        self.assertEqual(restore_review(build_cases([result], self.owner.review_context), load_review(path))['incorporadas'], 1)
+        book = load_workbook(path); book['1_12'].cell(5, 3, '99'); book.save(path); book.close()
+        self.assertEqual(restore_review(build_cases([result], self.owner.review_context), load_review(path))['datos_invalidos'], 1)
 
 
 if __name__ == '__main__':

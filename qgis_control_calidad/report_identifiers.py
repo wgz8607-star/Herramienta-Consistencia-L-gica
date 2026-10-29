@@ -46,3 +46,14 @@ def condition_text(row, formatter=None):
     if not fields:
         return 'Incumple'
     return value(fields[0]) if len(fields) == 1 else '\n'.join(str(key) + ': ' + value(key) for key in fields)
+
+
+def sql_report_fields(rows):
+    """Preserve SQL output order, coalescing only aliases of the same identifier."""
+    fields = []
+    for row in rows:
+        for field in row:
+            name = PREDIO_HEADER if is_predio_field(field) else field
+            if name not in fields:
+                fields.append(name)
+    return fields

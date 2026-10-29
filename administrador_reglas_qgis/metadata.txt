@@ -1,7 +1,7 @@
 [general]
 name=Administrador de Reglas SQL
 description=Carga administrativa de reglas desde Excel a PostgreSQL con conexiones de QGIS o parámetros manuales.
-version=1.0.0
+version=1.0.1
 qgisMinimumVersion=3.28
 author=Equipo de Calidad Catastral
 email=

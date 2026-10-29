@@ -1,11 +1,11 @@
-# Administrador de Reglas SQL — QGIS 1.0.0
+# Administrador de Reglas SQL — QGIS 1.0.1
 
 Complemento independiente para administrar las sentencias del repositorio desde Excel. No forma parte del Validador de Consistencia Lógica y no necesita el programa externo en Python ni sus archivos BAT.
 
 ## Instalación
 
 1. En QGIS, abra **Complementos → Administrar e instalar complementos → Instalar desde ZIP**.
-2. Seleccione `administrador_reglas_qgis_v1.0.0.zip` sin descomprimirlo.
+2. Seleccione `administrador_reglas_qgis_v1.0.1.zip` sin descomprimirlo.
 3. Active **Administrador de Reglas SQL**.
 4. Ábralo desde **Base de datos → Administrador de Reglas SQL** o desde su icono en la barra de herramientas.
 
@@ -37,7 +37,7 @@ Las plantillas anteriores siguen siendo compatibles si conservan los mismos enca
 - Una fila idéntica se marca **Sin cambios** y no se vuelve a escribir. El resultado final informa nuevas, reemplazadas y sin cambios.
 - Las filas nuevas de una versión existente heredan sus metadatos de publicación. Al reemplazar una fila, los metadatos diligenciados en el Excel sustituyen los de esa fila; los campos de metadatos vacíos conservan los anteriores. La publicación de una versión se determina por su primera fila según orden, componente y código, igual que en el validador. Los cambios de publicación se indican en la confirmación.
 - Una versión nueva queda sin publicar si no se indica lo contrario. Los metadatos repetidos de una versión nueva deben coincidir.
-- Las tablas denominadas V2 o V3 solo admiten reglas de su versión. Las tablas `reglas_cargue_snc_*` permiten una sola versión publicada con reglas activas.
+- Las versiones identificadas por fecha, como `29_10_2026`, son válidas. Si se indica explícitamente un prefijo V2 o V3, debe coincidir con la tabla de destino. Las tablas `reglas_cargue_snc_*` permiten una sola versión publicada con reglas activas.
 - El SQL no se ejecuta ni se comprueba sintácticamente durante la carga. En las reglas CONTROL, la consulta debe devolver únicamente los hallazgos; se comprobará al ejecutar las validaciones.
 - La carga utiliza una transacción para las inserciones y los reemplazos juntos. Un error revierte toda la operación. Si cambia el Excel, la conexión, el destino o el contenido del repositorio después de la revisión, debe repetir la vista previa.
 - Se respetan los permisos reales de la conexión. La inserción también requiere que el usuario pueda bloquear la tabla durante la transacción. La herramienta no utiliza usuarios internos, no concede permisos y no crea tablas.

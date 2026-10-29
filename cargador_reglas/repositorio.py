@@ -227,7 +227,9 @@ def make_plan(table, rules, existing, schema='public', catalog_target=False, rep
     if replace_by_order and len(order_keys) != len(set(order_keys)):
         raise ValueError('El archivo tiene órdenes repetidos dentro de una misma versión y componente.')
     major = re.search(r'_v(\d+)_', table)
-    if major and any(not re.match(r'^v?' + major.group(1) + r'(?:[_.\s-]|$)', rule.values[0], re.I) for rule in rules):
+    # A date labels a publication; only an explicit V prefix declares a model version.
+    declared = [re.match(r'^v(\d+)(?:[_.\s-]|$)', rule.values[0], re.I) for rule in rules]
+    if major and any(match and match.group(1) != major.group(1) for match in declared):
         raise ValueError('La versión del archivo no corresponde a la tabla de destino V' + major.group(1) + '.')
     grouped = defaultdict(list)
     heads = {}

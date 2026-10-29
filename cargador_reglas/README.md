@@ -33,7 +33,7 @@ Se incorporan todos los registros nuevos válidos, incluidos los que tengan `act
 - Las consultas CONTROL deben devolver únicamente las inconsistencias. El cargador las almacena como texto; no ejecuta el SQL ni comprueba su sintaxis.
 - La clave de coincidencia es `version + componente + codigo_regla`. Los duplicados dentro del archivo impiden la carga completa. Las reglas ya existentes se muestran en la vista previa, pero no se reemplazan.
 - Las versiones existentes mantienen su descripción y publicación actuales. Una versión nueva se guarda sin publicar cuando `version_publicada` queda vacío. Los metadatos repetidos de una versión nueva deben coincidir.
-- En SNC solo puede existir una versión publicada con reglas activas. Para las tablas V2 o V3, la versión de las filas debe corresponder al destino.
+- En SNC solo puede existir una versión publicada con reglas activas. Las versiones pueden identificarse por fecha. Si se declara explícitamente un prefijo V2 o V3, debe corresponder a la tabla de destino.
 - Excel admite hasta 32.767 caracteres por celda. El programa rechaza una exportación que exceda ese tamaño para evitar truncar el SQL.
 
 Los diez campos son los definidos para las reglas del validador. El programa no es un importador de cualquier tabla ni crea estructuras. Otros campos técnicos de la tabla, si existen, deben poder completarse con sus valores por defecto.

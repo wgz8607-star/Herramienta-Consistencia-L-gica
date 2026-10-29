@@ -168,6 +168,14 @@ class RuleUploadTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'una sola versión'):
             make_plan(TABLE, [RuleUpload(2, values('002', 'V2_SNC', active=True, published=True))], [values(active=True, published=True)])
 
+    def test_date_publication_is_allowed_in_v2_table(self):
+        for version in ('29_10_2026', '2026-10-29', 'V2_29_10_2026'):
+            with self.subTest(version=version):
+                plan = make_plan('reglas_interno_v2_29_07_2024',
+                                 [RuleUpload(2, values(version=version))], [])
+                self.assertEqual(len(plan.inserts), 1)
+                self.assertEqual(plan.inserts[0][0], version)
+
     def test_target_version_and_table_are_checked(self):
         with self.assertRaisesRegex(ValueError, 'destino V2'):
             make_plan('reglas_cica_v2_29_07_2024', [RuleUpload(2, values(version='V3_07_09_2026'))], [])

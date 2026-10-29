@@ -154,7 +154,7 @@ class TerritorialStatisticsTests(unittest.TestCase):
             self.assertEqual(data['r1_statistics']['total'], 2)
             dialog = TerritorialFilterDialog('urban+rural', (), lambda: data)
             self.addCleanup(dialog.close); dialog.load_codes()
-            self.assertIn('Fuente (registros): 2 de 2', dialog.selection_statistics.text())
+            self.assertIn('Base catastral a validar (registros): 2 de 2', dialog.selection_statistics.text())
             self.assertEqual(dialog.overview.rows['total'].text(2), '2')
             self.assertEqual(dialog.codes.columnCount(), 4)
             self.assertIn('R1 (predios únicos): 1 de 2', dialog.selection_statistics.text())
@@ -243,7 +243,7 @@ class TerritorialStatisticsTests(unittest.TestCase):
         from qgis_control_calidad.dialog import ControlCalidadDialog
         widget = ControlCalidadDialog(); self.addCleanup(widget.close)
         index = widget.advanced_filter_tab_index
-        self.assertEqual([widget.left_tabs.tabText(i) for i in range(3)], ['Conexión', 'Referencias R1/R2', 'Filtro avanzado'])
+        self.assertEqual([widget.left_tabs.tabText(i) for i in range(3)], ['Conexión', 'Referencias R1/R2', 'Estadística y filtro avanzado'])
         self.assertFalse(widget.left_tabs.isTabEnabled(index))
         self.assertFalse(widget.schema_controls.isAncestorOf(widget.filter_overview))
         widget.schema.addItem('city')
@@ -318,3 +318,68 @@ class TerritorialStatisticsTests(unittest.TestCase):
             widget.open_advanced_filter_window()
         self.assertEqual((widget.scope_selection, widget.scope_prefixes), ('urban+rural', (URBAN,)))
         self.assertFalse(hasattr(widget, 'filter_editor'))
+
+    def test_cica_status_counts_and_requested_summary_text(self):
+        from qgis_control_calidad.territorial_filter import TerritorialOverview
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'predios.csv'
+            with path.open('w', newline='') as output:
+                csv.writer(output).writerows([[URBAN, 'ACTIVO'], [RURAL, ' cancelado '], [CENTER, 'Activo'], [CENTER, None]])
+            data = read_source_statistics({}, '', 'CICA', SimpleNamespace(columns=('numero_predial', 'estado'), csv_path=path))
+        self.assertEqual(data['status_counts']['active'], 2)
+        self.assertEqual(data['status_counts']['cancelled'], 1)
+        self.assertEqual(data['status_counts']['other'], 1)
+        r1 = statistics_from_values([URBAN, URBAN], unique=True)
+        view = TerritorialOverview(); self.addCleanup(view.close)
+        view.set_statistics({'source_statistics': data, 'r1_statistics': r1})
+        self.assertIn('Base catastral: 2 predios activos; 1 predios cancelados', view.note.text())
+        self.assertIn('R1: 1 predios', view.note.text())
+        self.assertIn('otros/sin estado: 1', view.note.text())
+
+    def test_missing_state_is_unavailable_not_all_active(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'predios.csv'; path.write_text(URBAN + '\n')
+            data = read_source_statistics({}, '', 'CICA', SimpleNamespace(columns=('numero_predial',), csv_path=path))
+        self.assertIsNone(data['status_counts']['active'])
+        self.assertIsNone(data['status_counts']['cancelled'])
+        self.assertEqual(data['total'], 1)
+
+    def test_database_state_aggregates_count_null_and_other_states(self):
+        from qgis_control_calidad.territorial_statistics import read_status_counts
+        class Cursor:
+            def execute(self, statement): self.query = render(statement)
+            def fetchall(self): return [(7, 2, 1)]
+        cursor = Cursor()
+        counts = read_status_counts(cursor, 'datos', 'cica_predio', {'numero_predial', 'estado'}, 'CICA')
+        self.assertEqual((counts['active'], counts['cancelled'], counts['other']), (7, 2, 1))
+        self.assertIn("= 'ACTIVO'", cursor.query)
+        self.assertIn("= 'CANCELADO'", cursor.query)
+        self.assertIn('IS NULL', cursor.query)
+
+    def test_internal_cancellation_does_not_multiply_predios_with_multiple_novelties(self):
+        import sqlite3
+        from qgis_control_calidad.territorial_statistics import read_status_counts
+        db = sqlite3.connect(':memory:'); self.addCleanup(db.close)
+        db.execute("ATTACH DATABASE ':memory:' AS datos")
+        metadata = {
+            'ilc_datosadicionaleslevantamientocatastral': ['t_id', 'ilc_predio'],
+            'ilc_estructuranovedadnumeropredial': ['ilc_dtsdcnltmntctstral_novedad_numeros_prediales', 'tipo_novedad'],
+            'ilc_estructuranovedadnumeropredial_tipo_novedad': ['t_id', 'ilicode'],
+        }
+        db.execute('CREATE TABLE datos.ilc_predio (t_id INTEGER)')
+        db.executemany('INSERT INTO datos.ilc_predio VALUES (?)', [(1,), (2,), (3,)])
+        for table, columns in metadata.items():
+            db.execute('CREATE TABLE datos.' + table + ' (' + ', '.join(columns) + ')')
+        db.executemany('INSERT INTO datos.ilc_datosadicionaleslevantamientocatastral VALUES (?, ?)', [(10, 1), (20, 2)])
+        db.executemany('INSERT INTO datos.ilc_estructuranovedadnumeropredial VALUES (?, ?)', [(10, 100), (10, 101), (20, 102)])
+        db.executemany('INSERT INTO datos.ilc_estructuranovedadnumeropredial_tipo_novedad VALUES (?, ?)', [(100, 'Cancelacion'), (101, 'Cancelacion_por_Englobe'), (102, 'Otra_Novedad')])
+        class Cursor:
+            def execute(self, statement, params=()):
+                query = render(statement)
+                if 'information_schema.columns' in query:
+                    self.rows = [(table, column) for table, columns in metadata.items() for column in columns]
+                else:
+                    self.rows = db.execute(query).fetchall()
+            def fetchall(self): return self.rows
+        counts = read_status_counts(Cursor(), 'datos', 'ilc_predio', {'numero_predial_nacional', 't_id'}, 'Modelo Interno de Levantamiento 1.0')
+        self.assertEqual((counts['active'], counts['cancelled'], counts['other']), (2, 1, 0))

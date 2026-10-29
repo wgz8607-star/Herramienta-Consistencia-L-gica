@@ -461,6 +461,7 @@ class ControlCalidadDialog(QDialog):
         self.scope_prefixes = ()
         self.advanced_filter_summary = QLabel('Todos · Sin filtro de manzana/vereda')
         self.advanced_filter_summary.setWordWrap(True)
+        self.advanced_filter_summary.setStyleSheet('color: #344054; background: white; border: 1px solid #DCE4EC; border-radius: 7px; padding: 10px; font-weight: 600;')
         self.environment = QComboBox()
         self.environment.addItems(["Seleccione un ambiente…", "Validaciones del modelo", SNC_ENVIRONMENT])
         self.environment_label = QLabel("Ambiente")
@@ -657,7 +658,7 @@ class ControlCalidadDialog(QDialog):
         reference_layout = QVBoxLayout(references)
         reference_layout.setContentsMargins(8, 14, 8, 6)
         self.reference_mode = QComboBox()
-        self.reference_mode.addItems(["Archivos R1 y R2 temporales", "R1 y R2 Vigente"])
+        self.reference_mode.addItems(["Archivos R1 y R2 cargados por usuario", "R1 y R2 Vigente"])
         self.reference_mode.currentIndexChanged.connect(self.reference_mode_changed)
         self.reference_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.reference_mode.setMinimumContentsLength(22)
@@ -715,13 +716,14 @@ class ControlCalidadDialog(QDialog):
         filter_layout.addWidget(self.filter_overview)
         self.open_filter_window_button = QPushButton('Ver estadísticas y seleccionar filtros…')
         self.open_filter_window_button.clicked.connect(self.open_advanced_filter_window)
+        self.open_filter_window_button.setStyleSheet('QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #217346, stop:1 #0066B3); color: white; border: none; border-radius: 7px; padding: 11px 12px; font-weight: 700; } QPushButton:hover { background: #0066B3; }')
         filter_layout.addWidget(self.open_filter_window_button)
         filter_layout.addStretch()
         filter_scroll = QScrollArea()
         filter_scroll.setWidgetResizable(True)
         filter_scroll.setFrameShape(QFrame.NoFrame)
         filter_scroll.setWidget(filter_page)
-        self.advanced_filter_tab_index = self.left_tabs.addTab(filter_scroll, 'Filtro avanzado')
+        self.advanced_filter_tab_index = self.left_tabs.addTab(filter_scroll, 'Estadística y filtro avanzado')
         self.left_tabs.setTabEnabled(self.advanced_filter_tab_index, False)
         self.filter_source_signature = None
         self.filter_needs_refresh = True
@@ -734,10 +736,10 @@ class ControlCalidadDialog(QDialog):
         tab_bar.setUsesScrollButtons(False)
         tab_bar.setExpanding(True)
         metrics = tab_bar.fontMetrics()
-        tab_width = max(metrics.horizontalAdvance(self.left_tabs.tabText(i)) for i in range(self.left_tabs.count())) + 28
-        tab_bar.setMinimumWidth(tab_width * self.left_tabs.count())
+        tab_width = sum(metrics.horizontalAdvance(self.left_tabs.tabText(i)) + 28 for i in range(self.left_tabs.count()))
+        tab_bar.setMinimumWidth(tab_width)
         tab_bar.setMinimumHeight(metrics.height() + 20)
-        self.left_tabs.setMinimumWidth(max(250, tab_width * self.left_tabs.count() + 4))
+        self.left_tabs.setMinimumWidth(max(250, tab_width + 4))
         help_page = QWidget()
         help_layout = QVBoxLayout(help_page)
         search_row = QHBoxLayout()
@@ -1028,7 +1030,7 @@ class ControlCalidadDialog(QDialog):
         if not ready and self.left_tabs.currentIndex() == self.advanced_filter_tab_index:
             self.left_tabs.setCurrentIndex(0)
         self.left_tabs.setTabEnabled(self.advanced_filter_tab_index, enabled)
-        self.left_tabs.setTabToolTip(self.advanced_filter_tab_index, '' if ready else 'Seleccione la fuente de datos y cargue R1 temporal o seleccione un municipio con R1 vigente.')
+        self.left_tabs.setTabToolTip(self.advanced_filter_tab_index, '' if ready else 'Seleccione la base catastral a validar y cargue R1 temporal o seleccione un municipio con R1 vigente.')
 
     def advanced_filter_tab_changed(self, index):
         if index != self.advanced_filter_tab_index or self.filter_reading:
@@ -1413,7 +1415,7 @@ class ControlCalidadDialog(QDialog):
     def run_rules(self):
         scope = self.scope_selection
         if scope not in SCOPES:
-            QMessageBox.warning(self, 'Seleccione el ámbito', 'Seleccione Todos, Urbano, Rural o Centro poblado. Se aplicará el mismo filtro a CICA, R1 y R2.')
+            QMessageBox.warning(self, 'Seleccione el alcance', 'Seleccione Todos, Urbano, Rural o Centro poblado. Se aplicará el mismo filtro a CICA, R1 y R2.')
             return
         self.update_run_availability()
         if not self.run_button.isEnabled():
@@ -1475,7 +1477,7 @@ class ControlCalidadDialog(QDialog):
             'Versión SQL': self.selected_sql_version.get('codigo', ''),
             'Base de datos': params.get('dbname', ''), 'Esquema': schema,
         }
-        self.execution_info["Ámbito territorial"] = SCOPES[scope]
+        self.execution_info["Alcance territorial"] = SCOPES[scope]
         self.execution_info["Manzanas / veredas (NPN 1–17)"] = ", ".join(self.scope_prefixes) or "Todas"
         self.results.clear()
         self.review_cases = []

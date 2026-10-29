@@ -74,7 +74,7 @@ class ScopeTests(unittest.TestCase):
             widget.model.setCurrentText(model)
             self.assertEqual(widget.scope_selection, 'all')
             self.assertEqual(widget.scope_prefixes, ())
-            self.assertEqual(widget.left_tabs.tabText(widget.advanced_filter_tab_index), 'Filtro avanzado')
+            self.assertEqual(widget.left_tabs.tabText(widget.advanced_filter_tab_index), 'Estadística y filtro avanzado')
             self.assertFalse(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
 
     def test_17_digit_prefixes_are_validated_and_combined_with_scope(self):

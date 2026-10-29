@@ -8,7 +8,7 @@ SCOPES.update({'urban+rural': 'Urbano + Rural', 'urban+center': 'Urbano + Centro
 
 def scope_members(scope):
     if scope not in SCOPES:
-        raise ValueError('Ámbito territorial no válido.')
+        raise ValueError('Alcance territorial no válido.')
     return ('urban', 'rural', 'center') if scope == 'all' else tuple(scope.split('+'))
 
 def sector_scope(value):
@@ -22,7 +22,7 @@ NPN_COLUMNS = ('numero_predial', 'numero_predial_nacional')
 
 def predicate(column, scope, prefixes=()):
     if scope not in SCOPES:
-        raise ValueError('Ámbito territorial no válido.')
+        raise ValueError('Alcance territorial no válido.')
     prefixes = normalize_prefixes(prefixes)
     sector = sql.SQL('substring(btrim({}::text), 6, 2)').format(sql.Identifier(column))
     if scope == 'all':
@@ -48,7 +48,7 @@ def normalize_prefixes(prefixes):
 
 def install_scope(connection, schema, temporary_tables, references, scope, prefixes=(), model="CICA"):
     if scope not in SCOPES:
-        raise ValueError('Seleccione el ámbito de validación de CICA.')
+        raise ValueError('Seleccione el alcance de validación de CICA.')
     prefixes = normalize_prefixes(prefixes)
     if scope == 'all' and not prefixes:
         return {}
@@ -68,7 +68,7 @@ def install_scope(connection, schema, temporary_tables, references, scope, prefi
             column = next((name for name in NPN_COLUMNS if name in columns), None)
             if not column:
                 if table in references or table == predio:
-                    raise ValueError(f'{table}: no tiene una columna NPN para aplicar el ámbito.')
+                    raise ValueError(f'{table}: no tiene una columna NPN para aplicar el alcance.')
                 continue
             predio_found |= table == predio
             view = f'validation_scope_{index}'

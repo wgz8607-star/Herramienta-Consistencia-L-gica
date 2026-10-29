@@ -66,9 +66,9 @@ La contraseña de datos no se muestra y se usa durante la sesión. No debe confu
 
 Estas opciones están en la pestaña **Referencias R1/R2**, junto a **Conexión**.
 
-### A. Archivos R1 y R2 temporales
+### A. Archivos R1 y R2 cargados por usuario
 
-1. Elija **Archivos R1 y R2 temporales** y pulse **Cargar R1 / R2…**.
+1. Elija **Archivos R1 y R2 cargados por usuario** y pulse **Cargar R1 / R2…**.
 2. Seleccione un Excel R1. Puede seleccionar también un Excel R2; R2 es opcional.
 3. Pulse **Preparar referencias temporales** y después **Aceptar**.
 4. Compruebe los nombres y cantidades de registros preparados.
@@ -334,11 +334,11 @@ Una vez incorporadas las reglas con el programa externo, vuelva a consultar la v
 
 ## Filtro avanzado: pestaña y estadísticas de R1
 
-Abra **Filtro avanzado**, después de **Referencias R1/R2**. Se habilita al elegir la fuente de datos y cargar R1 temporal o seleccionar un municipio con R1 vigente. La pestaña muestra solo estadísticas de R1: cada NPN completo cuenta una vez, sin sumar duplicados; las filas sin NPN se informan por separado y se excluyen del conteo.
+Abra **Estadística y filtro avanzado**, después de **Referencias R1/R2**. Se habilita al elegir la base catastral a validar y cargar R1 temporal o seleccionar un municipio con R1 vigente. La pestaña muestra solo estadísticas de R1: cada NPN completo cuenta una vez, sin sumar duplicados; las filas sin NPN se informan por separado y se excluyen del conteo.
 
-Combine Urbano, Rural y Centro poblado mediante casillas. Todos no restringe el ámbito. Opcionalmente marque códigos NPN de manzana/vereda de 17 dígitos; sin códigos marcados se incluyen todos los del ámbito elegido. Seleccionar todo y Deseleccionar todo actúan sobre códigos visibles. Use **Aplicar filtro** antes de ejecutar o **Restablecer** para recuperar la selección aplicada. El filtro también se aplica a la fuente validada y a R2, aunque sus estadísticas no se muestran aquí.
+Combine Urbano, Rural y Centro poblado mediante casillas. Todos no restringe el alcance. Opcionalmente marque códigos NPN de manzana/vereda de 17 dígitos; sin códigos marcados se incluyen todos los del alcance elegido. Seleccionar todo y Deseleccionar todo actúan sobre códigos visibles. Use **Aplicar filtro** antes de ejecutar o **Restablecer** para recuperar la selección aplicada. El filtro también se aplica a la base catastral a validar y a R2, aunque sus estadísticas no se muestran aquí.
 
 
 ### Resumen y ventana de selección
 
-En **Filtro avanzado** se muestran las estadísticas generales de Urbano, Rural y Centro poblado para la fuente y para R1, en columnas separadas. La fuente cuenta registros y R1 cuenta NPN únicos, sin sumar duplicados. Pulse **Ver estadísticas y seleccionar filtros…** para abrir la ventana ampliable de estadísticas detalladas y selección de filtros. **Aplicar filtro** guarda la selección; **Cancelar** mantiene la selección anterior. La pestaña continúa requiriendo ambas fuentes seleccionadas.
+En **Estadística y filtro avanzado** se muestran las estadísticas generales de Urbano, Rural y Centro poblado para la base catastral a validar y para R1, en columnas separadas. La base catastral a validar cuenta registros y R1 cuenta NPN únicos, sin sumar duplicados. Pulse **Ver estadísticas y seleccionar filtros…** para abrir la ventana ampliable de estadísticas detalladas y selección de filtros. **Aplicar filtro** guarda la selección; **Cancelar** mantiene la selección anterior. La pestaña continúa requiriendo la base catastral a validar y R1 seleccionados.

@@ -5,10 +5,11 @@ from contextlib import closing
 
 import psycopg2
 from psycopg2 import sql
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import Qt, QSize, pyqtSignal
+from qgis.PyQt.QtGui import QColor, QFont
 from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout,
     QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QHBoxLayout,
-    QToolButton, QMenu, QWidgetAction, QWidget, QCheckBox, QTreeWidget, QTreeWidgetItem, QHeaderView, QSizePolicy, QGridLayout, QScrollArea)
+    QToolButton, QMenu, QWidgetAction, QWidget, QCheckBox, QTreeWidget, QTreeWidgetItem, QHeaderView, QSizePolicy, QGridLayout, QScrollArea, QFrame, QAbstractItemView)
 from .territorial_scope import SCOPES, NPN_COLUMNS, normalize_prefixes, scope_members, sector_scope
 from .territorial_statistics import included_count, prefix_counts
 
@@ -22,12 +23,12 @@ def read_prefixes(params, schema, model, snapshot=None):
     if snapshot is not None:
         column = next((name for name in NPN_COLUMNS if name in snapshot.columns), None)
         if column is None:
-            raise ValueError('La fuente de predios no contiene una columna NPN.')
+            raise ValueError('La tabla de predios no contiene una columna NPN.')
         index = snapshot.columns.index(column)
         with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
             return prefixes_from_values(row[index] for row in csv.reader(stream) if len(row) > index)
     if not schema:
-        raise ValueError('Seleccione el esquema a validar o cargue la fuente CICA antes de leer los códigos.')
+        raise ValueError('Seleccione el esquema a validar o cargue la base catastral CICA antes de leer los códigos.')
     table = 'cica_predio' if model == 'CICA' else 'ilc_predio'
     options = dict(params); options.setdefault('connect_timeout', 8)
     with closing(psycopg2.connect(**options)) as connection:
@@ -38,10 +39,21 @@ def read_prefixes(params, schema, model, snapshot=None):
             columns = {row[0] for row in cursor.fetchall()}
             column = next((name for name in NPN_COLUMNS if name in columns), None)
             if not column:
-                raise ValueError(f'{table}: no se encontró una columna NPN en la fuente seleccionada.')
+                raise ValueError(f'{table}: no se encontró una columna NPN en la tabla seleccionada.')
             cursor.execute(sql.SQL("SELECT DISTINCT substring(btrim({}::text), 1, 17) FROM {} WHERE substring(btrim({}::text), 1, 17) ~ '^[0-9]{{17}}$' ORDER BY 1").format(
                 sql.Identifier(column), sql.Identifier(schema, table), sql.Identifier(column)))
             return [row[0] for row in cursor.fetchall()]
+
+
+BASE_COLOR = '#217346'
+R1_COLOR = '#0066B3'
+
+
+def color_columns(item, base_column, r1_column):
+    item.setForeground(base_column, QColor(BASE_COLOR))
+    item.setBackground(base_column, QColor('#EAF5EC'))
+    item.setForeground(r1_column, QColor(R1_COLOR))
+    item.setBackground(r1_column, QColor('#EAF2FC'))
 
 
 class ScopeSelector(QToolButton):
@@ -92,41 +104,91 @@ class ScopeSelector(QToolButton):
         self.selectionChanged.emit()
 
     def update_text(self):
-        self.setText(SCOPES.get(self.currentData(), 'Seleccione ámbito…'))
+        self.setText(SCOPES.get(self.currentData(), 'Seleccione alcance…'))
 
 
 class TerritorialOverview(QWidget):
     """Compact source/R1 counts, shared by the summary tab and the detail window."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0)
-        title = QLabel('Distribución por ámbito')
-        title.setStyleSheet('color: #0468A3; font-weight: bold; font-size: 14px;')
+        self.setObjectName('territorialOverview')
+        self.setStyleSheet('QWidget#territorialOverview { background: white; border: 1px solid #DCE4EC; border-radius: 10px; }')
+        layout = QVBoxLayout(self); layout.setContentsMargins(12, 14, 12, 12); layout.setSpacing(12)
+        title = QLabel('Distribución por alcance')
+        title.setStyleSheet('color: #243B53; font-weight: 700; font-size: 16px; border: none;')
         layout.addWidget(title)
-        self.source_label = QLabel(); self.source_label.setWordWrap(True); layout.addWidget(self.source_label)
-        self.r1_label = QLabel(); self.r1_label.setWordWrap(True); layout.addWidget(self.r1_label)
+        cards = QHBoxLayout(); cards.setSpacing(10)
+        self.source_label = QLabel(); self.r1_label = QLabel()
+        self.total_labels = {}
+        for key, caption, detail, color, background in (
+            ('source', 'Base catastral a validar', self.source_label, BASE_COLOR, '#EDF8F1'),
+            ('r1', 'R1 · Predios únicos', self.r1_label, R1_COLOR, '#EDF5FF')):
+            card = QFrame(); card.setObjectName(key + 'OverviewCard')
+            card.setStyleSheet(f'QFrame#{key}OverviewCard {{ background: {background}; border: 1px solid {color}; border-left: 5px solid {color}; border-radius: 8px; }}')
+            card_layout = QVBoxLayout(card); card_layout.setContentsMargins(12, 12, 10, 12); card_layout.setSpacing(5)
+            label = QLabel(caption); label.setWordWrap(True)
+            label.setStyleSheet(f'color: {color}; font-weight: 700; font-size: 13px; border: none;')
+            value = QLabel('—'); value.setStyleSheet(f'color: {color}; font-size: 29px; font-weight: 700; border: none;')
+            self.total_labels[key] = value
+            detail.setWordWrap(True); detail.setTextFormat(Qt.PlainText)
+            detail.setStyleSheet(f'color: {color}; font-size: 11px; border: none;')
+            card_layout.addWidget(label); card_layout.addWidget(value); card_layout.addWidget(detail)
+            cards.addWidget(card, 1)
+        layout.addLayout(cards)
         self.table = QTreeWidget(); self.table.setRootIsDecorated(False)
-        self.table.setHeaderLabels(['Ámbito', 'Fuente', 'R1 únicos'])
+        self.table.setHeaderLabels(['Alcance', 'Base catastral\na validar', 'R1 únicos'])
+        color_columns(self.table.headerItem(), 1, 2)
         self.table.header().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setMinimumHeight(180); self.table.setMaximumHeight(215)
+        self.table.header().setMinimumHeight(42)
+        self.table.headerItem().setToolTip(1, "Base catastral a validar: conteo de registros")
+        self.table.setMinimumHeight(226); self.table.setMaximumHeight(226)
+        self.table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.table.setFocusPolicy(Qt.NoFocus)
+        self.table.setStyleSheet('QTreeWidget { background: white; border: 1px solid #DCE4EC; border-radius: 6px; font-size: 12px; } QHeaderView::section { background: #F0F4F8; padding: 7px 3px; border: none; border-bottom: 1px solid #DCE4EC; font-weight: 700; }')
         self.rows = {}
-        for key, label in (('total', 'Total'), ('urban', 'Urbano'), ('rural', 'Rural'), ('center', 'Centro poblado'), ('unknown', 'Sin ámbito')):
-            item = QTreeWidgetItem([label, '—', '—']); self.table.addTopLevelItem(item); self.rows[key] = item
+        for key, label in (('total', 'Total'), ('urban', 'Urbano'), ('rural', 'Rural'), ('center', 'Centro poblado'), ('unknown', 'Sin alcance')):
+            item = QTreeWidgetItem([label, '—', '—']); color_columns(item, 1, 2)
+            item.setSizeHint(0, QSize(0, 35))
+            item.setBackground(0, QColor('#F7F9FC'))
+            for column in (1, 2):
+                item.setTextAlignment(column, Qt.AlignCenter)
+            if key == 'total':
+                for column in range(3):
+                    font = QFont(item.font(column)); font.setBold(True); font.setPointSize(11)
+                    item.setFont(column, font)
+                item.setBackground(0, QColor('#E8EEF5'))
+                item.setBackground(1, QColor('#D3EEDD'))
+                item.setBackground(2, QColor('#D5E8FF'))
+            self.table.addTopLevelItem(item); self.rows[key] = item
         layout.addWidget(self.table)
-        self.note = QLabel('Fuente: registros (incluye duplicados). R1: predios únicos por NPN completo. No se suman entre fuentes.')
+        self.note = QLabel('Base catastral: activos y cancelados pendientes de consultar — R1: pendiente de consultar.')
+        self.note.setTextFormat(Qt.RichText)
+        self.note.setStyleSheet('background: #F7F9FC; border: 1px solid #E4EAF0; border-radius: 6px; padding: 9px; font-size: 12px;')
         self.note.setWordWrap(True); layout.addWidget(self.note)
         self.r1_note = QLabel(); self.r1_note.setWordWrap(True); layout.addWidget(self.r1_note)
+        self.r1_note.setStyleSheet(f"color: {R1_COLOR};")
         self.set_statistics(None)
 
     def set_statistics(self, bundle):
         bundle = bundle or {}
         source = bundle.get('source_statistics'); r1 = bundle.get('r1_statistics')
-        self.source_label.setText('Fuente: ' + (source['source'] if source is not None else bundle.get('source_error') or 'pendiente de consultar'))
+        self.source_label.setText('Base catastral a validar: ' + (source['source'] if source is not None else bundle.get('source_error') or 'pendiente de consultar'))
         self.r1_label.setText('R1: ' + (r1['source'] if r1 is not None else bundle.get('r1_status') or 'pendiente de consultar'))
+        for key, data in (('source', source), ('r1', r1)):
+            self.total_labels[key].setText('—' if data is None else f"{data['total']:,}".replace(',', '.'))
         for column, data in ((1, source), (2, r1)):
             for key, item in self.rows.items():
                 value = None if data is None else data['total'] if key == 'total' else data['totals'][key]
                 item.setText(column, '—' if value is None else f'{value:,}'.replace(',', '.'))
+        statuses = source.get('status_counts', {}) if source is not None else {}
+        def number(value):
+            return 'no disponible' if value is None else f'{value:,}'.replace(',', '.')
+        base_text = ('Base catastral: ' + number(statuses.get('active')) + ' predios activos; ' +
+                     number(statuses.get('cancelled')) + ' predios cancelados' +
+                     (f"; otros/sin estado: {number(statuses['other'])}" if statuses.get('other') else ''))
+        r1_text = 'R1: ' + number(r1['total'] if r1 is not None else None) + ' predios (NPN únicos).'
+        self.note.setText(f'<span style="color:{BASE_COLOR}">{base_text}</span> — <span style="color:{R1_COLOR}">{r1_text}</span>')
+        self.note.setToolTip(statuses.get('method', 'Estado de la base catastral no disponible.'))
         if r1 is None:
             self.r1_note.setText('Las estadísticas de R1 se mostrarán al consultar su origen.')
         else:
@@ -155,15 +217,16 @@ class TerritorialFilterDialog(QDialog):
         self.overview = TerritorialOverview()
         layout.addWidget(self.overview)
         form = QFormLayout(); self.scope = ScopeSelector(scope)
-        form.addRow('Ámbito', self.scope); layout.addLayout(form)
-        explanation = QLabel('Combine ámbitos. Todos incluye registros sin ámbito identificable. El mismo filtro se aplica a la fuente y a R1/R2. Los conteos de la fuente y de R1 se muestran separados.')
+        form.addRow('Alcance', self.scope); layout.addLayout(form)
+        explanation = QLabel('Combine alcances. Todos incluye registros sin alcance identificable. El mismo filtro se aplica a la base catastral a validar y a R1/R2. Los conteos de la base catastral a validar y de R1 se muestran separados.')
         explanation.setWordWrap(True); layout.addWidget(explanation)
         self.selection_statistics = QLabel('Predios incluidos con este filtro: pendiente de consultar.')
-        self.selection_statistics.setStyleSheet('background: #e0f1ff; color: #005b80; padding: 10px; font-weight: bold;')
+        self.selection_statistics.setStyleSheet('background: #f4f6f8; padding: 10px; font-weight: bold;')
+        self.selection_statistics.setTextFormat(Qt.RichText)
         self.selection_statistics.setWordWrap(True); layout.addWidget(self.selection_statistics)
-        text = QLabel('Manzanas / veredas (opcional): posiciones 1–17 del NPN.\nCódigos presentes en la fuente o en R1. Sin códigos marcados se incluyen todos los del ámbito elegido. El mismo filtro se aplica a la fuente y a R1/R2.')
+        text = QLabel('Manzanas / veredas (opcional): posiciones 1–17 del NPN.\nCódigos presentes en la base catastral a validar o en R1. Sin códigos marcados se incluyen todos los del alcance elegido. El mismo filtro se aplica a la base catastral a validar y a R1/R2.')
         text.setWordWrap(True); layout.addWidget(text)
-        self.read_button = QPushButton('Actualizar datos de la fuente')
+        self.read_button = QPushButton('Actualizar estadísticas')
         self.read_button.clicked.connect(self.load_codes); layout.addWidget(self.read_button)
         self.search = QLineEdit(); self.search.setPlaceholderText('Buscar código de 17 dígitos…')
         self.search.textChanged.connect(self.filter_codes); layout.addWidget(self.search)
@@ -172,10 +235,11 @@ class TerritorialFilterDialog(QDialog):
         self.select_all_button.clicked.connect(lambda: self.set_visible_checked(True))
         self.deselect_all_button.clicked.connect(lambda: self.set_visible_checked(False))
         for button in (self.select_all_button, self.deselect_all_button):
-            button.setToolTip('Actúa sobre los códigos visibles según el ámbito y la búsqueda.')
+            button.setToolTip('Actúa sobre los códigos visibles según el alcance y la búsqueda.')
             selection_buttons.addWidget(button)
         layout.addLayout(selection_buttons)
-        self.codes = QTreeWidget(); self.codes.setHeaderLabels(['Código NPN (1–17)', 'Tipo', 'Registros fuente', 'Predios únicos R1'])
+        self.codes = QTreeWidget(); self.codes.setHeaderLabels(['Código NPN (1–17)', 'Tipo', 'Base catastral a validar', 'Predios únicos R1'])
+        color_columns(self.codes.headerItem(), 2, 3)
         self.codes.setRootIsDecorated(False); self.codes.header().setSectionResizeMode(0, QHeaderView.Stretch)
         for column in (1, 2, 3):
             self.codes.header().setSectionResizeMode(column, QHeaderView.ResizeToContents)
@@ -206,10 +270,11 @@ class TerritorialFilterDialog(QDialog):
             self.codes.clear()
             for code in codes:
                 category = sector_scope(code)
-                label = {'rural': 'Vereda', 'urban': 'Manzana', 'center': 'Centro poblado'}.get(category, 'Sin ámbito')
+                label = {'rural': 'Vereda', 'urban': 'Manzana', 'center': 'Centro poblado'}.get(category, 'Sin alcance')
                 r1_count = str(r1_counts.get(code, 0)) if self.r1_statistics is not None else '—'
                 source_count = str(self.counts.get(code, 0)) if self.statistics is not None else '—'
                 item = QTreeWidgetItem([code, label, source_count, r1_count])
+                color_columns(item, 2, 3)
                 item.setData(0, Qt.UserRole, code)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(0, Qt.Checked if code in selected else Qt.Unchecked)
@@ -260,7 +325,7 @@ class TerritorialFilterDialog(QDialog):
             for item in self.items():
                 item.setText(2, '—'); item.setText(3, '—')
             self.update_summary()
-            QMessageBox.warning(self, 'No fue posible leer las fuentes', str(error))
+            QMessageBox.warning(self, 'No fue posible leer los datos', str(error))
         finally:
             self.reading = False
             for widget in (self.read_button, self.buttons, self.scope, self.codes, self.select_all_button, self.deselect_all_button):
@@ -295,10 +360,10 @@ class TerritorialFilterDialog(QDialog):
 
     def update_summary(self, *_):
         selected = self.selected_prefixes()
-        self.summary.setText(f'{len(selected)} códigos seleccionados. Seleccionar/deseleccionar todo actúa sobre los visibles. Sin códigos marcados se incluyen todos los del ámbito elegido.')
+        self.summary.setText(f'{len(selected)} códigos seleccionados. Seleccionar/deseleccionar todo actúa sobre los visibles. Sin códigos marcados se incluyen todos los del alcance elegido.')
         scope = self.scope.currentData()
         lines = []
-        for title, data in (('Fuente (registros)', self.statistics), ('R1 (predios únicos)', self.r1_statistics)):
+        for title, data in (('Base catastral a validar (registros)', self.statistics), ('R1 (predios únicos)', self.r1_statistics)):
             if data is None:
                 lines.append(title + ': estadísticas no disponibles.')
                 continue
@@ -306,18 +371,19 @@ class TerritorialFilterDialog(QDialog):
             total = data['total']; percent = 100 * count / total if total else 0
             text = f'{count:,} de {total:,}'.replace(',', '.')
             lines.append(f'{title}: {text} ({percent:.1f} %)')
-        self.selection_statistics.setText('Incluidos con el filtro seleccionado:\n' + '\n'.join(lines))
+        colored = [f'<span style="color:{BASE_COLOR if index == 0 else R1_COLOR}">{line}</span>' for index, line in enumerate(lines)]
+        self.selection_statistics.setText('Incluidos con el filtro seleccionado:<br>' + '<br>'.join(colored))
 
     def accept(self):
         if self.reading:
             return
         scope = self.scope.currentData()
         if scope is None:
-            QMessageBox.warning(self, 'Seleccione el ámbito', 'Marque al menos un ámbito o Todos.')
+            QMessageBox.warning(self, 'Seleccione el alcance', 'Marque al menos un alcance o Todos.')
             return
         members = scope_members(scope)
         if scope != 'all' and any(sector_scope(code) not in members for code in self.selected_prefixes()):
-            QMessageBox.warning(self, 'Selección incompatible', 'Hay códigos marcados de otro ámbito. Quite esa selección o marque el ámbito correspondiente.')
+            QMessageBox.warning(self, 'Selección incompatible', 'Hay códigos marcados de otro alcance. Quite esa selección o marque el alcance correspondiente.')
             return
         if self.embedded:
             self.filterApplied.emit(scope, self.selected_prefixes())

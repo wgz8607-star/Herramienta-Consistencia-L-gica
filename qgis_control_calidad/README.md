@@ -270,10 +270,10 @@ conexión manual conservan sus campos de configuración.
 
 La pestaña **Referencias R1/R2** ofrece dos opciones:
 
-1. **Archivos R1 y R2 temporales**: prepare las referencias Excel como copias locales de trabajo. Durante la validación se cargan únicamente en la sesión temporal de PostgreSQL.
+1. **Archivos R1 y R2 cargados por usuario**: prepare las referencias Excel como copias locales de trabajo. Durante la validación se cargan únicamente en la sesión temporal de PostgreSQL.
 2. **R1 y R2 Vigente**: consulta el esquema `r1_r2` de la base de sentencias, identifica los municipios por DIVIPOLA y muestra la fecha y las tablas disponibles. Se usa la fecha más reciente del municipio, sin mezclar R1/R2 de fechas distintas. Las referencias requeridas se copian a la sesión temporal de validación.
 
-**Filtro avanzado…**, debajo de **Esquema a validar**, se habilita al seleccionar un esquema o cargar la fuente de predios CICA. Aplica al Modelo Interno/XTF, CICA y sus referencias R1/R2. Por defecto incluye Todos. Permite elegir Urbano (01), Rural (00) o Centro poblado (>01) según las posiciones 6–7 del NPN y seleccionar opcionalmente manzanas/veredas por las posiciones 1–17, leyendo los códigos de la fuente. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).
+**Filtro avanzado…**, debajo de **Esquema a validar**, se habilita al seleccionar un esquema o cargar la base catastral CICA a validar. Aplica al Modelo Interno/XTF, CICA y sus referencias R1/R2. Por defecto incluye Todos. Permite elegir Urbano (01), Rural (00) o Centro poblado (>01) según las posiciones 6–7 del NPN y seleccionar opcionalmente manzanas/veredas por las posiciones 1–17, leyendo los códigos de la base catastral a validar. Consulte [Referencias y alcance](REFERENCIAS_Y_AMBITO.md).
 
 En el modo temporal, al iniciar la validación, el worker crea `reference_r1` y
 `reference_r2` como **TEMP TABLE** y carga sus datos con COPY en la misma conexión
@@ -437,12 +437,16 @@ La carga de sentencias se realiza con el complemento independiente de QGIS [Admi
 
 ## Filtro avanzado con estadísticas (2.4.0)
 
-Ámbito permite combinar Urbano, Rural y Centro poblado mediante casillas. El filtro muestra estadísticas de la fuente de validación y de R1 por separado, con cantidad y porcentaje incluidos. La lista de códigos NPN de 17 dígitos muestra registros de cada fuente y permite seleccionar o deseleccionar todos los códigos visibles. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md) para conocer el conteo y los estados de carga.
+Alcance permite combinar Urbano, Rural y Centro poblado mediante casillas. El filtro muestra estadísticas de la base catastral a validar y de R1 por separado, con cantidad y porcentaje incluidos. La lista de códigos NPN de 17 dígitos muestra registros de la base catastral a validar y de R1 y permite seleccionar o deseleccionar todos los códigos visibles. Consulte [Referencias y alcance](REFERENCIAS_Y_AMBITO.md) para conocer el conteo y los estados de carga.
 
 ## Filtro avanzado como pestaña (2.5.0)
 
-La pestaña **Filtro avanzado**, después de **Referencias R1/R2**, requiere seleccionar tanto la fuente de datos como la de R1. Contiene el editor integrado y muestra exclusivamente estadísticas de R1 por NPN completo único, con duplicados no sumados y filas sin NPN excluidas. **Aplicar filtro** guarda la selección; **Restablecer** vuelve a la selección aplicada. El filtro sigue actuando sobre el modelo y las referencias. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).
+La pestaña **Estadística y filtro avanzado**, después de **Referencias R1/R2**, requiere seleccionar tanto la base catastral a validar como el origen de R1. Contiene el editor integrado y muestra exclusivamente estadísticas de R1 por NPN completo único, con duplicados no sumados y filas sin NPN excluidas. **Aplicar filtro** guarda la selección; **Restablecer** vuelve a la selección aplicada. El filtro sigue actuando sobre el modelo y las referencias. Consulte [Referencias y alcance](REFERENCIAS_Y_AMBITO.md).
 
 ## Presentación del filtro avanzado (2.6.0)
 
-La pestaña presenta un resumen general por ámbito con estadísticas de CICA/Modelo Interno y R1 separadas. El botón **Ver estadísticas y seleccionar filtros…** abre una ventana independiente y ampliable para consultar detalles y editar ámbitos y códigos de 17 dígitos. R1 conserva el conteo único por NPN completo. Cancelar conserva el filtro anterior; Aplicar filtro guarda la selección para la validación.
+La pestaña presenta un resumen general por alcance con estadísticas de CICA/Modelo Interno y R1 separadas. El botón **Ver estadísticas y seleccionar filtros…** abre una ventana independiente y ampliable para consultar detalles y editar alcances y códigos de 17 dígitos. R1 conserva el conteo único por NPN completo. Cancelar conserva el filtro anterior; Aplicar filtro guarda la selección para la validación.
+
+## Presentación y terminología (2.7.0)
+
+La pestaña **Estadística y filtro avanzado** presenta tarjetas y estadísticas con verde para **Base catastral a validar** y azul para **R1**. El selector se denomina **Alcance** y las referencias propias se seleccionan como **Archivos R1 y R2 cargados por usuario**. El resumen agrega predios activos y cancelados de la base; R1 mantiene el conteo de NPN únicos. Los estados no determinables se muestran como no disponibles. La ventana de selección conserva la aplicación o cancelación de filtros.

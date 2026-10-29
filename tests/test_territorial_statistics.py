@@ -154,18 +154,18 @@ class TerritorialStatisticsTests(unittest.TestCase):
             self.assertEqual(data['r1_statistics']['total'], 2)
             dialog = TerritorialFilterDialog('urban+rural', (), lambda: data)
             self.addCleanup(dialog.close); dialog.load_codes()
-            self.assertNotIn('Fuente de validación:', dialog.selection_statistics.text())
-            self.assertEqual(dialog.stat_labels['total'].text(), 'Total predios únicos\n2')
-            self.assertEqual(dialog.codes.columnCount(), 3)
+            self.assertIn('Fuente (registros): 2 de 2', dialog.selection_statistics.text())
+            self.assertEqual(dialog.overview.rows['total'].text(2), '2')
+            self.assertEqual(dialog.codes.columnCount(), 4)
             self.assertIn('R1 (predios únicos): 1 de 2', dialog.selection_statistics.text())
             dialog.search.setText(URBAN); dialog.select_all_button.click()
             self.assertIn('R1 (predios únicos): 1 de 2', dialog.selection_statistics.text())
             row = next(item for item in dialog.items() if item.data(0, Qt.UserRole) == URBAN)
-            self.assertEqual(row.text(2), '1')
+            self.assertEqual(row.text(3), '1')
             # R1-only codes remain visible under the appropriate scope, source count zero.
             dialog.scope.set_scope('all'); dialog.search.clear()
             row = next(item for item in dialog.items() if item.data(0, Qt.UserRole) == CENTER)
-            self.assertEqual(row.text(2), '1')
+            self.assertEqual(row.text(3), '1')
 
     def test_missing_r1_is_not_reported_as_zero_and_source_errors_are_independent(self):
         from qgis_control_calidad.territorial_statistics import read_filter_statistics
@@ -237,7 +237,7 @@ class TerritorialStatisticsTests(unittest.TestCase):
         self.assertEqual(applied, [('urban+rural', ())])
         self.assertEqual(editor.result(), 0)
         self.assertFalse(editor.isWindow())
-        self.assertEqual(editor.codes.columnCount(), 3)
+        self.assertEqual(editor.codes.columnCount(), 4)
 
     def test_filter_tab_requires_both_sources_and_resets_on_source_change(self):
         from qgis_control_calidad.dialog import ControlCalidadDialog
@@ -245,18 +245,18 @@ class TerritorialStatisticsTests(unittest.TestCase):
         index = widget.advanced_filter_tab_index
         self.assertEqual([widget.left_tabs.tabText(i) for i in range(3)], ['Conexión', 'Referencias R1/R2', 'Filtro avanzado'])
         self.assertFalse(widget.left_tabs.isTabEnabled(index))
-        self.assertFalse(widget.schema_controls.isAncestorOf(widget.filter_editor))
+        self.assertFalse(widget.schema_controls.isAncestorOf(widget.filter_overview))
         widget.schema.addItem('city')
         self.assertFalse(widget.left_tabs.isTabEnabled(index))
         widget.temporary_references['R1'] = SimpleNamespace(close=lambda: None)
         widget.update_advanced_filter_availability()
         self.assertTrue(widget.left_tabs.isTabEnabled(index))
         widget.scope_prefixes = (URBAN,)
-        widget.filter_editor.r1_statistics = self.data()
+        widget.filter_statistics = {'r1_statistics': self.data()}
         widget.temporary_references['R1'] = SimpleNamespace(close=lambda: None)
         widget.update_advanced_filter_availability()
         self.assertEqual(widget.scope_prefixes, ())
-        self.assertIsNone(widget.filter_editor.r1_statistics)
+        self.assertIsNone(widget.filter_statistics)
         widget.schema.clear()
         self.assertFalse(widget.left_tabs.isTabEnabled(index))
         widget.model.setCurrentText('CICA')
@@ -281,3 +281,40 @@ class TerritorialStatisticsTests(unittest.TestCase):
         self.assertTrue(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
         widget.municipality.setEditText('Municipio sin seleccionar')
         self.assertFalse(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
+
+    def test_compact_overview_shows_both_sources_without_combining_counts(self):
+        from qgis_control_calidad.territorial_filter import TerritorialOverview
+        view = TerritorialOverview(); self.addCleanup(view.close)
+        source = self.data()
+        r1 = statistics_from_values([URBAN, URBAN, RURAL], unique=True, source='R1 ejemplo')
+        view.set_statistics({'source_statistics': source, 'r1_statistics': r1})
+        self.assertEqual((view.rows['total'].text(1), view.rows['total'].text(2)), ('6', '2'))
+        self.assertEqual((view.rows['urban'].text(1), view.rows['urban'].text(2)), ('3', '1'))
+        self.assertIn('1 duplicados', view.r1_note.text())
+        view.set_statistics({'source_error': 'Sin conexión', 'r1_statistics': r1})
+        self.assertEqual((view.rows['total'].text(1), view.rows['total'].text(2)), ('—', '2'))
+        self.assertIn('Sin conexión', view.source_label.text())
+
+    def test_popup_cancel_preserves_applied_filter_and_accept_updates_it(self):
+        from qgis_control_calidad.dialog import ControlCalidadDialog
+        from qgis.PyQt.QtWidgets import QDialog
+        from unittest.mock import MagicMock
+        widget = ControlCalidadDialog(); self.addCleanup(widget.close)
+        widget.schema.addItem('city')
+        widget.temporary_references['R1'] = SimpleNamespace(close=lambda: None)
+        widget.update_advanced_filter_availability()
+        widget.filter_statistics = {'source_statistics': self.data(), 'r1_statistics': self.data()}
+        widget.apply_advanced_filter('rural', ())
+        popup = MagicMock()
+        popup.scope.currentData.return_value = 'urban+rural'
+        popup.selected_prefixes.return_value = (URBAN,)
+        popup.exec_.return_value = QDialog.Rejected
+        with patch('qgis_control_calidad.dialog.TerritorialFilterDialog', return_value=popup):
+            widget.open_advanced_filter_window()
+        self.assertEqual((widget.scope_selection, widget.scope_prefixes), ('rural', ()))
+        popup.set_statistics.assert_called_once()
+        popup.exec_.return_value = QDialog.Accepted
+        with patch('qgis_control_calidad.dialog.TerritorialFilterDialog', return_value=popup):
+            widget.open_advanced_filter_window()
+        self.assertEqual((widget.scope_selection, widget.scope_prefixes), ('urban+rural', (URBAN,)))
+        self.assertFalse(hasattr(widget, 'filter_editor'))

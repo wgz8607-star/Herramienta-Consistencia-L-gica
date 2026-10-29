@@ -442,3 +442,7 @@ La carga de sentencias se realiza con el complemento independiente de QGIS [Admi
 ## Filtro avanzado como pestaña (2.5.0)
 
 La pestaña **Filtro avanzado**, después de **Referencias R1/R2**, requiere seleccionar tanto la fuente de datos como la de R1. Contiene el editor integrado y muestra exclusivamente estadísticas de R1 por NPN completo único, con duplicados no sumados y filas sin NPN excluidas. **Aplicar filtro** guarda la selección; **Restablecer** vuelve a la selección aplicada. El filtro sigue actuando sobre el modelo y las referencias. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).
+
+## Presentación del filtro avanzado (2.6.0)
+
+La pestaña presenta un resumen general por ámbito con estadísticas de CICA/Modelo Interno y R1 separadas. El botón **Ver estadísticas y seleccionar filtros…** abre una ventana independiente y ampliable para consultar detalles y editar ámbitos y códigos de 17 dígitos. R1 conserva el conteo único por NPN completo. Cancelar conserva el filtro anterior; Aplicar filtro guarda la selección para la validación.

@@ -8,7 +8,7 @@ from psycopg2 import sql
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout,
     QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QHBoxLayout,
-    QToolButton, QMenu, QWidgetAction, QWidget, QCheckBox, QTreeWidget, QTreeWidgetItem, QHeaderView, QSizePolicy, QGridLayout)
+    QToolButton, QMenu, QWidgetAction, QWidget, QCheckBox, QTreeWidget, QTreeWidgetItem, QHeaderView, QSizePolicy, QGridLayout, QScrollArea)
 from .territorial_scope import SCOPES, NPN_COLUMNS, normalize_prefixes, scope_members, sector_scope
 from .territorial_statistics import included_count, prefix_counts
 
@@ -95,6 +95,44 @@ class ScopeSelector(QToolButton):
         self.setText(SCOPES.get(self.currentData(), 'Seleccione ámbito…'))
 
 
+class TerritorialOverview(QWidget):
+    """Compact source/R1 counts, shared by the summary tab and the detail window."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self); layout.setContentsMargins(0, 0, 0, 0)
+        title = QLabel('Distribución por ámbito')
+        title.setStyleSheet('color: #0468A3; font-weight: bold; font-size: 14px;')
+        layout.addWidget(title)
+        self.source_label = QLabel(); self.source_label.setWordWrap(True); layout.addWidget(self.source_label)
+        self.r1_label = QLabel(); self.r1_label.setWordWrap(True); layout.addWidget(self.r1_label)
+        self.table = QTreeWidget(); self.table.setRootIsDecorated(False)
+        self.table.setHeaderLabels(['Ámbito', 'Fuente', 'R1 únicos'])
+        self.table.header().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setMinimumHeight(180); self.table.setMaximumHeight(215)
+        self.rows = {}
+        for key, label in (('total', 'Total'), ('urban', 'Urbano'), ('rural', 'Rural'), ('center', 'Centro poblado'), ('unknown', 'Sin ámbito')):
+            item = QTreeWidgetItem([label, '—', '—']); self.table.addTopLevelItem(item); self.rows[key] = item
+        layout.addWidget(self.table)
+        self.note = QLabel('Fuente: registros (incluye duplicados). R1: predios únicos por NPN completo. No se suman entre fuentes.')
+        self.note.setWordWrap(True); layout.addWidget(self.note)
+        self.r1_note = QLabel(); self.r1_note.setWordWrap(True); layout.addWidget(self.r1_note)
+        self.set_statistics(None)
+
+    def set_statistics(self, bundle):
+        bundle = bundle or {}
+        source = bundle.get('source_statistics'); r1 = bundle.get('r1_statistics')
+        self.source_label.setText('Fuente: ' + (source['source'] if source is not None else bundle.get('source_error') or 'pendiente de consultar'))
+        self.r1_label.setText('R1: ' + (r1['source'] if r1 is not None else bundle.get('r1_status') or 'pendiente de consultar'))
+        for column, data in ((1, source), (2, r1)):
+            for key, item in self.rows.items():
+                value = None if data is None else data['total'] if key == 'total' else data['totals'][key]
+                item.setText(column, '—' if value is None else f'{value:,}'.replace(',', '.'))
+        if r1 is None:
+            self.r1_note.setText('Las estadísticas de R1 se mostrarán al consultar su origen.')
+        else:
+            self.r1_note.setText(f"R1: {r1.get('duplicates', 0):,} duplicados no sumados · {r1.get('missing_npn', 0):,} filas sin NPN excluidas.".replace(',', '.'))
+
+
 class TerritorialFilterDialog(QDialog):
     filterApplied = pyqtSignal(str, object)
     resetRequested = pyqtSignal()
@@ -106,27 +144,19 @@ class TerritorialFilterDialog(QDialog):
         if embedded:
             self.setWindowFlags(Qt.Widget)
         else:
-            self.resize(800, 700)
+            self.resize(900, 760)
+            self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
         self.loader = loader
         self.statistics = None; self.r1_statistics = None; self.r1_status = 'Pendiente de consultar R1.'; self.counts = {}; self.reading = False
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel('Estadísticas de R1 — predios únicos'))
-        self.source_label = QLabel('Pendiente de consultar R1 temporal o vigente.')
-        self.source_label.setWordWrap(True); layout.addWidget(self.source_label)
-        cards = QGridLayout(); self.stat_labels = {}
-        for index, (key, title) in enumerate((('total', 'Total predios únicos'), ('urban', 'Urbano'), ('rural', 'Rural'), ('center', 'Centro poblado'))):
-            label = QLabel(title + '\n—')
-            label.setStyleSheet('background: #edf6fa; color: #005b80; padding: 10px; border: 1px solid #cbdde6;')
-            self.stat_labels[key] = label; cards.addWidget(label, index // 2 if embedded else 0, index % 2 if embedded else index)
-        layout.addLayout(cards)
-        self.stat_note = QLabel('Cada NPN completo se cuenta una sola vez en R1.'); self.stat_note.setWordWrap(True)
-        layout.addWidget(self.stat_note)
-        self.r1_label = QLabel('R1 — pendiente de consultar.'); self.r1_label.setWordWrap(True)
-        self.r1_label.setStyleSheet('background: #f0f7f1; color: #275736; padding: 8px; border: 1px solid #c4ddcc;')
-        layout.addWidget(self.r1_label)
+        outer = QVBoxLayout(self)
+        content = QWidget(); layout = QVBoxLayout(content)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(content); outer.addWidget(scroll)
+        self.overview = TerritorialOverview()
+        layout.addWidget(self.overview)
         form = QFormLayout(); self.scope = ScopeSelector(scope)
         form.addRow('Ámbito', self.scope); layout.addLayout(form)
-        explanation = QLabel('Combine ámbitos. Todos incluye registros sin ámbito identificable. El mismo filtro se aplica a la fuente y a R1/R2. Las estadísticas mostradas corresponden solo a R1.')
+        explanation = QLabel('Combine ámbitos. Todos incluye registros sin ámbito identificable. El mismo filtro se aplica a la fuente y a R1/R2. Los conteos de la fuente y de R1 se muestran separados.')
         explanation.setWordWrap(True); layout.addWidget(explanation)
         self.selection_statistics = QLabel('Predios incluidos con este filtro: pendiente de consultar.')
         self.selection_statistics.setStyleSheet('background: #e0f1ff; color: #005b80; padding: 10px; font-weight: bold;')
@@ -145,9 +175,9 @@ class TerritorialFilterDialog(QDialog):
             button.setToolTip('Actúa sobre los códigos visibles según el ámbito y la búsqueda.')
             selection_buttons.addWidget(button)
         layout.addLayout(selection_buttons)
-        self.codes = QTreeWidget(); self.codes.setHeaderLabels(['Código NPN (1–17)', 'Tipo', 'Predios únicos R1'])
+        self.codes = QTreeWidget(); self.codes.setHeaderLabels(['Código NPN (1–17)', 'Tipo', 'Registros fuente', 'Predios únicos R1'])
         self.codes.setRootIsDecorated(False); self.codes.header().setSectionResizeMode(0, QHeaderView.Stretch)
-        for column in (1, 2):
+        for column in (1, 2, 3):
             self.codes.header().setSectionResizeMode(column, QHeaderView.ResizeToContents)
         self.codes.setMinimumHeight(140); layout.addWidget(self.codes, 1)
         self.summary = QLabel(); self.summary.setWordWrap(True); layout.addWidget(self.summary)
@@ -159,7 +189,7 @@ class TerritorialFilterDialog(QDialog):
         self.buttons.button(QDialogButtonBox.Cancel).setText('Restablecer' if embedded else 'Cancelar')
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.resetRequested.emit if embedded else self.reject)
-        layout.addWidget(self.buttons)
+        outer.addWidget(self.buttons)
         self.update_summary()
 
     def items(self):
@@ -178,7 +208,8 @@ class TerritorialFilterDialog(QDialog):
                 category = sector_scope(code)
                 label = {'rural': 'Vereda', 'urban': 'Manzana', 'center': 'Centro poblado'}.get(category, 'Sin ámbito')
                 r1_count = str(r1_counts.get(code, 0)) if self.r1_statistics is not None else '—'
-                item = QTreeWidgetItem([code, label, r1_count])
+                source_count = str(self.counts.get(code, 0)) if self.statistics is not None else '—'
+                item = QTreeWidgetItem([code, label, source_count, r1_count])
                 item.setData(0, Qt.UserRole, code)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(0, Qt.Checked if code in selected else Qt.Unchecked)
@@ -190,69 +221,46 @@ class TerritorialFilterDialog(QDialog):
     def invalidate_statistics(self, scope, prefixes):
         self.statistics = None; self.r1_statistics = None; self.counts = {}
         self.r1_status = 'Pendiente de actualizar.'
-        self.source_label.setText('R1 — pendiente de consultar la selección actual.')
-        self.r1_label.setText('Estadísticas no disponibles hasta actualizar.')
-        self.stat_note.setText('Cada NPN completo se cuenta una sola vez en R1.')
-        for label in self.stat_labels.values():
-            label.setText(label.text().split('\n')[0] + '\n—')
+        self.overview.set_statistics(None)
         self.scope.set_scope(scope)
         self.populate(prefixes, prefixes)
+
+    def set_statistics(self, loaded):
+        selected = self.selected_prefixes()
+        if isinstance(loaded, dict) and 'source_statistics' in loaded:
+            self.statistics = loaded.get('source_statistics')
+            self.r1_statistics = loaded.get('r1_statistics')
+            self.r1_status = loaded.get('r1_status', '')
+            self.overview.set_statistics(loaded)
+            codes = []
+        else:
+            self.statistics = loaded if isinstance(loaded, dict) else None
+            self.r1_statistics = None; self.r1_status = 'R1 no consultado.'
+            self.overview.set_statistics({'source_statistics': self.statistics, 'r1_status': self.r1_status})
+            codes = loaded if isinstance(loaded, list) else []
+        self.counts = prefix_counts(self.statistics) if self.statistics is not None else {}
+        codes = sorted(set(codes) | set(self.counts) | (set(prefix_counts(self.r1_statistics)) if self.r1_statistics is not None else set()))
+        if set(selected) - set(codes):
+            QMessageBox.warning(self, 'Códigos no encontrados', 'Algunos códigos marcados no aparecen en los orígenes consultados. Se conservarán marcados; revise la selección.')
+        self.populate(sorted(set(codes) | set(selected)), selected)
+        self.update_summary()
 
     def load_codes(self):
         if self.reading:
             return
-        selected = self.selected_prefixes(); self.reading = True
+        self.reading = True
         for widget in (self.read_button, self.buttons, self.scope, self.codes, self.select_all_button, self.deselect_all_button):
             widget.setEnabled(False)
-        self.source_label.setText('Leyendo R1 y códigos de manzana/vereda…')
         try:
-            loaded = self.loader()
-            if isinstance(loaded, dict) and 'source_statistics' in loaded:
-                data = loaded['source_statistics']
-                source_error = loaded.get('source_error', '')
-                self.r1_statistics = loaded.get('r1_statistics')
-                self.r1_status = loaded.get('r1_status', '')
-            else:
-                data = loaded; source_error = ''
-                self.r1_statistics = None; self.r1_status = 'R1 no consultado.'
-            if isinstance(data, dict):
-                self.statistics = data; self.counts = prefix_counts(data); codes = sorted(self.counts)
-            else:
-                codes = data or []; self.statistics = None; self.counts = {}
-            if self.r1_statistics is not None:
-                r1 = self.r1_statistics
-                self.source_label.setText(r1['source'])
-                for key, label in self.stat_labels.items():
-                    title = {'total': 'Total predios únicos', 'urban': 'Urbano', 'rural': 'Rural', 'center': 'Centro poblado'}[key]
-                    value = r1['total'] if key == 'total' else r1['totals'][key]
-                    label.setText(title + '\n' + f'{value:,}'.replace(',', '.'))
-                self.stat_note.setText(f"R1 sin ámbito identificable: {r1['totals']['unknown']:,}. Cada NPN completo se cuenta una vez.".replace(',', '.'))
-                self.r1_label.setText(f"Duplicados de R1 no sumados: {r1.get('duplicates', 0):,} · Filas sin NPN excluidas: {r1.get('missing_npn', 0):,}".replace(',', '.') +
-                                      '\nEstadística exclusiva de R1; no incluye R2 ni la fuente de validación.')
-            else:
-                self.source_label.setText('R1 — ' + self.r1_status)
-                self.r1_label.setText('Estadísticas de R1 no disponibles.')
-                self.stat_note.setText('Cargue o seleccione R1 y actualice para consultar sus predios únicos.')
-                for label in self.stat_labels.values():
-                    label.setText(label.text().split('\n')[0] + '\n—')
-            if self.r1_statistics is not None:
-                codes = sorted(set(codes) | set(prefix_counts(self.r1_statistics)))
-            if set(selected) - set(codes):
-                QMessageBox.warning(self, 'Códigos no encontrados', 'Algunos códigos marcados no aparecen en esta fuente. Se conservarán marcados con cero predios; revise la selección.')
-            self.populate(sorted(set(codes) | set(selected)), selected)
-            self.update_summary()
+            self.set_statistics(self.loader())
         except Exception as error:
             self.statistics = None; self.r1_statistics = None; self.counts = {}
             self.r1_status = 'Estadísticas no disponibles.'
-            self.r1_label.setText('R1 — ' + self.r1_status)
-            self.source_label.setText('No se pudo consultar R1. Vuelva a actualizar los datos.')
-            for label in self.stat_labels.values():
-                label.setText(label.text().split('\n')[0] + '\n—')
-            self.stat_note.setText('Estadísticas no disponibles.')
+            self.overview.set_statistics({'source_error': str(error), 'r1_status': self.r1_status})
             for item in self.items():
-                item.setText(2, '—')
+                item.setText(2, '—'); item.setText(3, '—')
             self.update_summary()
-            QMessageBox.warning(self, 'No fue posible leer la fuente', str(error))
+            QMessageBox.warning(self, 'No fue posible leer las fuentes', str(error))
         finally:
             self.reading = False
             for widget in (self.read_button, self.buttons, self.scope, self.codes, self.select_all_button, self.deselect_all_button):
@@ -289,14 +297,16 @@ class TerritorialFilterDialog(QDialog):
         selected = self.selected_prefixes()
         self.summary.setText(f'{len(selected)} códigos seleccionados. Seleccionar/deseleccionar todo actúa sobre los visibles. Sin códigos marcados se incluyen todos los del ámbito elegido.')
         scope = self.scope.currentData()
-        data = self.r1_statistics
-        if data is None:
-            self.selection_statistics.setText('R1 (predios únicos): estadísticas no disponibles.')
-        else:
+        lines = []
+        for title, data in (('Fuente (registros)', self.statistics), ('R1 (predios únicos)', self.r1_statistics)):
+            if data is None:
+                lines.append(title + ': estadísticas no disponibles.')
+                continue
             count = included_count(data, scope, selected) if scope is not None else 0
             total = data['total']; percent = 100 * count / total if total else 0
             text = f'{count:,} de {total:,}'.replace(',', '.')
-            self.selection_statistics.setText(f'R1 (predios únicos): {text} ({percent:.1f} %) incluidos con este filtro.')
+            lines.append(f'{title}: {text} ({percent:.1f} %)')
+        self.selection_statistics.setText('Incluidos con el filtro seleccionado:\n' + '\n'.join(lines))
 
     def accept(self):
         if self.reading:

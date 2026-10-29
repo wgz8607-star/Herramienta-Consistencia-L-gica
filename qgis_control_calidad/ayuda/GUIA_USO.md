@@ -337,3 +337,8 @@ Una vez incorporadas las reglas con el programa externo, vuelva a consultar la v
 Abra **Filtro avanzado**, después de **Referencias R1/R2**. Se habilita al elegir la fuente de datos y cargar R1 temporal o seleccionar un municipio con R1 vigente. La pestaña muestra solo estadísticas de R1: cada NPN completo cuenta una vez, sin sumar duplicados; las filas sin NPN se informan por separado y se excluyen del conteo.
 
 Combine Urbano, Rural y Centro poblado mediante casillas. Todos no restringe el ámbito. Opcionalmente marque códigos NPN de manzana/vereda de 17 dígitos; sin códigos marcados se incluyen todos los del ámbito elegido. Seleccionar todo y Deseleccionar todo actúan sobre códigos visibles. Use **Aplicar filtro** antes de ejecutar o **Restablecer** para recuperar la selección aplicada. El filtro también se aplica a la fuente validada y a R2, aunque sus estadísticas no se muestran aquí.
+
+
+### Resumen y ventana de selección
+
+En **Filtro avanzado** se muestran las estadísticas generales de Urbano, Rural y Centro poblado para la fuente y para R1, en columnas separadas. La fuente cuenta registros y R1 cuenta NPN únicos, sin sumar duplicados. Pulse **Ver estadísticas y seleccionar filtros…** para abrir la ventana ampliable de estadísticas detalladas y selección de filtros. **Aplicar filtro** guarda la selección; **Cancelar** mantiene la selección anterior. La pestaña continúa requiriendo ambas fuentes seleccionadas.

@@ -30,7 +30,7 @@ from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
 from .cica_gdb import install_gdb
 from .territorial_scope import SCOPES, install_scope, resolve_scope
-from .territorial_filter import TerritorialFilterDialog
+from .territorial_filter import TerritorialFilterDialog, TerritorialOverview
 from .territorial_statistics import read_filter_statistics
 from .templates import validation_format
 from .reference import ReferenceDialog
@@ -710,10 +710,13 @@ class ControlCalidadDialog(QDialog):
         filter_page = QWidget()
         filter_layout = QVBoxLayout(filter_page)
         filter_layout.addWidget(self.advanced_filter_summary)
-        self.filter_editor = TerritorialFilterDialog(self.scope_selection, self.scope_prefixes, self.read_territorial_prefixes, filter_page, embedded=True)
-        self.filter_editor.filterApplied.connect(self.apply_advanced_filter)
-        self.filter_editor.resetRequested.connect(self.reset_advanced_filter_editor)
-        filter_layout.addWidget(self.filter_editor)
+        self.filter_statistics = None
+        self.filter_overview = TerritorialOverview(filter_page)
+        filter_layout.addWidget(self.filter_overview)
+        self.open_filter_window_button = QPushButton('Ver estadísticas y seleccionar filtros…')
+        self.open_filter_window_button.clicked.connect(self.open_advanced_filter_window)
+        filter_layout.addWidget(self.open_filter_window_button)
+        filter_layout.addStretch()
         filter_scroll = QScrollArea()
         filter_scroll.setWidgetResizable(True)
         filter_scroll.setFrameShape(QFrame.NoFrame)
@@ -1018,7 +1021,8 @@ class ControlCalidadDialog(QDialog):
                 self.update_advanced_filter_summary()
             self.filter_source_signature = signature
             self.filter_needs_refresh = True
-            self.filter_editor.invalidate_statistics(self.scope_selection, self.scope_prefixes)
+            self.filter_statistics = None
+            self.filter_overview.set_statistics(None)
         ready = data_ready and r1_ready
         enabled = ready and not self.controls_running and not self.exporting and not self.reference_lookup_running
         if not ready and self.left_tabs.currentIndex() == self.advanced_filter_tab_index:
@@ -1037,7 +1041,12 @@ class ControlCalidadDialog(QDialog):
     def load_advanced_filter_tab(self):
         self.update_advanced_filter_availability()
         if self.left_tabs.currentIndex() == self.advanced_filter_tab_index and self.left_tabs.isTabEnabled(self.advanced_filter_tab_index):
-            self.filter_editor.load_codes()
+            try:
+                self.read_territorial_prefixes()
+            except Exception as error:
+                self.filter_statistics = None
+                self.filter_overview.set_statistics({'source_error': str(error), 'r1_status': 'No disponible.'})
+                self.status.setText('No se pudieron consultar las estadísticas: ' + str(error))
 
     def apply_advanced_filter(self, scope, prefixes):
         self.scope_selection = scope
@@ -1045,12 +1054,21 @@ class ControlCalidadDialog(QDialog):
         self.update_advanced_filter_summary()
         self.status.setText('Filtro aplicado: ' + self.advanced_filter_summary.text())
 
-    def reset_advanced_filter_editor(self):
-        self.filter_editor.scope.set_scope(self.scope_selection)
-        codes = {item.data(0, Qt.UserRole) for item in self.filter_editor.items()} | set(self.scope_prefixes)
-        self.filter_editor.populate(sorted(codes), self.scope_prefixes)
+    def open_advanced_filter_window(self):
+        self.update_advanced_filter_availability()
+        if not self.left_tabs.isTabEnabled(self.advanced_filter_tab_index) or self.filter_reading:
+            return
+        dialog = TerritorialFilterDialog(self.scope_selection, self.scope_prefixes, self.read_territorial_prefixes, self)
+        if self.filter_statistics is not None:
+            dialog.set_statistics(self.filter_statistics)
+        else:
+            QTimer.singleShot(0, dialog.load_codes)
+        if dialog.exec_() == QDialog.Accepted:
+            self.apply_advanced_filter(dialog.scope.currentData(), dialog.selected_prefixes())
 
     def read_territorial_prefixes(self):
+        self.filter_statistics = None
+        self.filter_overview.set_statistics(None)
         snapshot = None
         if self.model.currentText() == 'CICA':
             snapshot = self.cica_references.get('cica_predio')
@@ -1063,9 +1081,12 @@ class ControlCalidadDialog(QDialog):
         self.main_tabs.setEnabled(False)
         self.update_run_availability()
         try:
-            return self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
+            data = self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
                                     self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
                                     'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
+            self.filter_statistics = data
+            self.filter_overview.set_statistics(data)
+            return data
         finally:
             self.filter_reading = False
             self.main_tabs.setEnabled(True)

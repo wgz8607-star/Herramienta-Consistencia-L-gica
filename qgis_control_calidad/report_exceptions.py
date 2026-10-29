@@ -7,7 +7,9 @@ from openpyxl.styles import PatternFill, Protection, Font
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.hyperlink import Hyperlink
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import coordinate_to_tuple
 
 HEADERS = ('Excepción DT', 'Observación DT', 'Excepción operador', 'Observación operador')
 FIELDS = ('excepcion_dt', 'observacion_dt', 'excepcion_operador', 'observacion_operador')
@@ -140,3 +142,46 @@ def link_rule_reviews(book):
             cell.protection = Protection(locked=True)
     # Detail editing is the sole source in a workbook with linked rule sheets.
     summary.data_validations.dataValidation = []
+
+
+def configure_report_workbook(book):
+    """Protect report structure and data, retaining exception edits and column widths."""
+    book.security.lockStructure = True
+    for sheet in book:
+        if sheet.sheet_state != 'visible':
+            continue
+        # False means the action is allowed in Excel's protection flags.
+        sheet.protection.sheet = True
+        sheet.protection.formatColumns = False
+        sheet.protection.formatRows = True
+        sheet.protection.formatCells = True
+        sheet.protection.insertColumns = True
+        sheet.protection.insertRows = True
+        sheet.protection.deleteColumns = True
+        sheet.protection.deleteRows = True
+        sheet.protection.insertHyperlinks = True
+        sheet.protection.sort = True
+        sheet.protection.autoFilter = False
+        sheet.protection.objects = True
+        sheet.protection.scenarios = True
+        sheet.protection.pivotTables = True
+        sheet.protection.selectLockedCells = False
+        sheet.protection.selectUnlockedCells = False
+        coordinate = sheet.freeze_panes
+        row = coordinate_to_tuple(coordinate.coordinate if hasattr(coordinate, 'coordinate') else coordinate)[0] if coordinate else 2
+        sheet.freeze_panes = 'B' + str(max(2, row))
+
+
+def internal_detail_link(cell, sheet_name):
+    """An explicit in-workbook destination, visually distinct from plain text."""
+    text = '↪ Ir a ' + sheet_name
+    quoted = "'" + sheet_name.replace("'", "''") + "'"
+    cell.value = text
+    cell.hyperlink = Hyperlink(ref=cell.coordinate, location=quoted + '!A1', display=text,
+                               tooltip='Vínculo interno: abrir la hoja ' + sheet_name + ' en este mismo archivo.')
+    cell.font = Font(name='Calibri', size=11, color='0066B3', underline='single', bold=True)
+    cell.fill = PatternFill('solid', fgColor='EAF3FF')
+    alignment = copy(cell.alignment)
+    alignment.vertical = 'center'; alignment.wrap_text = True; alignment.indent = 1
+    cell.alignment = alignment
+    cell.parent.row_dimensions[cell.row].height = max(26, cell.parent.row_dimensions[cell.row].height or 0)

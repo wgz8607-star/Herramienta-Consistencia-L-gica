@@ -342,3 +342,33 @@ Combine Urbano, Rural y Centro poblado mediante casillas. Todos no restringe el 
 ### Resumen y ventana de selección
 
 En **Estadística y filtro avanzado** se muestran las estadísticas generales de Urbano, Rural y Centro poblado para la base catastral a validar y para R1, en columnas separadas. La base catastral a validar cuenta registros y R1 cuenta NPN únicos, sin sumar duplicados. Pulse **Ver estadísticas y seleccionar filtros…** para abrir la ventana ampliable de estadísticas detalladas y selección de filtros. **Aplicar filtro** guarda la selección; **Cancelar** mantiene la selección anterior. La pestaña continúa requiriendo la base catastral a validar y R1 seleccionados.
+
+
+### Nombres de los formatos descargados
+
+El formato de Modelo Interno V2 se guarda con el nombre sugerido **fo_gct_pc01_07_v2.xlsx**. El formato de CICA V2 se guarda como **cons_log_cica_v2.xlsx**. El contenido de los formatos homologados se conserva.
+
+
+### Identificador y orden de hojas
+
+Cada reporte utiliza la columna **Numero_Predial_Nacional**, sin duplicarla como Predio o numero_predial_nacional. Se conservan los ceros iniciales. Las hojas de reglas se nombran con el identificador definido en las sentencias (1_1, 1_2, 1_10, …, 1_52) y se ordenan numéricamente, sin renumerar los controles.
+
+
+### Protección y navegación del Excel
+
+Los reportes se entregan protegidos, conservando editables los campos habilitados de excepciones y observaciones. Se permite ajustar el ancho de columnas y utilizar los filtros existentes; las filas, celdas automáticas y la estructura del libro permanecen protegidas. La primera columna queda inmovilizada en todas las hojas visibles, junto con los encabezados: B5 en las hojas de reglas y B2 en las hojas de resumen.
+
+
+### Hojas automáticas y contexto
+
+La hoja **Revisión** permanece oculta: consolida automáticamente las excepciones diligenciadas en las hojas de reglas y permite recuperar el seguimiento. Las excepciones y observaciones se editan en cada detalle. Los reportes no muestran el campo **Identificador de entrega** ni incluyen hojas **Contexto** o **Contexto de validación**. La ubicación territorial se conserva en el encabezado de cada hoja de regla.
+
+
+### Reglas & Componente
+
+Esta hoja presenta encabezados azules, filas alternadas y descripciones con texto ajustado. Hallazgos destaca las cantidades positivas y los ceros; Detalle técnico resalta los mensajes de error cuando existen. Incluye filtros, primera columna inmovilizada y protección, permitiendo ajustar anchos de columna.
+
+
+### Vínculos a las reglas
+
+En **Detalle de errores**, la columna **Hoja de detalle** muestra un vínculo azul subrayado, por ejemplo **↪ Ir a 1_12**. Al pulsarlo se abre la hoja de esa regla dentro del mismo archivo. El mensaje al pasar el cursor identifica el destino como vínculo interno.

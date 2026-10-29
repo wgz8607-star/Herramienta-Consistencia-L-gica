@@ -450,3 +450,23 @@ La pestaña presenta un resumen general por alcance con estadísticas de CICA/Mo
 ## Presentación y terminología (2.7.0)
 
 La pestaña **Estadística y filtro avanzado** presenta tarjetas y estadísticas con verde para **Base catastral a validar** y azul para **R1**. El selector se denomina **Alcance** y las referencias propias se seleccionan como **Archivos R1 y R2 cargados por usuario**. El resumen agrega predios activos y cancelados de la base; R1 mantiene el conteo de NPN únicos. Los estados no determinables se muestran como no disponibles. La ventana de selección conserva la aplicación o cancelación de filtros.
+
+## Orden de resultados del modelo
+
+En **Validaciones del modelo**, los componentes disponibles se presentan en este orden y con su número: 0 Estructura, 1 Administrativas, 2 Jurídicas, 3 Físicas, 4 Económicas, 5 Novedades y 9 Étnico. TOTAL permanece al final. El resumen ejecutivo Excel conserva el mismo orden. El cambio es de presentación y no modifica las reglas ni los conteos.
+
+## Identificadores y hojas de los reportes
+
+Los reportes generados presentan una sola columna **Numero_Predial_Nacional**, conservada como texto. Se unifican Predio, numero_predial_nacional, numero_predial y npn; los datos originales continúan en los metadatos de identidad para recuperar revisiones sin alterar las claves. Un cambio del identificador visible impide recuperar la revisión.
+
+Las hojas de reglas toman el identificador definido en las sentencias: regla_1_1 se presenta como **1_1** y regla_1_52 como **1_52**. Se ordenan numéricamente, conservando saltos y sufijos definidos en los códigos. Cada reporte por componente conserva su propio espacio de nombres; no se crean hojas para controles sin hallazgos.
+
+## Reportes Excel (2.8.0)
+
+- En Validaciones del modelo, los resultados y su resumen siguen el orden 0 Estructura, 1 Administrativas, 2 Jurídicas, 3 Físicas, 4 Económicas, 5 Novedades, 9 Étnico y TOTAL.
+- Una sola columna Numero_Predial_Nacional, como texto, sin duplicar identificadores. Los metadatos originales de los casos se conservan para recuperar revisiones.
+- Hojas de reglas con el identificador de las sentencias y orden numérico: 1_1, 1_2, …, 1_10, …, 1_52. Hoja de detalle ofrece vínculos internos azules subrayados.
+- Se elimina Sheet vacía, Contexto, Contexto de validación e Identificador de entrega. Revisión permanece oculta y automática.
+- Reglas & Componente sustituye Ejecución automática, sin Resultado automático, con encabezados y filas formateados.
+- Reportes protegidos con anchos de columna ajustables, primera columna y encabezados inmovilizados. Se mantienen editables excepciones y observaciones.
+- Descargas de formatos: fo_gct_pc01_07_v2.xlsx y cons_log_cica_v2.xlsx.

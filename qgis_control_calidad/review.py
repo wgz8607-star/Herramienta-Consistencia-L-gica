@@ -7,6 +7,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 import hashlib
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -15,7 +16,9 @@ import unicodedata
 from zoneinfo import ZoneInfo
 
 from openpyxl import Workbook, load_workbook
-from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, yes, validate, add_controls, link_formula
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value
+from .report_exceptions import HEADERS as EXCEPTION_HEADERS, FIELDS as EXCEPTION_FIELDS, DEFAULTS as EXCEPTION_DEFAULTS, yes, validate, add_controls, link_formula, configure_report_workbook
 
 PENDING = "Revisión pendiente"
 EXCEPTION = "Excepción"
@@ -154,6 +157,46 @@ def _text(cell, value):
     cell.number_format = "@"
 
 
+def style_rule_component_sheet(sheet):
+    sheet.sheet_properties.tabColor = '0468A3'
+    sheet.sheet_view.showGridLines = False
+    sheet.freeze_panes = 'B2'
+    sheet.auto_filter.ref = sheet.dimensions
+    widths = {'A': 25, 'B': 20, 'C': 14, 'D': 50, 'E': 85}
+    for column, width in widths.items():
+        sheet.column_dimensions[column].width = width
+    sheet.row_dimensions[1].height = 32
+    line = Side(style='thin', color='E1E8EF')
+    for cell in sheet[1]:
+        cell.fill = PatternFill('solid', fgColor='0468A3')
+        cell.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    for row in sheet.iter_rows(min_row=2):
+        fill = 'F0F6FB' if row[0].row % 2 == 0 else 'FFFFFF'
+        lines = 1
+        for cell in row:
+            cell.font = Font(name='Calibri', size=11, color='344054')
+            cell.fill = PatternFill('solid', fgColor=fill)
+            cell.border = Border(bottom=line)
+            cell.alignment = Alignment(vertical='center', wrap_text=True,
+                                       horizontal='center' if cell.column == 3 else 'left')
+            width = widths[cell.column_letter]
+            lines = max(lines, sum(max(1, math.ceil(len(part) / max(1, width - 3)))
+                                   for part in str(cell.value or '').split('\n')))
+        row[0].font = Font(name='Calibri', size=11, bold=True, color='0468A3')
+        try:
+            findings = int(row[2].value)
+        except (TypeError, ValueError):
+            findings = None
+        if findings is not None:
+            row[2].font = Font(name='Calibri', size=11, bold=True, color='9C5700' if findings else '217346')
+            row[2].fill = PatternFill('solid', fgColor='FFF3D6' if findings else 'EAF5EC')
+        if row[3].value:
+            row[3].font = Font(name='Calibri', size=11, color='9C0006')
+            row[3].fill = PatternFill('solid', fgColor='FCECEE')
+        sheet.row_dimensions[row[0].row].height = min(409, max(30, lines * 15 + 8))
+
+
 def save_review(path, cases, results=(), general_rows=(), workbook=None):
     for case in cases:
         validate(case.exception_tracking(), valid_observation)
@@ -164,13 +207,13 @@ def save_review(path, cases, results=(), general_rows=(), workbook=None):
     book = workbook if workbook is not None else Workbook()
     sheet = book.create_sheet("Revisión") if workbook is not None else book.active
     sheet.title = "Revisión"
-    fields = sorted({str(k) for case in cases for k in case.data})
+    fields = sorted({str(k) for case in cases for k in case.data if not is_predio_field(k)})
     headers = ["clave_caso", "componente", "validacion", "resultado_automatico", *REVIEW_FIELDS,
-               "recuperable", *EXCEPTION_HEADERS, *["dato:" + name for name in fields]]
+               "recuperable", *EXCEPTION_HEADERS, PREDIO_HEADER, *["dato:" + name for name in fields]]
     sheet.append(headers)
     for index, case in enumerate(cases, 2):
         values = [case.key, case.component, case.rule, case.automatic, *case.tracking(),
-                  "Sí" if case.recoverable else "No", *case.exception_tracking(), *[case.data.get(name) for name in fields]]
+                  "Sí" if case.recoverable else "No", *case.exception_tracking(), predio_value(case.data), *[case.data.get(name) for name in fields]]
         for column, value in enumerate(values, 1):
             _text(sheet.cell(index, column), value)
     sheet.freeze_panes = "A2"
@@ -191,26 +234,21 @@ def save_review(path, cases, results=(), general_rows=(), workbook=None):
             for cell in (meta.cell(meta_row, 1), meta.cell(meta_row, 3)):
                 cell.data_type = 's'
     meta.sheet_state = "hidden"
-    context_sheet = book.create_sheet("Contexto")
-    context_sheet.append(["Campo", "Valor"])
-    if cases:
-        context = json.loads(cases[0].identity).get('context', {})
-        for row, (name, value) in enumerate(sorted(context.items()), 2):
-            _text(context_sheet.cell(row, 1), name)
-            _text(context_sheet.cell(row, 2), value)
-    execution = book.create_sheet("Ejecución automática")
-    execution.append(["Componente", "Validación", "Resultado automático", "Hallazgos", "Detalle técnico", "Descripción"])
+    execution = book.create_sheet("Reglas & Componente")
+    execution.append(["Componente", "Validación", "Hallazgos", "Detalle técnico", "Descripción"])
     for result in results:
-        execution.append([None] * 6)
-        for col, value in enumerate([result.category, result.rule, result.status, result.findings, result.detail, result.description], 1):
+        execution.append([None] * 5)
+        for col, value in enumerate([result.category, result.rule, result.findings, result.detail, result.description], 1):
             _text(execution.cell(execution.max_row, col), value)
+    style_rule_component_sheet(execution)
     if general_rows:
         general = book.create_sheet("Reporte general")
-        columns = sorted({str(k) for row in general_rows for k in row})
+        original_columns = {str(k) for row in general_rows for k in row}
+        columns = ([PREDIO_HEADER] if any(is_predio_field(k) for k in original_columns) else []) + sorted(k for k in original_columns if not is_predio_field(k))
         general.append(columns)
         for row_index, row in enumerate(general_rows, 2):
             for col, name in enumerate(columns, 1):
-                _text(general.cell(row_index, col), row.get(name))
+                _text(general.cell(row_index, col), predio_value(row) if name == PREDIO_HEADER else row.get(name))
     statistics = book.create_sheet("Estadística de revisión")
     statistics.append(STAT_HEADERS)
     groups, totals = review_statistics(results, cases)
@@ -219,6 +257,8 @@ def save_review(path, cases, results=(), general_rows=(), workbook=None):
     statistics.append(statistics_row('TOTAL', totals))
     statistics.freeze_panes = 'A2'
     statistics.auto_filter.ref = statistics.dimensions
+    sheet.sheet_state = "hidden"
+    configure_report_workbook(book)
     # Write atomically: a failed save must not replace the last saved review.
     if path is None:
         return book
@@ -319,10 +359,21 @@ def load_review(path):
                 actual = {h[5:]: '' if row[h] is None else str(row[h]) for h in headers if str(h).startswith('dato:') and h[5:].lower() not in POSITION_FIELDS}
                 expected = {k: _display_canonical(v) for k, v in original.items()}
                 # Blank columns from other rules are harmless; changed data is not.
-                valid = all(actual.get(k) == v for k, v in expected.items()) and not any(v for k, v in actual.items() if k not in expected)
+                # New exports coalesce displayed NPN aliases, while identities retain
+                # every original SQL field so matching still changes with the data.
+                unified = PREDIO_HEADER in row
+                visible_expected = {k: v for k, v in expected.items() if not (unified and is_predio_field(k))}
+                valid = all(actual.get(k) == v for k, v in visible_expected.items()) and not any(v for k, v in actual.items() if k not in expected)
+                if unified:
+                    valid = valid and ('' if row[PREDIO_HEADER] is None else str(row[PREDIO_HEADER])) == predio_value(expected)
                 valid = valid and [row['componente'], row['validacion']] == payload['validation'] and row['resultado_automatico'] == payload['automatic']
                 if source_data is not None:
+                    if PREDIO_HEADER in source_data:
+                        value = source_data[PREDIO_HEADER]
+                        valid = valid and ('' if value is None else str(value)) == (predio_value(expected) or 'Sin identificador')
                     for field, expected_value in expected.items():
+                        if PREDIO_HEADER in source_data and is_predio_field(field):
+                            continue
                         source_field = field if field in source_data else ('Predio' if re.sub(r'[^a-z0-9]', '', field.lower()) == 'numeropredialnacional' else field)
                         actual_value = source_data.get(source_field)
                         valid = valid and ('' if actual_value is None else str(actual_value)) == expected_value
@@ -454,6 +505,21 @@ def review_statistics(results, cases):
     totals = {field: sum(values[field] for values in grouped.values())
               for field in ('rules', 'findings', 'pending', 'dt', 'operator', 'errors')}
     return grouped, totals
+
+
+MODEL_COMPONENT_ORDER = {'estructura': 0, 'administrativas': 1, 'juridicas': 2,
+                         'fisicas': 3, 'economicas': 4, 'novedades': 5,
+                         'etnico': 9, 'etnicos': 9, 'etnica': 9, 'etnicas': 9}
+
+
+def model_component_number(component):
+    name = unicodedata.normalize('NFKD', str(component)).encode('ascii', 'ignore').decode().strip().lower()
+    return MODEL_COMPONENT_ORDER.get(name)
+
+
+def model_component_sort_key(component):
+    number = model_component_number(component)
+    return (number if number is not None else 100, str(component).casefold())
 
 
 def statistics_row(component, values):

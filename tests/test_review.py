@@ -192,11 +192,11 @@ class ReviewTests(unittest.TestCase):
         sheet = book['Revisión']
         self.assertEqual(sheet.max_row, 3)
         columns = {cell.value: cell.column for cell in sheet[1]}
-        identifier = sheet.cell(2, columns['dato:numero_predial'])
+        identifier = sheet.cell(2, columns['Numero_Predial_Nacional'])
         self.assertEqual(identifier.value, '000001')
         self.assertEqual(identifier.data_type, 's')
         self.assertEqual(sheet.cell(2, columns['dato:nota']).data_type, 's')
-        self.assertEqual(book['Ejecución automática'].max_row, 3)
+        self.assertEqual(book['Reglas & Componente'].max_row, 3)
         book.close()
         self.assertEqual(len(load_review(self.path)), 2)
 
@@ -205,7 +205,7 @@ class ReviewTests(unittest.TestCase):
         save_review(self.path, old)
         book = load_workbook(self.path); sheet = book['Revisión']
         cols = {cell.value: cell.column for cell in sheet[1]}
-        sheet.cell(2, cols['dato:numero_predial'], '999999')
+        sheet.cell(2, cols['Numero_Predial_Nacional'], '999999')
         book.save(self.path); book.close()
         new = cases(self.rows[:1]); counts = restore_review(new, load_review(self.path))
         self.assertEqual(counts['datos_invalidos'], 1)

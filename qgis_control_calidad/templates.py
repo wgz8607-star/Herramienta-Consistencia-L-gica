@@ -9,6 +9,12 @@ FORMATS = {
 }
 
 
+DOWNLOAD_NAMES = {
+    FORMATS['Modelo Interno de Levantamiento 1.0'][1]: 'fo_gct_pc01_07_v2.xlsx',
+    FORMATS['CICA'][1]: 'cons_log_cica_v2.xlsx',
+}
+
+
 def validation_format(model, environment, version):
     if model not in FORMATS or environment != 'Validaciones del modelo' or not version:
         return None

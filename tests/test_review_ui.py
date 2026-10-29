@@ -73,12 +73,30 @@ class ReviewUiTests(unittest.TestCase):
     def test_each_export_has_four_editable_exception_fields(self):
         self.owner.review_cases[0].excepcion_dt = 'Sí'
         self.owner.review_cases[0].observacion_dt = 'Documentado por DT'
+        self.owner.execution_info['Identificador de entrega'] = 'no_exportar'
         with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
             self.owner.export_excel()
         files = list(Path(self.directory.name).glob('*.xlsx'))
         self.assertEqual(len(files), 2)
         for path in files:
             book = load_workbook(path)
+            self.assertNotIn('Sheet', book.sheetnames)
+            self.assertTrue(book.security.lockStructure)
+            for report_sheet in book:
+                if report_sheet.sheet_state == 'visible':
+                    self.assertTrue(report_sheet.protection.sheet)
+                    self.assertFalse(report_sheet.protection.formatColumns)
+                    self.assertTrue(report_sheet.protection.formatRows)
+                    self.assertTrue(report_sheet.protection.insertRows)
+                    self.assertTrue(report_sheet.protection.deleteColumns)
+                    self.assertTrue(report_sheet.freeze_panes.startswith('B'))
+            if 'regla_1' in book:
+                self.assertEqual(book['regla_1'].freeze_panes, 'B5')
+                self.assertTrue(book['regla_1']['A5'].protection.locked)
+            self.assertNotIn('Contexto de validación', book.sheetnames)
+            self.assertNotIn('Contexto', book.sheetnames)
+            if 'regla_1' in book.sheetnames:
+                self.assertEqual(book['Detalle de errores']['A1'].value, 'Componente')
             if 'regla_1' not in book.sheetnames:
                 self.assertNotIn('Revisión', book.sheetnames)
                 self.assertNotIn('_Identidades', book.sheetnames)
@@ -86,6 +104,7 @@ class ReviewUiTests(unittest.TestCase):
                 book.close()
                 continue
             self.assertIn('Revisión', book.sheetnames)
+            self.assertEqual(book['Revisión'].sheet_state, 'hidden')
             sheet = book['Revisión']
             self.assertEqual(sheet.max_row, 3)
             for header in HEADERS:
@@ -161,7 +180,7 @@ class ReviewUiTests(unittest.TestCase):
         columns = {cell.value: cell.column for cell in sheet[4]}
         sheet.cell(5, columns['Excepción DT'], 'Sí')
         sheet.cell(5, columns['Observación DT'], 'Justificado DT')
-        sheet.cell(5, columns['numero_predial'], '99999')
+        sheet.cell(5, columns['Numero_Predial_Nacional'], '99999')
         book.save(path); book.close()
         current = build_cases(self.owner.results, self.owner.review_context)
         counts = restore_review(current, load_review(path))
@@ -528,6 +547,69 @@ class ReviewUiTests(unittest.TestCase):
         self.assertEqual(captured[0].rows, [{'id': 1, 'id__2': 2}])
         self.assertFalse(captured[0].identity_safe)
         self.assertEqual(captured[0].criterion_hash, digest('SELECT * FROM test.predio'))
+
+    def test_predio_aliases_export_as_one_column_and_restore_with_original_identity(self):
+        from qgis_control_calidad.review import load_review, restore_review
+        npn = '000000000000000000000000000001'
+        rows = [{'numero_predial_nacional': npn, 'numero_predial': npn, 'Predio': '123', 'valor': 'A'}]
+        result = module.RuleResult('unificada', 'Administrativas', 'Correcta', 1, rows=rows, criterion_hash=digest('criterio'))
+        self.owner.results = [result]
+        self.owner.review_cases = build_cases([result], self.owner.review_context)
+        case = self.owner.review_cases[0]
+        original_key = case.key
+        case.excepcion_dt = 'Sí'; case.observacion_dt = 'Justificada'
+        self.owner.review_snapshot = [case.tracking() + case.exception_tracking()]
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
+        book = load_workbook(path)
+        headers = [cell.value for cell in book['unificada'][4]]
+        self.assertEqual(headers.count('Numero_Predial_Nacional'), 1)
+        self.assertNotIn('Predio', headers)
+        self.assertNotIn('numero_predial', headers)
+        self.assertNotIn('numero_predial_nacional', headers)
+        self.assertEqual(book['unificada'].cell(5, 1).value, npn)
+        self.assertEqual(book['unificada'].cell(5, 1).data_type, 's')
+        review_headers = [cell.value for cell in book['Revisión'][1]]
+        self.assertIn('Numero_Predial_Nacional', review_headers)
+        self.assertNotIn('dato:Predio', review_headers)
+        self.assertNotIn('dato:numero_predial_nacional', review_headers)
+        book.close()
+        current = build_cases([result], self.owner.review_context)
+        self.assertEqual(current[0].key, original_key)
+        counts = restore_review(current, load_review(path))
+        self.assertEqual(counts['incorporadas'], 1)
+        self.assertEqual(current[0].excepcion_dt, 'Sí')
+        self.assertEqual(current[0].observacion_dt, 'Justificada')
+
+
+    def test_rule_tabs_use_declared_identifiers_and_natural_order_per_component(self):
+        codes = ['regla_1_52', 'regla_1_10', 'regla_1_2', 'regla_1_9', 'regla_1_1']
+        self.owner.results = [module.RuleResult(code, 'Administrativas', 'Correcta', 1,
+                             rows=[{'numero_predial': '00001'}], criterion_hash=digest(code)) for code in codes]
+        self.owner.results.append(module.RuleResult('regla_1_1', 'Juridicas', 'Correcta', 1,
+                                  rows=[{'numero_predial': '00002'}], criterion_hash=digest('juridica')))
+        self.owner.review_cases = build_cases(self.owner.results, self.owner.review_context)
+        self.owner.finished()
+        with patch.object(module.QFileDialog, 'getExistingDirectory', return_value=self.directory.name):
+            self.owner.export_excel()
+        path = next(Path(self.directory.name).glob('detalle_Administrativas_*.xlsx'))
+        book = load_workbook(path)
+        expected = ['1_1', '1_2', '1_9', '1_10', '1_52']
+        self.assertEqual([name for name in book.sheetnames if name in expected], expected)
+        index = book['Detalle de errores']
+        self.assertEqual([index.cell(row, 4).value for row in range(2, 7)], ['↪ Ir a ' + name for name in expected])
+        self.assertEqual(index.cell(6, 4).hyperlink.location, "'1_52'!A1")
+        self.assertIsNone(index.cell(6, 4).hyperlink.target)
+        self.assertEqual(index.cell(6, 4).font.underline, 'single')
+        self.assertEqual(index.cell(6, 4).font.color.rgb, '000066B3')
+        self.assertNotIn('1_3', book.sheetnames)
+        book.close()
+        other = next(Path(self.directory.name).glob('detalle_Juridicas_*.xlsx'))
+        book = load_workbook(other)
+        self.assertIn('1_1', book.sheetnames)
+        self.assertNotIn('1_1_2', book.sheetnames)
+        book.close()
 
 
 if __name__ == '__main__':

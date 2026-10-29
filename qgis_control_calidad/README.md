@@ -266,21 +266,14 @@ Servidor es de solo lectura y la conexión usa esa misma constante, incluso si
 el texto se altera por código. Puerto, base de datos y credenciales de la
 conexión manual conservan sus campos de configuración.
 
-## Referencias R1/R2 y modos de consulta (1.4.0)
+## Referencias R1/R2 y filtro avanzado (2.3.0)
 
-Una minisección **Referencias R1 y R2**, al pie de la ventana, reemplaza los
-controles de referencias del panel de conexión. Dispone de tres opciones:
+La pestaña **Referencias R1/R2** ofrece dos opciones:
 
-1. **Archivos R1 y R2 temporales**: seleccione un Excel R1 y, si se necesita,
-   un Excel R2 opcional. **Preparar referencias temporales** valida encabezados
-   y crea una copia local de trabajo. No requiere conectarse a PostgreSQL para
-   preparar los archivos ni escribe tablas en `public`. Tras Aceptar se muestran
-   nombres y cantidades de registros. **Liberar** elimina las copias locales.
-2. **R1 existente en public**: **Actualizar listado** enumera los R1 accesibles
-   en la conexión de datos actual. Seleccione uno; el plugin solo lo consulta.
-   No crea, elimina ni sobrescribe esa tabla. R2 temporal no se usa en este modo.
-3. **Consulta de R1 por municipio (próximamente)**: visible pero deshabilitada;
-   no contiene todavía un catálogo ni consultas a municipios.
+1. **Archivos R1 y R2 temporales**: prepare las referencias Excel como copias locales de trabajo. Durante la validación se cargan únicamente en la sesión temporal de PostgreSQL.
+2. **R1 y R2 Vigente**: consulta el esquema `r1_r2` de la base de sentencias, identifica los municipios por DIVIPOLA y muestra la fecha y las tablas disponibles. Se usa la fecha más reciente del municipio, sin mezclar R1/R2 de fechas distintas. Las referencias requeridas se copian a la sesión temporal de validación.
+
+**Filtro avanzado…**, debajo de **Esquema a validar**, se habilita al seleccionar un esquema o cargar la fuente de predios CICA. Aplica al Modelo Interno/XTF, CICA y sus referencias R1/R2. Por defecto incluye Todos. Permite elegir Urbano (01), Rural (00) o Centro poblado (>01) según las posiciones 6–7 del NPN y seleccionar opcionalmente manzanas/veredas por las posiciones 1–13, leyendo los códigos de la fuente. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).
 
 En el modo temporal, al iniciar la validación, el worker crea `reference_r1` y
 `reference_r2` como **TEMP TABLE** y carga sus datos con COPY en la misma conexión
@@ -440,4 +433,4 @@ La geodatabase también se utiliza temporalmente, conservando atributos, geometr
 
 ## Administración externa de reglas
 
-La carga de sentencias se realiza con el complemento independiente de QGIS [Administrador de Reglas SQL](../administrador_reglas_qgis/README.md), usando una conexión guardada en QGIS o los parámetros del administrador. El código del plugin ya no incluye la pestaña Administrar reglas; consulta y ejecuta las sentencias publicadas. La eliminación se incluirá en el próximo ZIP del complemento. El paquete 2.2.0 publicado anteriormente conserva la función antigua.
+La carga de sentencias se realiza con el complemento independiente de QGIS [Administrador de Reglas SQL](../administrador_reglas_qgis/README.md), usando una conexión guardada en QGIS o los parámetros del administrador. El código del plugin ya no incluye la pestaña Administrar reglas; consulta y ejecuta las sentencias publicadas. La versión 2.3.0 incluye esta separación; el paquete 2.2.0 conserva la función antigua.

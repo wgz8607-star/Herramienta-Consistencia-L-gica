@@ -143,7 +143,8 @@ class TemporaryReferenceTests(unittest.TestCase):
         self.assertEqual(worker.resolve_sql('SELECT * FROM {esquema}{punto}ilc_predio'), 'SELECT * FROM municipio.ilc_predio')
         with self.assertRaises(ValueError):
             RuleWorker({}, 'municipio', '', '', []).resolve_sql('SELECT * FROM {esquema_r1}.{tabla_r1}')
-        self.assertEqual(RuleWorker({}, 'municipio', '', 'r1_publicado', []).resolve_sql('SELECT * FROM {esquema_r1}.{tabla_r1}'), 'SELECT * FROM public.r1_publicado')
+        with self.assertRaises(ValueError):
+            RuleWorker({}, 'municipio', '', 'r1_publicado', []).resolve_sql('SELECT * FROM {esquema_r1}.{tabla_r1}')
 
     def test_worker_uses_one_connection_temporaries_survive_rule_failure_and_close(self):
         refs = {'R1': self.prepared('R1'), 'R2': self.prepared('R2')}
@@ -178,19 +179,19 @@ class TemporaryReferenceTests(unittest.TestCase):
         self.assertEqual(results, [])
         self.assertEqual(errors, ['TEMP denied'])
 
-    def test_reference_tab_has_three_modes_and_future_mode_is_disabled(self):
+    def test_reference_tab_has_temporary_and_current_modes(self):
         widget = ControlCalidadDialog()
         self.addCleanup(widget.close)
         self.assertEqual(widget.left_tabs.count(), 2)
         self.assertEqual([widget.left_tabs.tabText(i) for i in range(2)], ['Conexión', 'Referencias R1/R2'])
         widget.left_tabs.setCurrentIndex(1)
         self.assertTrue(widget.left_tabs.currentWidget().isAncestorOf(widget.reference_mode))
-        self.assertEqual(widget.reference_mode.count(), 3)
-        self.assertFalse(widget.reference_mode.model().item(2).isEnabled())
-        widget.reference_mode.setCurrentIndex(1)
+        self.assertEqual(widget.reference_mode.count(), 2)
+        self.assertEqual(widget.reference_mode.itemText(1), 'R1 y R2 Vigente')
+        with patch.object(widget, 'load_current_references'):
+            widget.reference_mode.setCurrentIndex(1)
         self.assertEqual(widget.reference_pages.currentIndex(), 1)
-        widget.reference_mode.setCurrentIndex(2)
-        self.assertEqual(widget.reference_mode.currentIndex(), 0)
+        self.assertFalse(hasattr(widget, 'published_r1'))
         self.assertFalse(hasattr(widget, 'published_r2'))
 
     def test_prepare_dialog_reads_both_files_without_database_access(self):
@@ -214,13 +215,13 @@ class TemporaryReferenceTests(unittest.TestCase):
         dialog.done(QDialog.Rejected)
         self.assertFalse(path.exists())
 
-    def test_existing_public_mode_does_not_install_tables(self):
+    def test_legacy_public_selection_is_rejected_without_querying_public(self):
         connection = FakeConnection()
         worker = RuleWorker({}, 'test', '', 'r1_existente', [('Prueba', 'r1', 'SELECT * FROM {esquema_r1}.{tabla_r1}', '')])
         with patch('qgis_control_calidad.dialog.psycopg2.connect', return_value=connection), patch('qgis_control_calidad.dialog.install_reference') as install:
             worker.run()
         install.assert_not_called()
-        self.assertIn(('sql', 'SELECT * FROM public.r1_existente'), connection.events)
+        self.assertFalse(any('public.' in event[1] for event in connection.events if event[0] == 'sql'))
         self.assertTrue(connection.closed)
 
 

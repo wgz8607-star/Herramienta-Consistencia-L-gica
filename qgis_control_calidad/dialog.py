@@ -29,9 +29,12 @@ from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
 from .cica_gdb import install_gdb
+from .territorial_scope import SCOPES, install_scope, resolve_scope
+from .territorial_filter import TerritorialFilterDialog, read_prefixes
 from .templates import validation_format
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
+from .current_references import read_catalog, needed_references, prepare_current_references
 from .review_imports import ReviewImports
 from .review_files import fingerprint_file
 from .review import build_cases, digest, save_review, load_review, REVIEW_FIELDS, display, review_statistics, statistics_row, STAT_HEADERS
@@ -190,17 +193,24 @@ class SqlVersionDialog(QDialog):
 class RuleWorker(QObject):
     result = pyqtSignal(object)
     general_report = pyqtSignal(object, str)
+    reference_context = pyqtSignal(object)
     progress = pyqtSignal(int, int)
     fatal_error = pyqtSignal(str)
     finished = pyqtSignal()
     message = pyqtSignal(str)
 
-    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None, cica_references=None, cica_gdb=None):
+    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None, cica_references=None, cica_gdb=None, current_reference=None, repository_params=None, territorial_scope="all", territorial_prefixes=(), model="CICA"):
         super().__init__()
         self.params = params
         self.schema = schema
         self.prefix = prefix
         self.r1_table = r1_table
+        self.current_reference = current_reference
+        self.territorial_prefixes = tuple(territorial_prefixes)
+        self.validation_model = model
+        self.territorial_scope = territorial_scope
+        self.scope_views = {}
+        self.repository_params = repository_params
         self.references = dict(references or {})
         self.cica_references = dict(cica_references or {})
         self.cica_gdb = cica_gdb
@@ -216,12 +226,8 @@ class RuleWorker(QObject):
             if any(marker in sql for marker in (f'{{esquema_{suffix}}}', f'{{tabla_{suffix}}}')):
                 if kind in self.references:
                     source = f'pg_temp.{TEMP_TABLES[kind]}'
-                elif kind == 'R1' and self.r1_table:
-                    if not re.fullmatch(r'[A-Za-z0-9_]+', self.r1_table):
-                        raise ValueError('El nombre del R1 de public no es válido.')
-                    source = 'public.' + self.r1_table
                 else:
-                    raise ValueError(f'Esta regla requiere {kind}: cargue la referencia temporal' + (' o seleccione un R1 de public.' if kind == 'R1' else '.'))
+                    raise ValueError(f'Esta regla requiere {kind}: cargue el archivo temporal o seleccione R1 y R2 Vigente.')
                 for marker in markers:
                     sql = sql.replace(marker, source)
                 sql = sql.replace(f'{{esquema_{suffix}}}', source.rsplit('.', 1)[0])
@@ -231,10 +237,17 @@ class RuleWorker(QObject):
         sql = sql.replace('{esquema}{punto}.', schema_prefix)
         sql = sql.replace('{esquema}{punto}', schema_prefix)
         sql = sql.replace('{esquema}.', schema_prefix).replace('{esquema}', schema_prefix).replace('{punto}', self.prefix)
-        return resolve_csv_tables(sql, self.schema, self.cica_references, self.cica_gdb.layers if self.cica_gdb else ())
+        return resolve_scope(resolve_csv_tables(sql, self.schema, self.cica_references, self.cica_gdb.layers if self.cica_gdb else ()), self.scope_views)
 
     def run(self):
+        owned_references = {}
         try:
+            if self.current_reference:
+                kinds = needed_references(self.rules, self.general_report_path)
+                self.message.emit('Leyendo R1 y R2 Vigente del municipio seleccionado…')
+                owned_references = prepare_current_references(self.repository_params, self.current_reference, kinds)
+                self.references.update(owned_references)
+                self.reference_context.emit({'reference_' + kind.lower(): ref.fingerprint for kind, ref in owned_references.items()})
             with closing(psycopg2.connect(**self.params)) as raw_connection, raw_connection as connection:
                 for kind, reference in sorted(self.references.items()):
                     self.message.emit(f'Cargando {kind} en tabla temporal de la sesión…')
@@ -245,7 +258,11 @@ class RuleWorker(QObject):
                 for table, reference in sorted(self.cica_references.items()):
                     self.message.emit(f'Cargando {table} en tabla temporal de la sesión…')
                     install_csv(connection, reference, self.schema, self.cica_gdb.layers.get(table) if self.cica_gdb else None)
-                if self.references or self.cica_references or self.cica_gdb:
+                if self.territorial_scope != 'all' or self.territorial_prefixes:
+                    temporary_tables = set(self.cica_references) | (set(self.cica_gdb.layers) if self.cica_gdb else set())
+                    self.scope_views = install_scope(connection, self.schema, temporary_tables,
+                                                     [TEMP_TABLES[kind] for kind in self.references], self.territorial_scope, self.territorial_prefixes, self.validation_model)
+                if self.references or self.cica_references or self.cica_gdb or self.scope_views:
                     # Commit setup once so a failing rule cannot roll back the tables.
                     connection.commit()
                 for index, (category, rule_name, raw_sql, description) in enumerate(self.rules, 1):
@@ -289,6 +306,8 @@ class RuleWorker(QObject):
         except Exception as error:
             self.fatal_error.emit(str(error))
         finally:
+            for reference in owned_references.values():
+                reference.close()
             self.finished.emit()
 
 
@@ -324,6 +343,7 @@ class ControlCalidadDialog(QDialog):
         self.export_created_paths = []
         self._repository_password = None
         self.references_ready = False
+        self.reference_lookup_running = False
         self.temporary_references = {}
         self.cica_references = {}
         self.cica_gdb = None
@@ -433,12 +453,23 @@ class ControlCalidadDialog(QDialog):
         self.connection_stack.addWidget(manual_page)
         self.schema = QComboBox()
         self.schema.setEditable(False)
+        self.schema.currentTextChanged.connect(self.clear_territorial_prefixes)
         form.addRow("Modelo", self.model)
+        self.scope_selection = 'all'
+        self.scope_prefixes = ()
+        self.advanced_filter_button = QPushButton('Filtro avanzado…')
+        self.advanced_filter_button.clicked.connect(self.open_advanced_filter)
+        self.advanced_filter_button.setEnabled(False)
+        self.advanced_filter_summary = QLabel('Todos · Sin filtro de manzana/vereda')
+        self.advanced_filter_summary.setWordWrap(True)
         self.environment = QComboBox()
         self.environment.addItems(["Seleccione un ambiente…", "Validaciones del modelo", SNC_ENVIRONMENT])
         self.environment_label = QLabel("Ambiente")
         self.environment.currentTextChanged.connect(self.model_changed)
         form.addRow(self.environment_label, self.environment)
+        filter_layout = QVBoxLayout()
+        filter_layout.addWidget(self.advanced_filter_button)
+        filter_layout.addWidget(self.advanced_filter_summary)
         self.sql_version_label = QLabel("Seleccione una versión de SQL")
         choose_sql_version = QPushButton("Buscar versión de sentencias…")
         self.choose_sql_version = choose_sql_version
@@ -464,12 +495,9 @@ class ControlCalidadDialog(QDialog):
         schema_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         schema_form.addRow(test)
         schema_form.addRow("Esquema a validar", self.schema)
+        schema_form.addRow(filter_layout)
         qgis_layout.addRow(self.schema_controls)
         left_layout.addWidget(connection)
-        info = QLabel("La contraseña se usa durante esta sesión y no se guarda. Las reglas se ejecutan en modo consulta y no alteran datos.")
-        info.setWordWrap(True)
-        info.setStyleSheet("color: #52666a;")
-        left_layout.addWidget(info)
         left_layout.addStretch()
         for combo in left.findChildren(QComboBox):
             combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -634,8 +662,7 @@ class ControlCalidadDialog(QDialog):
         reference_layout = QVBoxLayout(references)
         reference_layout.setContentsMargins(8, 14, 8, 6)
         self.reference_mode = QComboBox()
-        self.reference_mode.addItems(["Archivos R1 y R2 temporales", "R1 existente en public", "Consulta de R1 por municipio (próximamente)"])
-        self.reference_mode.model().item(2).setEnabled(False)
+        self.reference_mode.addItems(["Archivos R1 y R2 temporales", "R1 y R2 Vigente"])
         self.reference_mode.currentIndexChanged.connect(self.reference_mode_changed)
         self.reference_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.reference_mode.setMinimumContentsLength(22)
@@ -653,22 +680,30 @@ class ControlCalidadDialog(QDialog):
         temporary_layout.addWidget(self.load_reference_button)
         temporary_layout.addWidget(self.reference_status, 1)
         self.reference_pages.addWidget(temporary_page)
-        public_page = QWidget()
-        public_layout = QVBoxLayout(public_page)
-        public_layout.setContentsMargins(0, 0, 0, 0)
-        public_layout.addWidget(QLabel("R1 en public"))
-        self.published_r1 = QComboBox()
-        self.published_r1.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.published_r1.setMinimumContentsLength(10)
-        self.published_r1.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-        public_layout.addWidget(self.published_r1)
-        self.refresh_references = QPushButton("Actualizar listado")
-        self.refresh_references.clicked.connect(self.load_public_references)
-        public_layout.addWidget(self.refresh_references)
-        self.reference_pages.addWidget(public_page)
-        upcoming = QLabel("Consulta centralizada de R1 por municipio: pendiente de desarrollo.")
-        upcoming.setWordWrap(True)
-        self.reference_pages.addWidget(upcoming)
+        current_page = QWidget()
+        current_layout = QVBoxLayout(current_page)
+        current_layout.setContentsMargins(0, 0, 0, 0)
+        current_layout.addWidget(QLabel('R1 y R2 Vigente · sentencias.r1_r2'))
+        self.municipality = QComboBox()
+        self.municipality.setEditable(True)
+        self.municipality.setInsertPolicy(QComboBox.NoInsert)
+        self.municipality.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.municipality.setMinimumContentsLength(12)
+        self.municipality.completer().setCaseSensitivity(Qt.CaseInsensitive)
+        self.municipality.completer().setFilterMode(Qt.MatchContains)
+        self.municipality.lineEdit().setPlaceholderText('Seleccione o busque DIVIPOLA / municipio')
+        self.municipality.currentTextChanged.connect(self.show_current_reference)
+        current_layout.addWidget(self.municipality)
+        self.reference_date = QLabel('Fecha vigente: sin selección')
+        self.current_reference_status = QLabel('Consulte los municipios disponibles.')
+        self.current_reference_status.setWordWrap(True)
+        current_layout.addWidget(self.reference_date)
+        current_layout.addWidget(self.current_reference_status)
+        self.refresh_references = QPushButton('Consultar R1 y R2 Vigente')
+        self.refresh_references.clicked.connect(self.load_current_references)
+        current_layout.addWidget(self.refresh_references)
+        self.reference_pages.addWidget(current_page)
+        self.schema.currentTextChanged.connect(self.select_reference_municipality)
         self.reference_pages.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         reference_layout.addWidget(self.reference_pages)
         reference_layout.addStretch()
@@ -789,6 +824,8 @@ class ControlCalidadDialog(QDialog):
         self.environment.blockSignals(True)
         self.environment.setCurrentIndex(0)
         self.environment.blockSignals(False)
+        self.scope_selection = "all"
+        self.clear_territorial_prefixes()
         self.update_ingestion_button()
         self.choose_sql_version.setEnabled(False)
         self.clear_repository_rules()
@@ -859,13 +896,14 @@ class ControlCalidadDialog(QDialog):
         self.status.setText("Ejecución bloqueada: seleccione una versión con controles activos del repositorio SQL.")
 
     def update_run_availability(self):
+        self.update_advanced_filter_availability()
         selected = {name for name, card in self.category_checks.items() if card.isChecked()}
         ready = bool(self.selected_sql_version) and any(
             item["type"] == "CONTROL" and item["component"] in selected
             and item["sql"] and item["sql"].strip()
             for item in self.repository_rules
         )
-        self.run_button.setEnabled(ready and not self.controls_running and not self.exporting)
+        self.run_button.setEnabled(ready and not self.controls_running and not self.exporting and not self.reference_lookup_running)
         self.run_button.setToolTip("" if ready else "Cargue una versión del repositorio con controles activos y seleccione al menos un grupo.")
 
     def open_sql_version_dialog(self):
@@ -941,12 +979,49 @@ class ControlCalidadDialog(QDialog):
             self.clear_repository_rules()
             QMessageBox.warning(self, "No fue posible cargar reglas", str(error))
 
+    def update_advanced_filter_summary(self):
+        detail = f'{len(self.scope_prefixes)} manzanas/veredas' if self.scope_prefixes else 'Sin filtro de manzana/vereda'
+        self.advanced_filter_summary.setText(SCOPES[self.scope_selection] + ' · ' + detail)
+
+    def clear_territorial_prefixes(self, *_):
+        self.scope_prefixes = ()
+        self.update_advanced_filter_summary()
+        self.update_advanced_filter_availability()
+
+    def update_advanced_filter_availability(self):
+        has_cica = self.model.currentText() == "CICA" and (
+            "cica_predio" in self.cica_references or
+            bool(self.cica_gdb and "cica_predio" in self.cica_gdb.layers))
+        ready = bool(self.schema.currentText().strip()) or has_cica
+        self.advanced_filter_button.setEnabled(ready and not self.controls_running and not self.exporting and not self.reference_lookup_running)
+        self.advanced_filter_button.setToolTip("" if ready else "Liste y seleccione un esquema o cargue la fuente de predios CICA antes de aplicar filtros.")
+
+    def read_territorial_prefixes(self):
+        snapshot = None
+        if self.model.currentText() == 'CICA':
+            snapshot = self.cica_references.get('cica_predio')
+            if snapshot is None and self.cica_gdb:
+                snapshot = self.cica_gdb.layers.get('cica_predio')
+        params = {} if snapshot else self.connection_params()
+        return self.report_task(read_prefixes, params, self.schema.currentText().strip(), self.model.currentText(), snapshot)
+
+    def open_advanced_filter(self):
+        self.update_advanced_filter_availability()
+        if not self.advanced_filter_button.isEnabled():
+            return
+        dialog = TerritorialFilterDialog(self.scope_selection, self.scope_prefixes, self.read_territorial_prefixes, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.scope_selection = dialog.scope.currentData()
+            self.scope_prefixes = dialog.selected_prefixes()
+            self.update_advanced_filter_summary()
+
     def open_ingestion(self):
         if self.controls_running or self.exporting:
             return
         dialog = CicaIngestionDialog(self, self.cica_references, self.cica_gdb)
         try:
             if dialog.exec() == QDialog.Accepted:
+                self.clear_territorial_prefixes()
                 for table, reference in dialog.take_prepared().items():
                     old = self.cica_references.get(table)
                     self.cica_references[table] = reference
@@ -961,6 +1036,7 @@ class ControlCalidadDialog(QDialog):
                 self.ingestion_button.setToolTip(f'{len(self.cica_references)} CSV · ' + (f'{len(self.cica_gdb.layers)} capas/tablas temporales' if self.cica_gdb else 'Sin geodatabase temporal'))
         finally:
             dialog.clear_prepared()
+            self.update_advanced_filter_availability()
 
     def download_validation_format(self):
         if not self.completed_format or not self.format_download.isEnabled():
@@ -980,10 +1056,9 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.warning(self, 'No se pudo descargar el formato', str(error))
 
     def reference_mode_changed(self, index):
-        if index == 2:
-            self.reference_mode.setCurrentIndex(0)
-            return
         self.reference_pages.setCurrentIndex(index)
+        if index == 1 and not self.municipality.count():
+            self.load_current_references()
 
     def open_references(self):
         if self.controls_running:
@@ -1005,21 +1080,69 @@ class ControlCalidadDialog(QDialog):
         self.temporary_references = {}
         self.reference_status.setText('Sin referencias temporales')
 
-    def load_public_references(self):
-        if self.controls_running or psycopg2 is None:
+    def selected_current_reference(self):
+        index = self.municipality.currentIndex()
+        if index < 0 or self.municipality.currentText() != self.municipality.itemText(index):
+            return None
+        return self.municipality.currentData()
+
+    def show_current_reference(self, *_):
+        selection = self.selected_current_reference()
+        if selection is None:
+            self.reference_date.setText('Fecha vigente: sin selección')
+            self.current_reference_status.setText('Seleccione un municipio del catálogo.')
             return
+        date = datetime.strptime(selection['date'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        self.reference_date.setText('Fecha vigente: ' + date)
+        tables = selection['tables']
+        self.current_reference_status.setText('\n'.join(kind + ': ' + tables.get(kind, 'No disponible para esta fecha') for kind in ('R1', 'R2')))
+
+    def select_reference_municipality(self, *_):
+        codes = set(re.findall(r'(?<!\d)(\d{5})(?!\d)', self.schema.currentText()))
+        matches = [index for index in range(self.municipality.count()) if self.municipality.itemData(index) and self.municipality.itemData(index)['divipola'] in codes]
+        if len(matches) == 1:
+            self.municipality.setCurrentIndex(matches[0])
+            self.show_current_reference()
+
+    def load_current_references(self):
+        if self.controls_running or self.exporting or self.reference_lookup_running:
+            return
+        params = self.repository_connection_params()
+        if params is None:
+            return
+        selected = self.selected_current_reference()
+        previous = selected['divipola'] if selected else None
+        self.reference_lookup_running = True
+        self.main_tabs.setEnabled(False)
+        self.update_run_availability()
+        self.status.setText('Consultando R1 y R2 Vigente en sentencias.r1_r2…')
         try:
-            with closing(psycopg2.connect(**self.connection_params(), connect_timeout=8)) as connection, connection.cursor() as cursor:
-                cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (lower(table_name) LIKE 'r1%' OR lower(table_name) LIKE '%_r1%') ORDER BY table_name")
-                names = [row[0] for row in cursor.fetchall()]
-            current = self.published_r1.currentText()
-            self.published_r1.clear()
-            self.published_r1.addItems(names)
-            if current in names:
-                self.published_r1.setCurrentText(current)
-            self.status.setText(f'{len(names)} referencias R1 disponibles en public; no se modifican.')
+            entries, ignored = self.report_task(read_catalog, params, DIVIPOLA_FILE)
+            self.municipality.blockSignals(True)
+            self.municipality.clear()
+            self.municipality.addItem('Seleccione un municipio…', None)
+            for entry in entries:
+                label = entry['divipola'] + ' · ' + entry['municipality']
+                if entry['department']:
+                    label += ' · ' + entry['department']
+                self.municipality.addItem(label, entry)
+            self.municipality.blockSignals(False)
+            for index in range(1, self.municipality.count()):
+                if self.municipality.itemData(index)['divipola'] == previous:
+                    self.municipality.setCurrentIndex(index)
+                    break
+            self.select_reference_municipality()
+            self.show_current_reference()
+            self.status.setText(f'{len(entries)} municipios disponibles en R1 y R2 Vigente.' + (f' {len(ignored)} tablas sin nomenclatura reconocida.' if ignored else ''))
         except Exception as error:
-            QMessageBox.warning(self, 'No fue posible listar R1 de public', str(error))
+            self.municipality.blockSignals(False)
+            self.municipality.clear(); self.show_current_reference()
+            self.status.setText('No se pudo consultar R1 y R2 Vigente. Revise la conexión al repositorio.')
+            QMessageBox.warning(self, 'No se consultaron las referencias vigentes', str(error))
+        finally:
+            self.reference_lookup_running = False
+            self.main_tabs.setEnabled(True)
+            self.update_run_availability()
 
     def change_connection_mode(self, index):
         self.connection_stack.setCurrentIndex(index)
@@ -1031,7 +1154,6 @@ class ControlCalidadDialog(QDialog):
             destination.layout().addRow(self.schema_controls)
         self.resize_connection_stack()
         self.schema.clear()
-        self.published_r1.clear()
         self.status.setText("Pulse Listar Esquemas para cargar los esquemas disponibles.")
 
     def load_qgis_connections(self):
@@ -1202,11 +1324,15 @@ class ControlCalidadDialog(QDialog):
             self.status.setText("Conexión exitosa: " + version.split(",")[0])
             self.references_ready = True
             if self.reference_mode.currentIndex() == 1:
-                self.load_public_references()
+                self.load_current_references()
         except Exception as error:
             QMessageBox.critical(self, "No fue posible conectar", str(error))
 
     def run_rules(self):
+        scope = self.scope_selection
+        if scope not in SCOPES:
+            QMessageBox.warning(self, 'Seleccione el ámbito', 'Seleccione Todos, Urbano, Rural o Centro poblado. Se aplicará el mismo filtro a CICA, R1 y R2.')
+            return
         self.update_run_availability()
         if not self.run_button.isEnabled():
             QMessageBox.warning(self, "Controles no disponibles", "Cargue una versión del repositorio SQL con controles activos y seleccione los grupos a ejecutar.")
@@ -1239,12 +1365,21 @@ class ControlCalidadDialog(QDialog):
         except Exception as error:
             QMessageBox.warning(self, "Conexión incompleta", str(error))
             return
-        missing = self.missing_references(rules)
+        missing = self.missing_references(rules + ([('', '', general_report_path, '')] if general_report_path else []))
         if missing:
             QMessageBox.warning(self, 'Faltan referencias', 'Prepare o seleccione antes de ejecutar: ' + ', '.join(missing))
             return
         if not self.commit_review_editor() or not self.confirm_review_changes():
             return
+        current_reference = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
+        repository_params = self.repository_connection_params() if current_reference else None
+        if current_reference and repository_params is None:
+            return
+        if current_reference:
+            schema_codes = set(re.findall(r'(?<!\d)(\d{5})(?!\d)', schema))
+            if len(schema_codes) == 1 and current_reference['divipola'] not in schema_codes:
+                QMessageBox.warning(self, 'Municipio diferente', 'El DIVIPOLA seleccionado para R1 y R2 Vigente no coincide con el código del esquema a validar.')
+                return
         metadata = ConfigParser()
         metadata.read(PLUGIN_DIR / 'metadata.txt', encoding='utf-8')
         self.pending_format = validation_format(self.model.currentText(), self.environment.currentText(), self.selected_sql_version)
@@ -1258,6 +1393,8 @@ class ControlCalidadDialog(QDialog):
             'Versión SQL': self.selected_sql_version.get('codigo', ''),
             'Base de datos': params.get('dbname', ''), 'Esquema': schema,
         }
+        self.execution_info["Ámbito territorial"] = SCOPES[scope]
+        self.execution_info["Manzanas / veredas (NPN 1–13)"] = ", ".join(self.scope_prefixes) or "Todas"
         self.results.clear()
         self.review_cases = []
         self.review_imports = ReviewImports(self.review_cases)
@@ -1270,10 +1407,17 @@ class ControlCalidadDialog(QDialog):
             "model": self.model.currentText(), "environment": self.environment.currentText(),
             "host": params.get("host", ""), "port": str(params.get("port", "5432")),
             "database": params.get("dbname", ""), "schema": schema,
-            "reference_r1": (self.temporary_references['R1'].fingerprint if 'R1' in self.temporary_references else '') if self.reference_mode.currentIndex() == 0 else self.published_r1.currentText(),
+            "reference_r1": (self.temporary_references['R1'].fingerprint if 'R1' in self.temporary_references else '') if self.reference_mode.currentIndex() == 0 else (current_reference['divipola'] + '/' + current_reference['stamp'] if current_reference else ''),
 
             "repository": self.selected_sql_version.get("source", {}).get("label", ""),
         }
+        self.review_context["territorial_scope"] = scope
+        self.review_context["territorial_prefixes"] = list(self.scope_prefixes)
+        if current_reference:
+            self.review_context['reference_source'] = 'sentencias.r1_r2'
+            self.review_context['reference_municipality'] = current_reference['divipola']
+            self.review_context['reference_date'] = current_reference['date']
+            self.execution_info['R1 y R2 Vigente'] = current_reference['divipola'] + ' · ' + current_reference['date']
         if self.reference_mode.currentIndex() == 0 and 'R2' in self.temporary_references:
             self.review_context['reference_r2'] = self.temporary_references['R2'].fingerprint
         cica = dict(self.cica_references) if self.model.currentText() == 'CICA' else {}
@@ -1297,13 +1441,14 @@ class ControlCalidadDialog(QDialog):
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
         temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
-        public_r1 = self.published_r1.currentText() if self.reference_mode.currentIndex() == 1 else ''
-        self.worker = RuleWorker(params, schema, "", public_r1, rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb)
+        self.worker = RuleWorker(params, schema, "", "", rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb, current_reference=current_reference, repository_params=repository_params, territorial_scope=scope, territorial_prefixes=self.scope_prefixes, model=self.model.currentText())
+        self.worker.reference_context.connect(self.review_context.update)
         self.worker.message.connect(self.status.setText)
+        self.advanced_filter_button.setEnabled(False)
         self.reference_mode.setEnabled(False)
         self.load_reference_button.setEnabled(False)
         self.refresh_references.setEnabled(False)
-        self.published_r1.setEnabled(False)
+        self.municipality.setEnabled(False)
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)
         self.worker.result.connect(self.add_result)
@@ -1336,7 +1481,7 @@ class ControlCalidadDialog(QDialog):
         self.format_download.setEnabled(bool(self.completed_format))
         if self.completed_format:
             self.format_download.setText('Descargar · ' + self.completed_format[0])
-        for control in (self.reference_mode, self.load_reference_button, self.refresh_references, self.published_r1):
+        for control in (self.advanced_filter_button, self.reference_mode, self.load_reference_button, self.refresh_references, self.municipality):
             control.setEnabled(True)
         self.update_run_availability()
         self.progress.setValue(self.progress.maximum())
@@ -1471,8 +1616,10 @@ class ControlCalidadDialog(QDialog):
                 ref = self.temporary_references.get(kind)
                 if ref is None or not ref.csv_path.is_file():
                     missing.append(kind + ' temporal')
-            elif kind != 'R1' or not self.published_r1.currentText():
-                missing.append(kind)
+            else:
+                selection = self.selected_current_reference()
+                if selection is None or kind not in selection['tables']:
+                    missing.append(kind + ' vigente (municipio/fecha sin referencia disponible)')
         return missing
 
     def recovery_message(self, counts):
@@ -1539,7 +1686,7 @@ class ControlCalidadDialog(QDialog):
         return False
 
     def closeEvent(self, event):
-        if self.controls_running or self.exporting:
+        if self.controls_running or self.exporting or self.reference_lookup_running:
             QMessageBox.information(self, "Proceso en curso", "Espere a que termine el proceso actual antes de cerrar.")
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():

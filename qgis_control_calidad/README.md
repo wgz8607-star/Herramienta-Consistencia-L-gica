@@ -492,3 +492,7 @@ Ejecutar validación presenta los metadatos seleccionados para confirmar antes d
 ## Confirmación de parámetros (2.10.1)
 
 El cuadro previo a la ejecución indica «Revise los parámetros antes de ejecutar la validación». Se retiran de ese cuadro Reporte general y el bloque de referencias R1/R2, sin cambiar su uso por las reglas. Cancelar conserva los resultados y seguimientos anteriores.
+
+## Reportes sin estadística duplicada (2.10.2)
+
+Se elimina la hoja Estadística de revisión de los archivos de detalle. Las estadísticas se mantienen en los resultados del plugin y en el resumen ejecutivo. La hoja Revisión permanece oculta para recuperar excepciones.

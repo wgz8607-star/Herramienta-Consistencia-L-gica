@@ -249,14 +249,6 @@ def save_review(path, cases, results=(), general_rows=(), workbook=None):
         for row_index, row in enumerate(general_rows, 2):
             for col, name in enumerate(columns, 1):
                 _text(general.cell(row_index, col), predio_value(row) if name == PREDIO_HEADER else row.get(name))
-    statistics = book.create_sheet("Estadística de revisión")
-    statistics.append(STAT_HEADERS)
-    groups, totals = review_statistics(results, cases)
-    for component, values in sorted(groups.items()):
-        statistics.append(statistics_row(component, values))
-    statistics.append(statistics_row('TOTAL', totals))
-    statistics.freeze_panes = 'A2'
-    statistics.auto_filter.ref = statistics.dimensions
     sheet.sheet_state = "hidden"
     configure_report_workbook(book)
     # Write atomically: a failed save must not replace the last saved review.

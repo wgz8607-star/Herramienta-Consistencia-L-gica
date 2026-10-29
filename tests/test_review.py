@@ -88,8 +88,7 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(error.status, 'Error')
         save_review(self.path, current, [automatic, error])
         book = load_workbook(self.path)
-        stats = book['Estadística de revisión']
-        self.assertEqual(list(stats.values)[-1], ('TOTAL', 2, 3, 1, 1, 2, 1))
+        self.assertNotIn('Estadística de revisión', book.sheetnames)
         book.close()
 
     def test_operator_exceptions_are_visible_but_do_not_discount_errors(self):

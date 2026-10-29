@@ -82,6 +82,7 @@ class ReviewUiTests(unittest.TestCase):
         for path in files:
             book = load_workbook(path)
             self.assertNotIn('Sheet', book.sheetnames)
+            self.assertNotIn('Estadística de revisión', book.sheetnames)
             self.assertTrue(book.security.lockStructure)
             for report_sheet in book:
                 if report_sheet.sheet_state == 'visible':

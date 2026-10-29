@@ -345,6 +345,7 @@ class ControlCalidadDialog(QDialog):
         self._repository_password = None
         self.references_ready = False
         self.reference_lookup_running = False
+        self.filter_reading = False
         self.temporary_references = {}
         self.cica_references = {}
         self.cica_gdb = None
@@ -458,9 +459,6 @@ class ControlCalidadDialog(QDialog):
         form.addRow("Modelo", self.model)
         self.scope_selection = 'all'
         self.scope_prefixes = ()
-        self.advanced_filter_button = QPushButton('Filtro avanzado…')
-        self.advanced_filter_button.clicked.connect(self.open_advanced_filter)
-        self.advanced_filter_button.setEnabled(False)
         self.advanced_filter_summary = QLabel('Todos · Sin filtro de manzana/vereda')
         self.advanced_filter_summary.setWordWrap(True)
         self.environment = QComboBox()
@@ -468,9 +466,6 @@ class ControlCalidadDialog(QDialog):
         self.environment_label = QLabel("Ambiente")
         self.environment.currentTextChanged.connect(self.model_changed)
         form.addRow(self.environment_label, self.environment)
-        filter_layout = QVBoxLayout()
-        filter_layout.addWidget(self.advanced_filter_button)
-        filter_layout.addWidget(self.advanced_filter_summary)
         self.sql_version_label = QLabel("Seleccione una versión de SQL")
         choose_sql_version = QPushButton("Buscar versión de sentencias…")
         self.choose_sql_version = choose_sql_version
@@ -496,7 +491,6 @@ class ControlCalidadDialog(QDialog):
         schema_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         schema_form.addRow(test)
         schema_form.addRow("Esquema a validar", self.schema)
-        schema_form.addRow(filter_layout)
         qgis_layout.addRow(self.schema_controls)
         left_layout.addWidget(connection)
         left_layout.addStretch()
@@ -713,6 +707,22 @@ class ControlCalidadDialog(QDialog):
         reference_scroll.setFrameShape(QFrame.NoFrame)
         reference_scroll.setWidget(references)
         self.left_tabs.addTab(reference_scroll, "Referencias R1/R2")
+        filter_page = QWidget()
+        filter_layout = QVBoxLayout(filter_page)
+        filter_layout.addWidget(self.advanced_filter_summary)
+        self.filter_editor = TerritorialFilterDialog(self.scope_selection, self.scope_prefixes, self.read_territorial_prefixes, filter_page, embedded=True)
+        self.filter_editor.filterApplied.connect(self.apply_advanced_filter)
+        self.filter_editor.resetRequested.connect(self.reset_advanced_filter_editor)
+        filter_layout.addWidget(self.filter_editor)
+        filter_scroll = QScrollArea()
+        filter_scroll.setWidgetResizable(True)
+        filter_scroll.setFrameShape(QFrame.NoFrame)
+        filter_scroll.setWidget(filter_page)
+        self.advanced_filter_tab_index = self.left_tabs.addTab(filter_scroll, 'Filtro avanzado')
+        self.left_tabs.setTabEnabled(self.advanced_filter_tab_index, False)
+        self.filter_source_signature = None
+        self.filter_needs_refresh = True
+        self.left_tabs.currentChanged.connect(self.advanced_filter_tab_changed)
         tab_bar = self.left_tabs.tabBar()
         tab_font = tab_bar.font()
         tab_font.setPointSize(9)
@@ -904,7 +914,7 @@ class ControlCalidadDialog(QDialog):
             and item["sql"] and item["sql"].strip()
             for item in self.repository_rules
         )
-        self.run_button.setEnabled(ready and not self.controls_running and not self.exporting and not self.reference_lookup_running)
+        self.run_button.setEnabled(ready and not self.controls_running and not self.exporting and not self.reference_lookup_running and not self.filter_reading)
         self.run_button.setToolTip("" if ready else "Cargue una versión del repositorio con controles activos y seleccione al menos un grupo.")
 
     def open_sql_version_dialog(self):
@@ -990,12 +1000,55 @@ class ControlCalidadDialog(QDialog):
         self.update_advanced_filter_availability()
 
     def update_advanced_filter_availability(self):
+        if not hasattr(self, 'advanced_filter_tab_index'):
+            return
         has_cica = self.model.currentText() == "CICA" and (
             "cica_predio" in self.cica_references or
             bool(self.cica_gdb and "cica_predio" in self.cica_gdb.layers))
-        ready = bool(self.schema.currentText().strip()) or has_cica
-        self.advanced_filter_button.setEnabled(ready and not self.controls_running and not self.exporting and not self.reference_lookup_running)
-        self.advanced_filter_button.setToolTip("" if ready else "Liste y seleccione un esquema o cargue la fuente de predios CICA antes de aplicar filtros.")
+        data_ready = bool(self.schema.currentText().strip()) or has_cica
+        current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
+        r1_ready = bool(self.temporary_references.get('R1')) if self.reference_mode.currentIndex() == 0 else bool(current and current.get('tables', {}).get('R1'))
+        signature = (self.model.currentText(), self.schema.currentText(), self.connection_mode.currentIndex(),
+                     self.qgis_connection.currentText(), self.database.text(), self.user.text(),
+                     id(self.cica_references.get('cica_predio')), id(self.cica_gdb), self.reference_mode.currentIndex(),
+                     id(self.temporary_references.get('R1')), current.get('tables', {}).get('R1') if current else None)
+        if signature != self.filter_source_signature:
+            if self.filter_source_signature is not None:
+                self.scope_prefixes = ()
+                self.update_advanced_filter_summary()
+            self.filter_source_signature = signature
+            self.filter_needs_refresh = True
+            self.filter_editor.invalidate_statistics(self.scope_selection, self.scope_prefixes)
+        ready = data_ready and r1_ready
+        enabled = ready and not self.controls_running and not self.exporting and not self.reference_lookup_running
+        if not ready and self.left_tabs.currentIndex() == self.advanced_filter_tab_index:
+            self.left_tabs.setCurrentIndex(0)
+        self.left_tabs.setTabEnabled(self.advanced_filter_tab_index, enabled)
+        self.left_tabs.setTabToolTip(self.advanced_filter_tab_index, '' if ready else 'Seleccione la fuente de datos y cargue R1 temporal o seleccione un municipio con R1 vigente.')
+
+    def advanced_filter_tab_changed(self, index):
+        if index != self.advanced_filter_tab_index or self.filter_reading:
+            return
+        self.update_advanced_filter_availability()
+        if self.left_tabs.isTabEnabled(index) and self.filter_needs_refresh:
+            self.filter_needs_refresh = False
+            QTimer.singleShot(0, self.load_advanced_filter_tab)
+
+    def load_advanced_filter_tab(self):
+        self.update_advanced_filter_availability()
+        if self.left_tabs.currentIndex() == self.advanced_filter_tab_index and self.left_tabs.isTabEnabled(self.advanced_filter_tab_index):
+            self.filter_editor.load_codes()
+
+    def apply_advanced_filter(self, scope, prefixes):
+        self.scope_selection = scope
+        self.scope_prefixes = tuple(prefixes)
+        self.update_advanced_filter_summary()
+        self.status.setText('Filtro aplicado: ' + self.advanced_filter_summary.text())
+
+    def reset_advanced_filter_editor(self):
+        self.filter_editor.scope.set_scope(self.scope_selection)
+        codes = {item.data(0, Qt.UserRole) for item in self.filter_editor.items()} | set(self.scope_prefixes)
+        self.filter_editor.populate(sorted(codes), self.scope_prefixes)
 
     def read_territorial_prefixes(self):
         snapshot = None
@@ -1006,20 +1059,17 @@ class ControlCalidadDialog(QDialog):
         params = {} if snapshot else self.connection_params()
         current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
         repository_params = self.repository_connection_params() if current else None
-        return self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
-                                self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
-                                'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
-
-    def open_advanced_filter(self):
-        self.update_advanced_filter_availability()
-        if not self.advanced_filter_button.isEnabled():
-            return
-        dialog = TerritorialFilterDialog(self.scope_selection, self.scope_prefixes, self.read_territorial_prefixes, self)
-        QTimer.singleShot(0, dialog.load_codes)
-        if dialog.exec_() == QDialog.Accepted:
-            self.scope_selection = dialog.scope.currentData()
-            self.scope_prefixes = dialog.selected_prefixes()
-            self.update_advanced_filter_summary()
+        self.filter_reading = True
+        self.main_tabs.setEnabled(False)
+        self.update_run_availability()
+        try:
+            return self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
+                                    self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
+                                    'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
+        finally:
+            self.filter_reading = False
+            self.main_tabs.setEnabled(True)
+            self.update_run_availability()
 
     def open_ingestion(self):
         if self.controls_running or self.exporting:
@@ -1063,6 +1113,7 @@ class ControlCalidadDialog(QDialog):
 
     def reference_mode_changed(self, index):
         self.reference_pages.setCurrentIndex(index)
+        self.update_advanced_filter_availability()
         if index == 1 and not self.municipality.count():
             self.load_current_references()
 
@@ -1077,6 +1128,7 @@ class ControlCalidadDialog(QDialog):
                 self.temporary_references = prepared
                 self.reference_status.setText(' · '.join(f'{kind}: {ref.filename} ({ref.row_count} registros)' for kind, ref in prepared.items()))
         dialog.clear_prepared()
+        self.update_advanced_filter_availability()
 
     def release_references(self):
         if self.controls_running:
@@ -1085,6 +1137,7 @@ class ControlCalidadDialog(QDialog):
             reference.close()
         self.temporary_references = {}
         self.reference_status.setText('Sin referencias temporales')
+        self.update_advanced_filter_availability()
 
     def selected_current_reference(self):
         index = self.municipality.currentIndex()
@@ -1097,11 +1150,13 @@ class ControlCalidadDialog(QDialog):
         if selection is None:
             self.reference_date.setText('Fecha vigente: sin selección')
             self.current_reference_status.setText('Seleccione un municipio del catálogo.')
+            self.update_advanced_filter_availability()
             return
         date = datetime.strptime(selection['date'], '%Y-%m-%d').strftime('%d/%m/%Y')
         self.reference_date.setText('Fecha vigente: ' + date)
         tables = selection['tables']
         self.current_reference_status.setText('\n'.join(kind + ': ' + tables.get(kind, 'No disponible para esta fecha') for kind in ('R1', 'R2')))
+        self.update_advanced_filter_availability()
 
     def select_reference_municipality(self, *_):
         codes = set(re.findall(r'(?<!\d)(\d{5})(?!\d)', self.schema.currentText()))
@@ -1450,7 +1505,6 @@ class ControlCalidadDialog(QDialog):
         self.worker = RuleWorker(params, schema, "", "", rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb, current_reference=current_reference, repository_params=repository_params, territorial_scope=scope, territorial_prefixes=self.scope_prefixes, model=self.model.currentText())
         self.worker.reference_context.connect(self.review_context.update)
         self.worker.message.connect(self.status.setText)
-        self.advanced_filter_button.setEnabled(False)
         self.reference_mode.setEnabled(False)
         self.load_reference_button.setEnabled(False)
         self.refresh_references.setEnabled(False)
@@ -1487,7 +1541,7 @@ class ControlCalidadDialog(QDialog):
         self.format_download.setEnabled(bool(self.completed_format))
         if self.completed_format:
             self.format_download.setText('Descargar · ' + self.completed_format[0])
-        for control in (self.advanced_filter_button, self.reference_mode, self.load_reference_button, self.refresh_references, self.municipality):
+        for control in (self.reference_mode, self.load_reference_button, self.refresh_references, self.municipality):
             control.setEnabled(True)
         self.update_run_availability()
         self.progress.setValue(self.progress.maximum())
@@ -1692,7 +1746,7 @@ class ControlCalidadDialog(QDialog):
         return False
 
     def closeEvent(self, event):
-        if self.controls_running or self.exporting or self.reference_lookup_running:
+        if self.controls_running or self.exporting or self.reference_lookup_running or self.filter_reading:
             QMessageBox.information(self, "Proceso en curso", "Espere a que termine el proceso actual antes de cerrar.")
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():

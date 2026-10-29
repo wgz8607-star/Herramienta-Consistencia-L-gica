@@ -182,7 +182,7 @@ class TemporaryReferenceTests(unittest.TestCase):
     def test_reference_tab_has_temporary_and_current_modes(self):
         widget = ControlCalidadDialog()
         self.addCleanup(widget.close)
-        self.assertEqual(widget.left_tabs.count(), 2)
+        self.assertEqual(widget.left_tabs.count(), 3)
         self.assertEqual([widget.left_tabs.tabText(i) for i in range(2)], ['Conexión', 'Referencias R1/R2'])
         widget.left_tabs.setCurrentIndex(1)
         self.assertTrue(widget.left_tabs.currentWidget().isAncestorOf(widget.reference_mode))

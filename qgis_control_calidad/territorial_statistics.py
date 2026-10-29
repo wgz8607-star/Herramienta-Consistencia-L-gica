@@ -21,9 +21,24 @@ def statistics_from_groups(rows, source=''):
     return {'groups': dict(groups), 'totals': totals, 'total': sum(totals.values()), 'source': source}
 
 
-def statistics_from_values(values, source=''):
-    counts = Counter(('' if value is None else str(value).strip())[:17] for value in values)
-    return statistics_from_groups(counts.items(), source)
+def statistics_from_values(values, source='', unique=False):
+    counts = Counter(); seen = set(); row_count = missing = duplicates = 0
+    for value in values:
+        row_count += 1
+        value = '' if value is None else str(value).strip()
+        if unique:
+            if not value:
+                missing += 1
+                continue
+            if value in seen:
+                duplicates += 1
+                continue
+            seen.add(value)
+        counts[value[:17]] += 1
+    data = statistics_from_groups(counts.items(), source)
+    if unique:
+        data.update(counting='unique_npn', row_count=row_count, missing_npn=missing, duplicates=duplicates)
+    return data
 
 
 def included_count(statistics, scope, prefixes=()):
@@ -49,7 +64,7 @@ def read_source_statistics(params, schema, model, snapshot=None, table_name=None
         index = snapshot.columns.index(column)
         with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
             return statistics_from_values((row[index] if len(row) > index else '' for row in csv.reader(stream)),
-                                          'Fuente temporal · ' + ('cica_predio' if model == 'CICA' else 'ilc_predio'))
+                                          'Fuente temporal · ' + ('cica_predio' if model == 'CICA' else 'ilc_predio'), unique=(model == 'R1'))
     if not schema:
         raise ValueError('Seleccione el esquema a validar o cargue la fuente CICA antes de leer los datos.')
     table = table_name or ('cica_predio' if model == 'CICA' else 'ilc_predio')
@@ -63,9 +78,21 @@ def read_source_statistics(params, schema, model, snapshot=None, table_name=None
             column = next((name for name in NPN_COLUMNS if name in columns), None)
             if not column:
                 raise ValueError(f'{table}: no se encontró una columna NPN en la fuente seleccionada.')
+            if model == 'R1':
+                # Deduplicate full NPNs, not 17-digit territorial prefixes.
+                npn = sql.SQL("NULLIF(btrim({}::text), '')").format(sql.Identifier(column))
+                cursor.execute(sql.SQL('SELECT substring(btrim({}::text), 1, 17), COUNT(DISTINCT {}), COUNT(*), COUNT({}) FROM {} GROUP BY 1').format(
+                    sql.Identifier(column), npn, npn, sql.Identifier(schema, table)))
+                rows = cursor.fetchall()
+                data = statistics_from_groups(((row[0], row[1]) for row in rows), schema + '.' + table)
+                data.update(counting='unique_npn', row_count=sum(row[2] for row in rows),
+                            missing_npn=sum(row[2] - row[3] for row in rows),
+                            duplicates=sum(row[3] - row[1] for row in rows))
+                return data
             cursor.execute(sql.SQL('SELECT substring(btrim({}::text), 1, 17), COUNT(*) FROM {} GROUP BY 1').format(
                 sql.Identifier(column), sql.Identifier(schema, table)))
             return statistics_from_groups(cursor.fetchall(), schema + '.' + table)
+
 
 
 def read_filter_statistics(params, schema, model, snapshot=None, r1_snapshot=None,

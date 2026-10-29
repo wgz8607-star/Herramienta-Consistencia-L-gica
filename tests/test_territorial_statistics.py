@@ -95,7 +95,7 @@ class TerritorialStatisticsTests(unittest.TestCase):
         self.assertIsNone(selector.currentData())
 
     def test_dialog_updates_count_and_bulk_selection_respects_hidden_codes(self):
-        dialog = TerritorialFilterDialog('all', (), self.data)
+        dialog = TerritorialFilterDialog('all', (), lambda: {'source_statistics': self.data(), 'r1_statistics': self.data()})
         self.addCleanup(dialog.close)
         dialog.load_codes()
         self.assertIn('6 de 6', dialog.selection_statistics.text())
@@ -128,7 +128,7 @@ class TerritorialStatisticsTests(unittest.TestCase):
             warning.assert_called_once()
 
     def test_refresh_failure_does_not_reuse_old_statistics(self):
-        dialog = TerritorialFilterDialog('all', (), self.data)
+        dialog = TerritorialFilterDialog('all', (), lambda: {'source_statistics': self.data(), 'r1_statistics': self.data()})
         self.addCleanup(dialog.close)
         dialog.load_codes()
         dialog.loader = lambda: (_ for _ in ()).throw(RuntimeError('Sin conexión'))
@@ -151,20 +151,21 @@ class TerritorialStatisticsTests(unittest.TestCase):
             r1 = snapshot('r1.csv', [URBAN, URBAN, CENTER])
             data = read_filter_statistics({}, '', 'CICA', source, r1)
             self.assertEqual(data['source_statistics']['total'], 2)
-            self.assertEqual(data['r1_statistics']['total'], 3)
+            self.assertEqual(data['r1_statistics']['total'], 2)
             dialog = TerritorialFilterDialog('urban+rural', (), lambda: data)
             self.addCleanup(dialog.close); dialog.load_codes()
-            self.assertIn('Fuente de validación: 2 de 2', dialog.selection_statistics.text())
-            self.assertIn('R1: 2 de 3', dialog.selection_statistics.text())
+            self.assertNotIn('Fuente de validación:', dialog.selection_statistics.text())
+            self.assertEqual(dialog.stat_labels['total'].text(), 'Total predios únicos\n2')
+            self.assertEqual(dialog.codes.columnCount(), 3)
+            self.assertIn('R1 (predios únicos): 1 de 2', dialog.selection_statistics.text())
             dialog.search.setText(URBAN); dialog.select_all_button.click()
-            self.assertIn('Fuente de validación: 1 de 2', dialog.selection_statistics.text())
-            self.assertIn('R1: 2 de 3', dialog.selection_statistics.text())
+            self.assertIn('R1 (predios únicos): 1 de 2', dialog.selection_statistics.text())
             row = next(item for item in dialog.items() if item.data(0, Qt.UserRole) == URBAN)
-            self.assertEqual((row.text(2), row.text(3)), ('1', '2'))
+            self.assertEqual(row.text(2), '1')
             # R1-only codes remain visible under the appropriate scope, source count zero.
             dialog.scope.set_scope('all'); dialog.search.clear()
             row = next(item for item in dialog.items() if item.data(0, Qt.UserRole) == CENTER)
-            self.assertEqual((row.text(2), row.text(3)), ('0', '1'))
+            self.assertEqual(row.text(2), '1')
 
     def test_missing_r1_is_not_reported_as_zero_and_source_errors_are_independent(self):
         from qgis_control_calidad.territorial_statistics import read_filter_statistics
@@ -192,3 +193,91 @@ class TerritorialStatisticsTests(unittest.TestCase):
         self.assertEqual(data['source_statistics']['total'], 6)
         self.assertIsNone(data['r1_statistics'])
         self.assertIn('Sin permiso', data['r1_status'])
+
+    def test_unique_r1_counts_full_npns_not_territorial_prefixes(self):
+        first = URBAN + '0000000000001'
+        second = URBAN + '0000000000002'
+        data = statistics_from_values([first, first, ' ' + first + ' ', second, None, '', '  '], unique=True)
+        self.assertEqual(data['total'], 2)
+        self.assertEqual(prefix_counts(data), {URBAN: 2})
+        self.assertEqual(data['row_count'], 7)
+        self.assertEqual(data['duplicates'], 2)
+        self.assertEqual(data['missing_npn'], 3)
+        self.assertEqual(included_count(data, 'urban', (URBAN,)), 2)
+
+    def test_current_r1_uses_distinct_complete_npn_and_excludes_missing_values(self):
+        class Database:
+            def __init__(self): self.queries = []; self.closed = False
+            def set_session(self, **kwargs): self.options = kwargs
+            def cursor(self): return self
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def execute(self, statement, params=()): self.queries.append(render(statement))
+            def fetchall(self):
+                return [('numero_predial',)] if 'information_schema.columns' in self.queries[-1] else [(URBAN, 2, 5, 5), ('', 0, 2, 0)]
+            def close(self): self.closed = True
+        db = Database()
+        with patch('qgis_control_calidad.territorial_statistics.psycopg2.connect', return_value=db):
+            data = read_source_statistics({}, 'r1_r2', 'R1', table_name='08421_20260930_r1')
+        self.assertIn('COUNT(DISTINCT NULLIF(btrim("numero_predial"::text)', db.queries[-1])
+        self.assertEqual(data['total'], 2)
+        self.assertEqual(data['duplicates'], 3)
+        self.assertEqual(data['missing_npn'], 2)
+        self.assertEqual(prefix_counts(data), {URBAN: 2})
+        self.assertEqual(db.options, {'readonly': True})
+        self.assertTrue(db.closed)
+
+    def test_embedded_filter_applies_without_closing_or_opening_a_dialog(self):
+        from qgis.PyQt.QtWidgets import QWidget
+        parent = QWidget(); self.addCleanup(parent.close)
+        editor = TerritorialFilterDialog('urban+rural', (), lambda: [], parent, embedded=True)
+        self.addCleanup(editor.close)
+        applied = []; editor.filterApplied.connect(lambda scope, prefixes: applied.append((scope, prefixes)))
+        editor.accept()
+        self.assertEqual(applied, [('urban+rural', ())])
+        self.assertEqual(editor.result(), 0)
+        self.assertFalse(editor.isWindow())
+        self.assertEqual(editor.codes.columnCount(), 3)
+
+    def test_filter_tab_requires_both_sources_and_resets_on_source_change(self):
+        from qgis_control_calidad.dialog import ControlCalidadDialog
+        widget = ControlCalidadDialog(); self.addCleanup(widget.close)
+        index = widget.advanced_filter_tab_index
+        self.assertEqual([widget.left_tabs.tabText(i) for i in range(3)], ['Conexión', 'Referencias R1/R2', 'Filtro avanzado'])
+        self.assertFalse(widget.left_tabs.isTabEnabled(index))
+        self.assertFalse(widget.schema_controls.isAncestorOf(widget.filter_editor))
+        widget.schema.addItem('city')
+        self.assertFalse(widget.left_tabs.isTabEnabled(index))
+        widget.temporary_references['R1'] = SimpleNamespace(close=lambda: None)
+        widget.update_advanced_filter_availability()
+        self.assertTrue(widget.left_tabs.isTabEnabled(index))
+        widget.scope_prefixes = (URBAN,)
+        widget.filter_editor.r1_statistics = self.data()
+        widget.temporary_references['R1'] = SimpleNamespace(close=lambda: None)
+        widget.update_advanced_filter_availability()
+        self.assertEqual(widget.scope_prefixes, ())
+        self.assertIsNone(widget.filter_editor.r1_statistics)
+        widget.schema.clear()
+        self.assertFalse(widget.left_tabs.isTabEnabled(index))
+        widget.model.setCurrentText('CICA')
+        widget.cica_references['cica_predio'] = SimpleNamespace(close=lambda: None)
+        widget.update_advanced_filter_availability()
+        self.assertTrue(widget.left_tabs.isTabEnabled(index))
+        widget.release_references()
+        self.assertFalse(widget.left_tabs.isTabEnabled(index))
+
+    def test_current_r1_tab_remains_disabled_for_missing_r1_or_typed_municipality(self):
+        from qgis_control_calidad.dialog import ControlCalidadDialog
+        widget = ControlCalidadDialog(); self.addCleanup(widget.close)
+        widget.schema.addItem('city')
+        with patch.object(widget, 'load_current_references'):
+            widget.reference_mode.setCurrentIndex(1)
+        selection = {'divipola': '08421', 'date': '2026-09-30', 'tables': {'R2': '08421_20260930_r2'}}
+        widget.municipality.addItem('08421', selection)
+        self.assertFalse(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
+        selection['tables']['R1'] = '08421_20260930_r1'
+        widget.municipality.setItemData(widget.municipality.currentIndex(), selection)
+        widget.show_current_reference()
+        self.assertTrue(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
+        widget.municipality.setEditText('Municipio sin seleccionar')
+        self.assertFalse(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))

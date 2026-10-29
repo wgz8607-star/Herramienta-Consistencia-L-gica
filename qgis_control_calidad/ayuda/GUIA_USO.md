@@ -330,3 +330,10 @@ La carga de sentencias SQL corresponde a los administradores y se realiza con el
 El plugin consulta las versiones publicadas y ejecuta las validaciones. No incorpora un cargador administrativo de Excel. La retirada de la pestaña Administrar reglas queda aplicada al código para el próximo paquete del complemento; el ZIP 2.2.0 publicado anteriormente todavía contiene esa pestaña.
 
 Una vez incorporadas las reglas con el programa externo, vuelva a consultar la versión de sentencias en el validador. Consulte el README del complemento Administrador de Reglas SQL para la instalación y los permisos del repositorio.
+
+
+## Filtro avanzado: pestaña y estadísticas de R1
+
+Abra **Filtro avanzado**, después de **Referencias R1/R2**. Se habilita al elegir la fuente de datos y cargar R1 temporal o seleccionar un municipio con R1 vigente. La pestaña muestra solo estadísticas de R1: cada NPN completo cuenta una vez, sin sumar duplicados; las filas sin NPN se informan por separado y se excluyen del conteo.
+
+Combine Urbano, Rural y Centro poblado mediante casillas. Todos no restringe el ámbito. Opcionalmente marque códigos NPN de manzana/vereda de 17 dígitos; sin códigos marcados se incluyen todos los del ámbito elegido. Seleccionar todo y Deseleccionar todo actúan sobre códigos visibles. Use **Aplicar filtro** antes de ejecutar o **Restablecer** para recuperar la selección aplicada. El filtro también se aplica a la fuente validada y a R2, aunque sus estadísticas no se muestran aquí.

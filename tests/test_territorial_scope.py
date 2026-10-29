@@ -74,7 +74,8 @@ class ScopeTests(unittest.TestCase):
             widget.model.setCurrentText(model)
             self.assertEqual(widget.scope_selection, 'all')
             self.assertEqual(widget.scope_prefixes, ())
-            self.assertEqual(widget.advanced_filter_button.text(), 'Filtro avanzado…')
+            self.assertEqual(widget.left_tabs.tabText(widget.advanced_filter_tab_index), 'Filtro avanzado')
+            self.assertFalse(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
 
     def test_17_digit_prefixes_are_validated_and_combined_with_scope(self):
         from qgis_control_calidad.territorial_scope import normalize_prefixes

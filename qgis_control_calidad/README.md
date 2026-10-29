@@ -438,3 +438,7 @@ La carga de sentencias se realiza con el complemento independiente de QGIS [Admi
 ## Filtro avanzado con estadísticas (2.4.0)
 
 Ámbito permite combinar Urbano, Rural y Centro poblado mediante casillas. El filtro muestra estadísticas de la fuente de validación y de R1 por separado, con cantidad y porcentaje incluidos. La lista de códigos NPN de 17 dígitos muestra registros de cada fuente y permite seleccionar o deseleccionar todos los códigos visibles. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md) para conocer el conteo y los estados de carga.
+
+## Filtro avanzado como pestaña (2.5.0)
+
+La pestaña **Filtro avanzado**, después de **Referencias R1/R2**, requiere seleccionar tanto la fuente de datos como la de R1. Contiene el editor integrado y muestra exclusivamente estadísticas de R1 por NPN completo único, con duplicados no sumados y filas sin NPN excluidas. **Aplicar filtro** guarda la selección; **Restablecer** vuelve a la selección aplicada. El filtro sigue actuando sobre el modelo y las referencias. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md).

@@ -434,3 +434,7 @@ La geodatabase también se utiliza temporalmente, conservando atributos, geometr
 ## Administración externa de reglas
 
 La carga de sentencias se realiza con el complemento independiente de QGIS [Administrador de Reglas SQL](../administrador_reglas_qgis/README.md), usando una conexión guardada en QGIS o los parámetros del administrador. El código del plugin ya no incluye la pestaña Administrar reglas; consulta y ejecuta las sentencias publicadas. La versión 2.3.0 incluye esta separación; el paquete 2.2.0 conserva la función antigua.
+
+## Filtro avanzado con estadísticas (2.4.0)
+
+Ámbito permite combinar Urbano, Rural y Centro poblado mediante casillas. El filtro muestra estadísticas de la fuente de validación y de R1 por separado, con cantidad y porcentaje incluidos. La lista de códigos NPN de 17 dígitos muestra registros de cada fuente y permite seleccionar o deseleccionar todos los códigos visibles. Consulte [Referencias y ámbito](REFERENCIAS_Y_AMBITO.md) para conocer el conteo y los estados de carga.

@@ -9,3 +9,13 @@ La misma selección filtra Modelo Interno/CICA y R1/R2 antes de ejecutar las reg
 R1/R2 pueden provenir de archivos temporales o de R1 y R2 Vigente en sentencias.r1_r2. En Vigente se muestra municipio, DIVIPOLA, fecha y nombres de las tablas. Se toma la fecha más reciente del municipio, sin combinar referencias de fechas diferentes. Las referencias se copian a la sesión temporal de validación; las tablas originales no se modifican.
 
 El ámbito queda registrado en los datos de ejecución y en la identidad de las revisiones. Las revisiones de ámbitos diferentes no se trasladan automáticamente. El filtro no transforma ni modifica el SQL almacenado en el repositorio.
+
+## Estadísticas y selección combinada (2.4.0)
+
+El cuadro Ámbito contiene casillas y permite combinar Urbano, Rural y Centro poblado. Todos es el valor inicial e incluye también registros sin ámbito identificable. Marcar los tres ámbitos equivale a Todos. Desmarcar todos impide aplicar el filtro hasta elegir al menos uno.
+
+Al abrir Filtro avanzado se consulta la fuente y el R1 seleccionado. Se muestran por separado sus totales por ámbito, registros sin ámbito identificable y registros incluidos con el filtro (cantidad y porcentaje). Son conteos de registros, incluidos duplicados, previos a las condiciones particulares de las reglas. No representan conteos de NPN únicos ni se suman entre fuentes.
+
+R1 temporal se lee de la copia local preparada; R1 vigente se consulta en la base de sentencias por municipio y fecha seleccionados, en modo de solo lectura. Si falta R1 o falla su consulta, aparece el motivo; no se informa un cero que pueda confundirse con un archivo vacío.
+
+La lista combina los prefijos de 17 dígitos encontrados en la fuente o en R1 y presenta dos columnas de cantidades. Seleccionar todo y Deseleccionar todo actúan sobre los códigos visibles según el ámbito y la búsqueda; las selecciones ocultas se conservan. La búsqueda solo afecta a la lista, no al conteo ni a la validación. Sin códigos marcados se incluyen todos los del ámbito seleccionado.

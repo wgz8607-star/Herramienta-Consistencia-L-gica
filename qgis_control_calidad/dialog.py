@@ -30,7 +30,8 @@ from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
 from .cica_gdb import install_gdb
 from .territorial_scope import SCOPES, install_scope, resolve_scope
-from .territorial_filter import TerritorialFilterDialog, read_prefixes
+from .territorial_filter import TerritorialFilterDialog
+from .territorial_statistics import read_filter_statistics
 from .templates import validation_format
 from .reference import ReferenceDialog
 from .reference_data import TEMP_TABLES, install_reference
@@ -1003,13 +1004,18 @@ class ControlCalidadDialog(QDialog):
             if snapshot is None and self.cica_gdb:
                 snapshot = self.cica_gdb.layers.get('cica_predio')
         params = {} if snapshot else self.connection_params()
-        return self.report_task(read_prefixes, params, self.schema.currentText().strip(), self.model.currentText(), snapshot)
+        current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
+        repository_params = self.repository_connection_params() if current else None
+        return self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
+                                self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
+                                'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
 
     def open_advanced_filter(self):
         self.update_advanced_filter_availability()
         if not self.advanced_filter_button.isEnabled():
             return
         dialog = TerritorialFilterDialog(self.scope_selection, self.scope_prefixes, self.read_territorial_prefixes, self)
+        QTimer.singleShot(0, dialog.load_codes)
         if dialog.exec_() == QDialog.Accepted:
             self.scope_selection = dialog.scope.currentData()
             self.scope_prefixes = dialog.selected_prefixes()

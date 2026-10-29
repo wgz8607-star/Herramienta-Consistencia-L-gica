@@ -3,6 +3,20 @@ import re
 from psycopg2 import sql
 
 SCOPES = {'all': 'Todos', 'urban': 'Urbano (01)', 'rural': 'Rural (00)', 'center': 'Centro poblado (>01)'}
+SCOPES.update({'urban+rural': 'Urbano + Rural', 'urban+center': 'Urbano + Centro poblado',
+               'rural+center': 'Rural + Centro poblado'})
+
+def scope_members(scope):
+    if scope not in SCOPES:
+        raise ValueError('Ámbito territorial no válido.')
+    return ('urban', 'rural', 'center') if scope == 'all' else tuple(scope.split('+'))
+
+def sector_scope(value):
+    sector = ('' if value is None else str(value).strip())[5:7]
+    if not re.fullmatch(r'[0-9]{2}', sector):
+        return 'unknown'
+    return 'rural' if sector == '00' else 'urban' if sector == '01' else 'center'
+
 NPN_COLUMNS = ('numero_predial', 'numero_predial_nacional')
 
 
@@ -14,8 +28,11 @@ def predicate(column, scope, prefixes=()):
     if scope == 'all':
         result = sql.SQL('TRUE')
     else:
-        condition = {'urban': " = '01'", 'rural': " = '00'", 'center': " ~ '^[0-9][0-9]$' AND {} > '01'"}[scope]
-        result = sector + (sql.SQL(condition).format(sector) if scope == 'center' else sql.SQL(condition))
+        conditions = []
+        for member in scope_members(scope):
+            condition = {'urban': " = '01'", 'rural': " = '00'", 'center': " ~ '^[0-9][0-9]$' AND {} > '01'"}[member]
+            conditions.append(sql.SQL('({})').format(sector + (sql.SQL(condition).format(sector) if member == 'center' else sql.SQL(condition))))
+        result = sql.SQL(' OR ').join(conditions)
     if prefixes:
         values = sql.SQL(', ').join(sql.Literal(value) for value in prefixes)
         result = sql.SQL('({}) AND substring(btrim({}::text), 1, 17) IN ({})').format(result, sql.Identifier(column), values)

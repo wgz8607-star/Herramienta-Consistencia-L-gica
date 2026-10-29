@@ -488,3 +488,7 @@ Antes de iniciar una validación se solicita confirmar los metadatos seleccionad
 Resumen ejecutivo incorpora los metadatos de la validación sobre la tabla de resultados. Las hojas de reglas muestran de nuevo las columnas devueltas por SQL, en su orden original y con el identificador predial unificado, además de las excepciones y observaciones. Se conserva la recuperación de revisiones anteriores, incluidos los detalles compactos.
 
 Ejecutar validación presenta los metadatos seleccionados para confirmar antes de iniciar controles o descartar resultados anteriores. Cancelar conserva los resultados y seguimientos existentes. La ayuda se reorganiza como una guía operativa por función, sin historial de cambios ni administración del repositorio.
+
+## Confirmación de parámetros (2.10.1)
+
+El cuadro previo a la ejecución indica «Revise los parámetros antes de ejecutar la validación». Se retiran de ese cuadro Reporte general y el bloque de referencias R1/R2, sin cambiar su uso por las reglas. Cancelar conserva los resultados y seguimientos anteriores.

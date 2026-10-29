@@ -116,7 +116,7 @@ El filtro se aplica a la Base catastral a validar y a R1/R2. Al cambiar de orige
 1. En **Controles a ejecutar**, abra **Seleccionar grupos** y marque los componentes que necesita. Puede usar **Seleccionar todos** o **Desmarcar todos**.
 2. Para SNC, compruebe que esté seleccionado **+ Cargue SNC**.
 3. Pulse **Ejecutar validación**.
-4. Revise el resumen: modelo, ambiente, versión SQL, base, esquema, alcance, manzanas/veredas, archivos CICA, R1/R2 y cantidad de reglas por componente.
+4. Revise el resumen: modelo, ambiente, versión SQL, base, esquema, alcance, manzanas/veredas, archivos CICA y cantidad de reglas por componente.
 5. Si algo no corresponde, pulse **Cancelar** y ajuste la selección. Los resultados y revisiones anteriores se conservan.
 6. Para iniciar, pulse **Ejecutar validación** dentro de la confirmación y atienda cualquier aviso de revisión pendiente.
 7. Espere a que finalice el proceso y revise los resultados.

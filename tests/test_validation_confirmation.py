@@ -57,7 +57,7 @@ class ValidationConfirmationTests(unittest.TestCase):
         self.assertEqual(events, ['metadatos', 'editor', 'revision'])
         worker.assert_not_called()
 
-    def test_summary_uses_selected_filters_and_actual_references_without_secrets(self):
+    def test_summary_uses_selected_filters_without_reference_rows_or_secrets(self):
         self.widget.scope_selection = 'urban+rural'
         self.widget.scope_prefixes = ('08421010000010001',)
         self.widget.temporary_references['R1'] = SimpleNamespace(filename='r1_usuario.xlsx', row_count=123, close=lambda: None)
@@ -67,21 +67,23 @@ class ValidationConfirmationTests(unittest.TestCase):
         self.assertEqual(rows['Base catastral a validar'], 'base_catastral')
         self.assertEqual(rows['Alcance territorial'], 'Urbano + Rural')
         self.assertEqual(rows['Manzanas / veredas (NPN 1–17)'], '08421010000010001')
-        self.assertIn('r1_usuario.xlsx', rows['R1']); self.assertIn('requerido', rows['R1'])
-        self.assertIn('no requerido', rows['R2'])
+        self.assertNotIn('Origen de R1/R2', rows)
+        self.assertNotIn('R1', rows)
+        self.assertNotIn('R2', rows)
         self.assertEqual(rows['Total de reglas'], '2')
         text = str(rows)
         self.assertNotIn(self.params['password'], text); self.assertNotIn(self.params['user'], text)
         self.assertNotIn('SELECT', text)
 
-    def test_current_reference_municipality_date_and_report_requirements_are_displayed(self):
+    def test_reference_and_report_general_rows_are_omitted(self):
         with patch.object(self.widget, 'load_current_references'):
             self.widget.reference_mode.setCurrentIndex(1)
         current = {'divipola': '08421', 'municipality': 'Luruaco', 'date': '2026-09-30',
                    'tables': {'R1': '08421_20260930_r1', 'R2': '08421_20260930_r2'}}
         rows = dict(self.widget.validation_confirmation_metadata(self.params, 'municipio', [], current,
                     'SELECT * FROM {esquema_r2}.{tabla_r2}'))
-        self.assertIn('08421', rows['Municipio de R1/R2'])
-        self.assertEqual(rows['Fecha R1/R2 vigente'], '2026-09-30')
-        self.assertEqual(rows['R2'], 'r1_r2.08421_20260930_r2 · requerido')
-        self.assertEqual(rows['Reporte general'], 'Sí')
+        self.assertNotIn('Municipio de R1/R2', rows)
+        self.assertNotIn('Fecha R1/R2 vigente', rows)
+        self.assertNotIn('R1', rows)
+        self.assertNotIn('R2', rows)
+        self.assertNotIn('Reporte general', rows)

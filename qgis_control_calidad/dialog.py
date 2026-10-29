@@ -1427,25 +1427,11 @@ class ControlCalidadDialog(QDialog):
                 rows.append(('Geodatabase CICA', self.cica_gdb.filename))
             if self.cica_references:
                 rows.append(('Archivos CICA', '\n'.join(table + ': ' + reference.filename for table, reference in sorted(self.cica_references.items()))))
-        rows.append(('Origen de R1/R2', self.reference_mode.currentText()))
-        required = needed_references(rules, general_report_path)
-        for kind in ('R1', 'R2'):
-            if self.reference_mode.currentIndex() == 0:
-                reference = self.temporary_references.get(kind)
-                value = (reference.filename + f' · {reference.row_count:,} registros cargados') if reference else 'No cargado'
-            else:
-                table = current_reference.get('tables', {}).get(kind) if current_reference else None
-                value = 'r1_r2.' + table if table else 'No seleccionado o no disponible'
-            rows.append((kind, value + (' · requerido' if kind in required else ' · no requerido por las reglas seleccionadas')))
-        if current_reference:
-            rows.extend([('Municipio de R1/R2', current_reference['divipola'] + ' · ' + current_reference.get('municipality', '')),
-                         ('Fecha R1/R2 vigente', current_reference['date'])])
         counts = defaultdict(int)
         for component, _name, _sql, _description in rules:
             counts[component] += 1
         rows.append(('Controles a ejecutar', '\n'.join(f'{name}: {count} reglas' for name, count in sorted(counts.items(), key=lambda item: model_component_sort_key(item[0])))))
         rows.append(('Total de reglas', str(len(rules))))
-        rows.append(('Reporte general', 'Sí' if general_report_path else 'No disponible en la versión seleccionada'))
         return rows
 
     def confirm_validation(self, params, schema, rules, current_reference, general_report_path=None):
@@ -1453,7 +1439,7 @@ class ControlCalidadDialog(QDialog):
         dialog.setWindowTitle('Confirmar validación')
         dialog.resize(760, 650)
         layout = QVBoxLayout(dialog)
-        title = QLabel('Revise los metadatos antes de ejecutar la validación')
+        title = QLabel('Revise los parámetros antes de ejecutar la validación')
         title.setWordWrap(True)
         title.setStyleSheet('font-size: 15px; font-weight: 700; color: #0468A3;')
         layout.addWidget(title)

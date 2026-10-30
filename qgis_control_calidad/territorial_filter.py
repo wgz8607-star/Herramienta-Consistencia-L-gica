@@ -11,7 +11,7 @@ from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayo
     QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QHBoxLayout,
     QToolButton, QMenu, QWidgetAction, QWidget, QCheckBox, QTreeWidget, QTreeWidgetItem, QHeaderView, QSizePolicy, QGridLayout, QScrollArea, QFrame, QAbstractItemView)
 from .territorial_scope import SCOPES, NPN_COLUMNS, normalize_prefixes, scope_members, sector_scope
-from .territorial_statistics import included_count, prefix_counts
+from .territorial_statistics import included_count, prefix_counts, selected_statistics
 
 
 def prefixes_from_values(values):
@@ -114,12 +114,18 @@ class TerritorialOverview(QWidget):
         self.setObjectName('territorialOverview')
         self.setStyleSheet('QWidget#territorialOverview { background: white; border: 1px solid #DCE4EC; border-radius: 10px; }')
         layout = QVBoxLayout(self); layout.setContentsMargins(12, 14, 12, 12); layout.setSpacing(12)
+        self.statistics_bundle = {}
+        self.applied_scope = 'all'
+        self.applied_prefixes = ()
+        self.validation_overview = False
         title = QLabel('Distribución por alcance')
+        self.title = title
         title.setStyleSheet('color: #243B53; font-weight: 700; font-size: 16px; border: none;')
         layout.addWidget(title)
         cards = QHBoxLayout(); cards.setSpacing(10)
         self.source_label = QLabel(); self.r1_label = QLabel()
         self.total_labels = {}
+        self.coverage_labels = {}
         for key, caption, detail, color, background in (
             ('source', 'Base catastral a validar', self.source_label, BASE_COLOR, '#EDF8F1'),
             ('r1', 'R1 · Predios únicos', self.r1_label, R1_COLOR, '#EDF5FF')):
@@ -132,7 +138,10 @@ class TerritorialOverview(QWidget):
             self.total_labels[key] = value
             detail.setWordWrap(True); detail.setTextFormat(Qt.PlainText)
             detail.setStyleSheet(f'color: {color}; font-size: 11px; border: none;')
-            card_layout.addWidget(label); card_layout.addWidget(value); card_layout.addWidget(detail)
+            coverage = QLabel(); coverage.setWordWrap(True)
+            coverage.setStyleSheet(f'color: {color}; font-size: 11px; border: none;')
+            coverage.hide(); self.coverage_labels[key] = coverage
+            card_layout.addWidget(label); card_layout.addWidget(value); card_layout.addWidget(coverage); card_layout.addWidget(detail)
             cards.addWidget(card, 1)
         layout.addLayout(cards)
         self.table = QTreeWidget(); self.table.setRootIsDecorated(False)
@@ -169,9 +178,29 @@ class TerritorialOverview(QWidget):
         self.r1_note.setStyleSheet(f"color: {R1_COLOR};")
         self.set_statistics(None)
 
+    def set_filter(self, scope, prefixes=()):
+        scope_members(scope)
+        self.validation_overview = True
+        self.applied_scope = scope
+        self.applied_prefixes = tuple(prefixes)
+        self.title.setText('Alcance a validar')
+        self.set_statistics(self.statistics_bundle)
+
     def set_statistics(self, bundle):
         bundle = bundle or {}
-        source = bundle.get('source_statistics'); r1 = bundle.get('r1_statistics')
+        self.statistics_bundle = bundle
+        original_source = bundle.get('source_statistics'); original_r1 = bundle.get('r1_statistics')
+        filtered = self.validation_overview and (self.applied_scope != 'all' or bool(self.applied_prefixes))
+        source = selected_statistics(original_source, self.applied_scope, self.applied_prefixes) if filtered and original_source is not None else original_source
+        r1 = selected_statistics(original_r1, self.applied_scope, self.applied_prefixes) if filtered and original_r1 is not None else original_r1
+        for key, original, selected in (('source', original_source, source), ('r1', original_r1, r1)):
+            coverage = self.coverage_labels[key]
+            coverage.setVisible(self.validation_overview)
+            if original is None:
+                coverage.setText('Estadísticas pendientes')
+            else:
+                percentage = 100 * selected['total'] / original['total'] if original['total'] else 0
+                coverage.setText(f"de {original['total']:,} disponibles · {percentage:.1f} %".replace(',', '.'))
         self.source_label.setText('Base catastral a validar: ' + (source['source'] if source is not None else bundle.get('source_error') or 'pendiente de consultar'))
         self.r1_label.setText('R1: ' + (r1['source'] if r1 is not None else bundle.get('r1_status') or 'pendiente de consultar'))
         for key, data in (('source', source), ('r1', r1)):
@@ -187,8 +216,11 @@ class TerritorialOverview(QWidget):
                      number(statuses.get('cancelled')) + ' predios cancelados' +
                      (f"; otros/sin estado: {number(statuses['other'])}" if statuses.get('other') else ''))
         r1_text = 'R1: ' + number(r1['total'] if r1 is not None else None) + ' predios (NPN únicos).'
+        if filtered:
+            base_text = 'Base catastral: ' + number(source['total'] if source is not None else None) + ' registros incluidos de ' + number(original_source['total'] if original_source is not None else None)
+            r1_text = 'R1: ' + number(r1['total'] if r1 is not None else None) + ' predios únicos incluidos de ' + number(original_r1['total'] if original_r1 is not None else None) + '.'
         self.note.setText(f'<span style="color:{BASE_COLOR}">{base_text}</span> — <span style="color:{R1_COLOR}">{r1_text}</span>')
-        self.note.setToolTip(statuses.get('method', 'Estado de la base catastral no disponible.'))
+        self.note.setToolTip('Cantidades del alcance y los códigos aplicados. El detalle de la fuente completa sigue disponible en la ventana de estadísticas.' if filtered else statuses.get('method', 'Estado de la base catastral no disponible.'))
         if r1 is None:
             self.r1_note.setText('Las estadísticas de R1 se mostrarán al consultar su origen.')
         else:
@@ -221,7 +253,7 @@ class TerritorialFilterDialog(QDialog):
         self.cica_stage_note.hide()
         layout.addWidget(self.cica_stage_note)
         self.cica_stages = QTreeWidget()
-        self.cica_stages.setHeaderLabels(['DIVIPOLA', 'Zona', 'Total predios', 'Reconocidos', 'Control de calidad', 'Con áreas geográficas', 'Cargados SNC', 'Cancelados', 'Fecha de actualización', 'Códigos NPN existentes'])
+        self.cica_stages.setHeaderLabels(['DIVIPOLA', 'Zona', 'Código zona (6–7)', 'Etapa', 'Total predios', 'Activos', 'Cancelados', 'Otros estados'])
         self.cica_stages.setAlternatingRowColors(True)
         self.cica_stages.setRootIsDecorated(False)
         self.cica_stages.setMinimumHeight(200)
@@ -309,14 +341,16 @@ class TerritorialFilterDialog(QDialog):
         self.cica_stages.setVisible(has_stages)
         if has_stages:
             error = loaded.get('cica_stages_error')
-            self.cica_stage_note.setText('Seguimiento CICA por etapas · sentencias.snc_cica_copy.vw_seguimiento_predios_2026\n' +
-                ('No disponible: ' + error if error else 'Resumen general publicado por municipio y zona. Estos totales no se recalculan con los filtros de validación ni representan necesariamente los CSV/GDB seleccionados.'))
+            self.cica_stages.setVisible(not bool(error))
+            source = loaded.get('cica_stages_source', '')
+            self.cica_stage_note.setText('Seguimiento CICA por etapas' + (' · ' + source if source else '') + '\n' +
+                ('No disponible: ' + error if error else 'Conteos por zona y etapa registrada. Para Copia base CICA: contexto del municipio completo antes de filtrar etapas; para CSV/GDB: datos del archivo seleccionado.'))
             for row in loaded.get('cica_stages', []):
                 values = []
                 for index, value in enumerate(row):
                     if value is None:
                         text = '—'
-                    elif 2 <= index <= 7:
+                    elif 4 <= index <= 7:
                         text = f'{value:,}'.replace(',', '.') if isinstance(value, (int, float)) else str(value)
                     else:
                         text = ', '.join(map(str, value)) if isinstance(value, (list, tuple)) else str(value)
@@ -324,8 +358,10 @@ class TerritorialFilterDialog(QDialog):
                 item = QTreeWidgetItem(values)
                 for index, text in enumerate(values):
                     item.setToolTip(index, text)
+                if len(values) > 3 and not values[3]:
+                    item.setText(3, 'Sin etapa')
                 self.cica_stages.addTopLevelItem(item)
-            for index in range(9):
+            for index in range(8):
                 self.cica_stages.resizeColumnToContents(index)
         selected = self.selected_prefixes()
         if isinstance(loaded, dict) and 'source_statistics' in loaded:

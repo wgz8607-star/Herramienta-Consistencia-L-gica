@@ -89,13 +89,15 @@ class CicaStagesTests(unittest.TestCase):
         from qgis_control_calidad.territorial_statistics import read_cica_stages
         connection = MagicMock()
         cursor = connection.cursor.return_value.__enter__.return_value
-        row = ('00123', 'Urbano', 10, 9, 8, 7, 6, 1, '2026-10-30', ['0012301'])
+        row = ('00123', 'Urbano', '01', 'TRAMITADO', 10, 8, 1, 1)
         cursor.fetchall.return_value = [row]
         with patch('psycopg2.connect', return_value=connection):
             self.assertEqual(read_cica_stages({}), [row])
         connection.set_session.assert_called_once_with(readonly=True)
-        query = cursor.execute.call_args[0][0]
-        self.assertIn('FROM snc_cica_copy.vw_seguimiento_predios_2026', query)
+        from test_temporary_references import render
+        query = render(cursor.execute.call_args[0][0])
+        self.assertIn('FROM snc_cica_copy.cica_predio', query)
+        self.assertNotIn('vw_seguimiento', query)
         self.assertIn("WHEN 'Centro poblado' THEN 2", query)
         self.assertIn("WHEN 'Rural' THEN 3", query)
         connection.close.assert_called_once()
@@ -106,10 +108,11 @@ class CicaStagesTests(unittest.TestCase):
         app = QgsApplication.instance() or QgsApplication([], False)
         dialog = TerritorialFilterDialog('all', (), lambda: {})
         dialog.set_statistics({'source_statistics': None, 'cica_stages': [
-            ('00123', 'Urbano', 10, 9, 8, 7, 6, 1, None, ['0012301'])]})
+            ('00123', 'Urbano', '01', 'TRAMITADO', 10, 8, 1, 1)]})
         self.assertFalse(dialog.cica_stages.isHidden())
         self.assertEqual(dialog.cica_stages.topLevelItem(0).text(0), '00123')
-        self.assertEqual(dialog.cica_stages.topLevelItem(0).text(9), '0012301')
+        self.assertEqual(dialog.cica_stages.topLevelItem(0).text(2), '01')
+        self.assertEqual(dialog.cica_stages.topLevelItem(0).text(3), 'TRAMITADO')
         self.assertEqual(dialog.scope.currentData(), 'all')
         dialog.set_statistics({'source_statistics': None, 'cica_stages': [], 'cica_stages_error': 'Sin permiso'})
         self.assertIn('Sin permiso', dialog.cica_stage_note.text())
@@ -192,3 +195,62 @@ class CopySourcePresentationTests(unittest.TestCase):
         dialog.source_mode.setCurrentIndex(1)
         self.assertEqual(dialog.repository_date.text(), 'Copia base CICA — 30/10/2026 · 08:15:02')
         dialog.close();owner.close()
+
+
+class DirectMonitoringTests(unittest.TestCase):
+    def test_direct_table_query_keeps_selected_municipality(self):
+        from qgis_control_calidad.territorial_statistics import read_cica_stages
+        connection = MagicMock()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        with patch('psycopg2.connect', return_value=connection):
+            data = read_cica_stages({}, '08421', include_source=True)
+        self.assertEqual(data, {'source': 'sentencias.snc_cica_copy.cica_predio', 'rows': []})
+        self.assertIn('FROM snc_cica_copy.cica_predio', cursor.execute.call_args.args[0])
+        self.assertNotIn('vw_seguimiento', cursor.execute.call_args.args[0])
+        self.assertEqual(cursor.execute.call_args.args[1], ('08421%',))
+
+    def test_file_statistics_preserve_cp_codes_stage_and_states(self):
+        import tempfile
+        from pathlib import Path
+        from qgis_control_calidad.cica_data import prepare_csv
+        from qgis_control_calidad.territorial_statistics import cica_stages_from_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'predio.csv'
+            source.write_text('numero_predial;estado;etapa\n0842101000001;ACTIVO;TRAMITADO\n0842102000001;CANCELADO;ASIGNADO\n0842102000002;ACTIVO;ASIGNADO\n0842100000001;OTRO;\n')
+            ref = prepare_csv('cica_predio', source)
+            try:
+                data = cica_stages_from_snapshot(ref)
+                self.assertEqual(data['rows'], [
+                    ('08421', 'Urbano', '01', 'TRAMITADO', 1, 1, 0, 0),
+                    ('08421', 'Centro poblado', '02', 'ASIGNADO', 2, 1, 1, 0),
+                    ('08421', 'Rural', '00', '', 1, 0, 0, 1)])
+            finally:
+                ref.close()
+
+    def test_direct_query_aggregates_actual_predios_by_cp_stage_and_state(self):
+        import sqlite3
+        from qgis_control_calidad.territorial_statistics import read_cica_stages
+        connection = MagicMock()
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value = []
+        with patch('psycopg2.connect', return_value=connection):
+            read_cica_stages({}, '08421')
+        query, args = cursor.execute.call_args.args
+        query = query.replace('::text', '').replace(' ~ ', ' REGEXP ').replace('%s', '?')
+        db = sqlite3.connect(':memory:')
+        self.addCleanup(db.close)
+        db.create_function('btrim', 1, lambda value: value.strip() if value else value)
+        db.create_function('regexp', 2, lambda pattern, value: bool(__import__('re').search(pattern, value or '')))
+        db.execute("ATTACH DATABASE ':memory:' AS snc_cica_copy")
+        db.execute('CREATE TABLE snc_cica_copy.cica_predio (numero_predial TEXT, estado TEXT, etapa TEXT)')
+        db.executemany('INSERT INTO snc_cica_copy.cica_predio VALUES (?,?,?)', [
+            ('0842101000001', 'ACTIVO', 'TRAMITADO'),
+            ('0842102000001', 'CANCELADO', 'ASIGNADO'),
+            ('0842102000002', 'ACTIVO', 'ASIGNADO'),
+            ('0842100000001', 'OTRO', None),
+            ('1300601000001', 'ACTIVO', 'ASIGNADO')])
+        self.assertEqual(db.execute(query, args).fetchall(), [
+            ('08421', 'Urbano', '01', 'TRAMITADO', 1, 1, 0, 0),
+            ('08421', 'Centro poblado', '02', 'ASIGNADO', 2, 1, 1, 0),
+            ('08421', 'Rural', '00', '', 1, 0, 0, 1)])

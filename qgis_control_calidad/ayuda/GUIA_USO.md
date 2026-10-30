@@ -38,6 +38,8 @@ Volver a seleccionar el modelo limpia el ambiente y la versión SQL. Si lo hace,
 
 ## 3. Conectar la Base catastral a validar
 
+Estas opciones se muestran para **Modelo Interno**. Al elegir **CICA**, se ocultan: seleccione los datos en **Fuente de datos → Seleccionar fuente de datos…**. La conexión de trabajo se resuelve automáticamente y los datos de validación son temporales.
+
 ### Conexión guardada en QGIS
 
 1. Elija **Conexión guardada en QGIS**.
@@ -55,15 +57,15 @@ Si la conexión falla, revise los datos de acceso y su conexión de red antes de
 
 ## 4. Cargar archivos CICA
 
-Use esta función únicamente si validará archivos CICA. Si consultará las tablas de una base CICA existente, continúe con R1/R2.
+Use esta función para elegir los CSV/GDB del usuario o la Copia base CICA. No es necesario seleccionar una conexión QGIS ni listar esquemas para CICA.
 
 1. Seleccione **CICA** y pulse **Seleccionar fuente de datos…**.
-2. Elija **Archivos CSV del usuario** o **Copia base CICA**. Para la segunda opción, pulse **Leer copia base CICA**: primero pulse **Consultar municipios y etapas**, seleccione el **Departamento** y después el **Municipio** (nombre y DIVIPOLA), o mantenga Todos los departamentos y elija **Todos los municipios**, y marque una o varias etapas. Puede seleccionar o deseleccionar todas las etapas. Después lea la copia: se consultan las siete tablas con esa selección y se muestran sus cantidades. Durante la lectura se indica la tabla en proceso y el avance por registros; si el servidor interrumpe una tabla por tiempo, se identifica y no se aplica una copia incompleta. Si cambia el municipio o las etapas, vuelva a leer la copia antes de usarla. La GDB continúa disponible y se valida sobre los predios seleccionados. Al seleccionar esta fuente se muestra la última fecha de marca registrada en `snc_cica_crudo._control` (campo `fecha_marca`). Si no se puede consultar, se indica como no disponible. La lectura no modifica el esquema. Para CSV, pulse **Cargar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
-3. Si utilizará una geodatabase, pulse **Seleccionar geodatabase…** y elija una carpeta `.gdb` o un ZIP que contenga una sola geodatabase.
-4. Revise los nombres y cantidades informados. El resumen general muestra los predios activos y cancelados de la fuente seleccionada, sin aplicar filtros. Los otros estados se indican aparte. Para la distribución territorial y los filtros detallados, utilice la pestaña de estadística y filtro avanzado.
+2. Elija **Archivos CSV del usuario** o **Copia base CICA**. Para la segunda opción, pulse **Leer copia base CICA**: primero pulse **Consultar municipios y etapas**, seleccione el **Departamento** y después el **Municipio** (nombre y DIVIPOLA), o mantenga Todos los departamentos y elija **Todos los municipios**, y marque una o varias etapas. Puede seleccionar o deseleccionar todas las etapas. Después lea la copia: se consultan las siete tablas con esa selección y se muestran sus cantidades. Durante la lectura se indica la tabla en proceso y el avance por registros; si el servidor interrumpe una tabla por tiempo, se identifica y no se aplica una copia incompleta. Si cambia el municipio o las etapas, vuelva a leer la copia antes de usarla. La GDB continúa disponible y se valida sobre los predios seleccionados. Al seleccionar esta fuente se muestra la última fecha de marca registrada en `snc_cica_crudo._control` (campo `fecha_marca`). Si no se puede consultar, se indica como no disponible. La lectura no modifica el esquema. Para CSV, pulse **Seleccionar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
+3. Si utilizará una geodatabase, pulse **Seleccionar GDB…** y elija una carpeta `.gdb` o un ZIP que contenga una sola geodatabase.
+4. Revise los nombres y cantidades informados. El resumen muestra los predios activos y cancelados de la fuente leída; en Copia base CICA corresponde al municipio y etapas seleccionados. Los otros estados se indican aparte. Para la distribución territorial y los filtros detallados, utilice la pestaña de estadística y filtro avanzado.
 5. Pulse **Usar fuente de datos** para aplicar la selección.
 
-Puede reemplazar un archivo sin volver a seleccionar los demás. Si una tabla está tanto en los CSV o en la copia de snc_cica_copy como en la geodatabase, se utilizan los datos tabulares seleccionados. Los archivos no seleccionados se consultan en el esquema elegido.
+Puede reemplazar un archivo sin volver a seleccionar los demás. Si una tabla está tanto en los CSV o en la copia de snc_cica_copy como en la geodatabase, se utilizan los datos tabulares seleccionados. Seleccione las tablas y capas necesarias para las reglas que ejecutará. Una tabla no cargada no se sustituye por datos de otro esquema.
 
 Los originales no se modifican. Los archivos preparados están disponibles durante la sesión; al cerrar el plugin deberá cargarlos nuevamente. **Cancelar** conserva la selección anterior.
 
@@ -105,11 +107,15 @@ La pestaña **Estadística y filtro avanzado** se habilita cuando estén selecci
 5. En **Alcance**, marque una o varias opciones: Urbano (`01`), Rural (`00`) o Centro poblado (`>01`). **Todos** no restringe el alcance.
 6. Opcionalmente, busque y marque manzanas/veredas usando los primeros **17 dígitos del NPN**.
 7. Revise la cantidad y el porcentaje incluidos para cada origen.
-8. Pulse **Aplicar filtro**. **Cancelar** mantiene la selección anterior.
+8. Pulse **Aplicar filtro**. El panel principal **Alcance a validar** actualiza las tarjetas y la distribución con los predios incluidos de la base catastral y R1, indicando cuántos quedan del total disponible. **Cancelar** mantiene la selección anterior.
 
 **Seleccionar todo** y **Deseleccionar todo** actúan sobre los códigos visibles según la búsqueda y el alcance. Las marcas de códigos ocultos se conservan; revise el contador antes de aplicar. Sin códigos marcados se incluyen todos los del alcance elegido.
 
 El filtro se aplica a la Base catastral a validar y a R1/R2. Al cambiar de origen se limpian los códigos seleccionados y las estadísticas anteriores. Use **Actualizar estadísticas** para volver a consultar los datos.
+
+Solo en **CICA**, pulse **Ver informe de avance CICA…**, encima del botón de estadísticas. Se abre una ventana independiente con tarjetas de total, activos y cancelados, barras por etapa, cambio Cantidad/Porcentaje y un detalle tabular. Seleccione Todas las zonas, Urbano, Centro poblado o Rural; en Centro poblado puede consultar los códigos encontrados en las posiciones 6–7 del NPN. Estos controles no cambian los filtros de validación.
+
+El seguimiento CICA se obtiene directamente de `sentencias.snc_cica_copy.cica_predio`, sin requerir una vista. Muestra los conteos por municipio, zona, código de las posiciones 6–7 del NPN y etapa registrada, separados en activos, cancelados y otros estados. Para Copia base CICA, representa el contexto del municipio completo antes de filtrar etapas. En modo CSV/GDB, se calcula sobre el archivo de predios seleccionado.
 
 ## 7. Confirmar y ejecutar la validación
 
@@ -206,6 +212,5 @@ El formato se entrega para diligenciarlo; no se completa automáticamente. El en
 | No se puede generar el reporte | Revise los avisos, cierre archivos de salida abiertos en Excel y recargue los detalles modificados o no disponibles. |
 | La generación termina con error | Consulte Incidencias y entregue el mensaje completo al responsable de soporte. |
 
-En CICA, la ventana de estadística y filtro avanzado también muestra el **Seguimiento CICA por etapas**, consultado en `sentencias.snc_cica_copy.vw_seguimiento_predios_2026`. Incluye los totales por municipio y zona, reconocidos, control de calidad, áreas geográficas, cargados SNC, cancelados, fecha de actualización y códigos NPN existentes. Es el resumen general publicado en la vista; no se recalcula al seleccionar filtros ni equivale necesariamente a los CSV/GDB cargados. Si no hay acceso a la vista, se informa sin impedir el uso de las demás estadísticas y filtros.
 
 En Copia base CICA, el municipio se identifica con los primeros cinco dígitos del NPN. La selección de etapas se aplica al campo `etapa` de `cica_predio` y a los datos asociados a esos predios. Las condiciones de las sentencias SQL se mantienen: se valida la intersección con los filtros seleccionados. La confirmación previa a ejecutar muestra municipio y etapas. R1/R2 se restringen al municipio seleccionado; el filtro de etapa corresponde a la base CICA.

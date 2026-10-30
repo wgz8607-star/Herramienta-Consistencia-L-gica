@@ -260,7 +260,7 @@ class RuleWorker(QObject):
                     install_gdb(connection, self.cica_gdb, exclude=self.cica_references)
                 for table, reference in sorted(self.cica_references.items()):
                     self.message.emit(f'Cargando {table} en tabla temporal de la sesión…')
-                    install_csv(connection, reference, self.schema, self.cica_gdb.layers.get(table) if self.cica_gdb else None)
+                    install_csv(connection, reference, 'snc_cica_copy' if self.schema == 'pg_temp' and self.validation_model == 'CICA' else self.schema, self.cica_gdb.layers.get(table) if self.cica_gdb else None)
                 if self.territorial_scope != 'all' or self.territorial_prefixes or self.cica_selection:
                     temporary_tables = set(self.cica_references) | (set(self.cica_gdb.layers) if self.cica_gdb else set())
                     self.scope_views = install_scope(connection, self.schema, temporary_tables,
@@ -404,6 +404,7 @@ class ControlCalidadDialog(QDialog):
         left_layout.setContentsMargins(0, 0, 4, 0)
         left_layout.setSpacing(6)
         connection = QGroupBox("1. Conexión PostgreSQL / PostGIS")
+        self.connection_group = connection
         style_section(connection, "#575756")
         connection.setStyleSheet(connection.styleSheet() +
             " QWidget { font-size: 12px; } QGroupBox { padding: 6px; } QLineEdit, QComboBox { padding: 3px; } "
@@ -484,7 +485,8 @@ class ControlCalidadDialog(QDialog):
         self.ingestion_button = QPushButton("Seleccionar fuente de datos…")
         self.ingestion_button.clicked.connect(self.open_ingestion)
         form.addRow(self.ingestion_label, self.ingestion_button)
-        form.addRow("Forma de conexión", self.connection_mode)
+        self.connection_mode_label = QLabel("Forma de conexión")
+        form.addRow(self.connection_mode_label, self.connection_mode)
         form.addRow("", self.connection_stack)
         test = QPushButton("Listar Esquemas")
         test.clicked.connect(self.test_connection)
@@ -716,7 +718,12 @@ class ControlCalidadDialog(QDialog):
         filter_layout.addWidget(self.advanced_filter_summary)
         self.filter_statistics = None
         self.filter_overview = TerritorialOverview(filter_page)
+        self.filter_overview.set_filter(self.scope_selection, self.scope_prefixes)
         filter_layout.addWidget(self.filter_overview)
+        self.cica_progress_button = QPushButton('Ver informe de avance CICA…')
+        self.cica_progress_button.clicked.connect(self.open_cica_progress)
+        self.cica_progress_button.setStyleSheet('QPushButton { background: #0066B3; color: white; border: none; border-radius: 7px; padding: 11px 12px; font-weight: 700; } QPushButton:hover { background: #005493; } QPushButton:disabled { background: #A4B6C5; }')
+        filter_layout.addWidget(self.cica_progress_button)
         self.open_filter_window_button = QPushButton('Ver estadísticas y seleccionar filtros…')
         self.open_filter_window_button.clicked.connect(self.open_advanced_filter_window)
         self.open_filter_window_button.setStyleSheet('QPushButton { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #217346, stop:1 #0066B3); color: white; border: none; border-radius: 7px; padding: 11px 12px; font-weight: 700; } QPushButton:hover { background: #0066B3; }')
@@ -837,6 +844,13 @@ class ControlCalidadDialog(QDialog):
         visible = self.model.currentText() == "CICA"
         self.ingestion_label.setVisible(visible)
         self.ingestion_button.setVisible(visible)
+        self.cica_progress_button.setVisible(visible)
+        self.connection_mode_label.setVisible(not visible)
+        self.connection_mode.setVisible(not visible)
+        self.connection_stack.setVisible(not visible)
+        self.schema_controls.setVisible(not visible)
+        self.connection_group.setTitle('1. Fuente de datos CICA' if visible else '1. Conexión PostgreSQL / PostGIS')
+        self.left_tabs.setTabText(0, 'Fuente de datos' if visible else 'Conexión')
 
     def reset_model_selection(self, *_):
         self.format_download.setEnabled(False)
@@ -1000,7 +1014,10 @@ class ControlCalidadDialog(QDialog):
 
     def update_advanced_filter_summary(self):
         detail = f'{len(self.scope_prefixes)} manzanas/veredas' if self.scope_prefixes else 'Sin filtro de manzana/vereda'
-        self.advanced_filter_summary.setText(SCOPES[self.scope_selection] + ' · ' + detail)
+        self.advanced_filter_summary.setText('Alcance a validar: ' + SCOPES[self.scope_selection] + ' · ' + detail)
+        if hasattr(self, 'filter_overview'):
+            self.filter_overview.set_filter(self.scope_selection, self.scope_prefixes)
+            self.filter_overview.set_statistics(self.filter_statistics)
 
     def clear_territorial_prefixes(self, *_):
         self.scope_prefixes = ()
@@ -1013,7 +1030,8 @@ class ControlCalidadDialog(QDialog):
         has_cica = self.model.currentText() == "CICA" and (
             "cica_predio" in self.cica_references or
             bool(self.cica_gdb and "cica_predio" in self.cica_gdb.layers))
-        data_ready = bool(self.schema.currentText().strip()) or has_cica
+        self.cica_progress_button.setEnabled(bool(has_cica) and not self.controls_running and not self.exporting and not self.filter_reading)
+        data_ready = bool(has_cica) if self.model.currentText() == "CICA" else bool(self.schema.currentText().strip())
         current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
         r1_ready = bool(self.temporary_references.get('R1')) if self.reference_mode.currentIndex() == 0 else bool(current and current.get('tables', {}).get('R1'))
         signature = (self.model.currentText(), self.schema.currentText(), self.connection_mode.currentIndex(),
@@ -1086,20 +1104,54 @@ class ControlCalidadDialog(QDialog):
         self.main_tabs.setEnabled(False)
         self.update_run_availability()
         try:
-            data = self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
+            data = self.report_task(read_filter_statistics, params, self.validation_schema(), self.model.currentText(), snapshot,
                                     self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
                                     'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
-            if self.model.currentText() == 'CICA':
-                from .territorial_statistics import read_cica_stages
-                data['cica_stages'] = []
-                try:
-                    if not repository_params:
-                        raise ValueError('Falta acceso a la base sentencias.')
-                    data['cica_stages'] = self.report_task(read_cica_stages, repository_params, self.cica_selection.get('municipality', ''))
-                except Exception as error:
-                    data['cica_stages_error'] = str(error)
             self.filter_statistics = data
             self.filter_overview.set_statistics(data)
+            return data
+        finally:
+            self.filter_reading = False
+            self.main_tabs.setEnabled(True)
+            self.update_run_availability()
+
+    def open_cica_progress(self):
+        if self.model.currentText() != 'CICA' or self.controls_running or self.exporting or self.filter_reading:
+            return
+        from .cica_progress import CicaProgressDialog
+        dialog = CicaProgressDialog(self.read_cica_progress_data, self)
+        dialog.exec_()
+
+    def read_cica_progress_data(self):
+        from .territorial_statistics import read_cica_stages, cica_stages_from_snapshot
+        from .cica_data import read_repository_cica_date
+        from .current_references import municipal_names
+        snapshot = self.cica_references.get('cica_predio') or (self.cica_gdb.layers.get('cica_predio') if self.cica_gdb else None)
+        if snapshot is None:
+            raise ValueError('Seleccione primero la base CICA a validar.')
+        self.filter_reading = True
+        self.main_tabs.setEnabled(False)
+        self.update_run_availability()
+        try:
+            if self.cica_selection:
+                params = self.repository_connection_params()
+                if not params:
+                    raise ValueError('Falta acceso a la copia base CICA.')
+                data = self.report_task(read_cica_stages, params, self.cica_selection.get('municipality', ''), include_source=True)
+                try:
+                    stamp = self.report_task(read_repository_cica_date, params)
+                    data['date'] = stamp.strftime('%d/%m/%Y %H:%M:%S') if hasattr(stamp, 'strftime') else str(stamp) if stamp is not None else 'Sin fecha registrada'
+                except Exception:
+                    data['date'] = 'Fecha de marca no disponible'
+            else:
+                data = self.report_task(cica_stages_from_snapshot, snapshot)
+            codes = sorted({row[0] for row in data['rows']})
+            selected = self.cica_selection.get('municipality')
+            if selected and not codes:
+                codes = [selected]
+            catalog = municipal_names(DIVIPOLA_FILE)
+            labels = [f"{catalog[code][1]}, {catalog[code][0]} ({code})" if code in catalog else code for code in codes]
+            data['municipality_label'] = '; '.join(labels[:3]) + (f' · y {len(labels) - 3} más' if len(labels) > 3 else '') if labels else 'Sin predios en la selección'
             return data
         finally:
             self.filter_reading = False
@@ -1199,7 +1251,7 @@ class ControlCalidadDialog(QDialog):
         self.update_advanced_filter_availability()
 
     def select_reference_municipality(self, *_):
-        codes = set(re.findall(r'(?<!\d)(\d{5})(?!\d)', self.schema.currentText()))
+        codes = ({self.cica_selection['municipality']} if self.cica_selection.get('municipality') else set()) if self.model.currentText() == 'CICA' else set(re.findall(r'(?<!\d)(\d{5})(?!\d)', self.schema.currentText()))
         matches = [index for index in range(self.municipality.count()) if self.municipality.itemData(index) and self.municipality.itemData(index)['divipola'] in codes]
         if len(matches) == 1:
             self.municipality.setCurrentIndex(matches[0])
@@ -1359,13 +1411,36 @@ class ControlCalidadDialog(QDialog):
         self.category_button.setEnabled(any(action.isEnabled() for action in self.category_checks.values()))
         self.update_run_availability()
 
+    def validation_schema(self):
+        return 'pg_temp' if self.model.currentText() == 'CICA' else self.schema.currentText().strip()
+
     def connection_params(self):
+        if self.model.currentText() == 'CICA':
+            params = self.repository_connection_params()
+            if not params:
+                raise ValueError('Falta acceso al servicio de validación CICA.')
+            return params
         if self.connection_mode.currentIndex() == 0:
             return self.qgis_connection_params()
         return {"host": POSTGRES_HOST, "port": self.port.text().strip(), "dbname": self.database.text().strip(), "user": self.user.text().strip(), "password": self.password.text()}
 
     def resolve_validation_context(self, params, schema):
         """Relaciona los cinco primeros dígitos de ILC_Predio con el DIVIPOLA interno."""
+        if self.model.currentText() == 'CICA':
+            from .cica_data import snapshot_municipalities
+            from .current_references import municipal_names
+            try:
+                snapshot = self.cica_references.get('cica_predio') or (self.cica_gdb.layers.get('cica_predio') if self.cica_gdb else None)
+                if snapshot is None:
+                    return 'Ubicación territorial no disponible: seleccione la base CICA a validar.'
+                codes = self.report_task(snapshot_municipalities, snapshot)
+                catalog = municipal_names(DIVIPOLA_FILE)
+                labels = [f"{catalog[code][0]} · {catalog[code][1]} ({code})" if code in catalog else code for code in codes]
+                if not labels:
+                    return 'Ubicación territorial no identificada: la base CICA seleccionada no contiene NPN válidos.'
+                return 'Ubicación territorial validada: ' + '; '.join(labels[:4]) + (f' · y {len(labels) - 4} más' if len(labels) > 4 else '')
+            except Exception as error:
+                return 'Ubicación territorial no disponible: ' + str(error)
         if not DIVIPOLA_FILE.exists():
             return "Ubicación territorial no disponible: falta la referencia DIVIPOLA del plugin."
         if not re.fullmatch(r"[A-Za-z0-9_]+", schema):
@@ -1439,6 +1514,7 @@ class ControlCalidadDialog(QDialog):
             ('Manzanas / veredas (NPN 1–17)', ', '.join(self.scope_prefixes) or 'Todas las del alcance seleccionado'),
         ]
         if self.model.currentText() == 'CICA':
+            rows = [row for row in rows if row[0] != 'Esquema']
             if self.cica_selection:
                 rows.append(('Municipio CICA (DIVIPOLA)', self.cica_selection.get('municipality') or 'Todos'))
                 rows.append(('Etapas CICA', ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ())) or 'Todas'))
@@ -1505,7 +1581,10 @@ class ControlCalidadDialog(QDialog):
         if not rules:
             QMessageBox.critical(self, "Reglas no encontradas", "No hay reglas SQL en la selección actual.")
             return
-        schema = self.schema.currentText().strip()
+        schema = self.validation_schema()
+        if self.model.currentText() == 'CICA' and not ('cica_predio' in self.cica_references or (self.cica_gdb and 'cica_predio' in self.cica_gdb.layers)):
+            QMessageBox.warning(self, 'Seleccione la fuente CICA', 'Pulse «Seleccionar fuente de datos» y cargue o lea la base CICA antes de ejecutar.')
+            return
         if not schema:
             QMessageBox.warning(self, "Seleccione un esquema", "Pulse Listar Esquemas y seleccione el esquema que desea validar.")
             return

@@ -285,3 +285,17 @@ def read_repository_cica_options(params):
                 COALESCE(etapa::text, ''), count(*) FROM snc_cica_copy.cica_predio
                 GROUP BY 1, 2 ORDER BY 1, 2""")
             return cursor.fetchall()
+
+
+def snapshot_municipalities(snapshot):
+    column = next((name for name in ('numero_predial', 'numero_predial_nacional') if name in snapshot.columns), None)
+    if column is None:
+        raise ValueError('La base CICA seleccionada no contiene un campo NPN.')
+    index = snapshot.columns.index(column)
+    codes = set()
+    with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
+        for row in csv.reader(stream):
+            code = row[index].strip()[:5] if len(row) > index else ''
+            if re.fullmatch(r'[0-9]{5}', code):
+                codes.add(code)
+    return sorted(codes)

@@ -508,3 +508,9 @@ Copia base CICA muestra fecha y hora desde `snc_cica_crudo._control.fecha_marca`
 ### Versión 2.12.1
 
 Ventana de fuente CICA reorganizada en bloques, con selección Departamento → Municipio usando el catálogo DIVIPOLA y conteo de etapas marcadas. La copia consulta primero los predios seleccionados y reutiliza su NPN al preparar las tablas relacionadas, evitando repetir la subconsulta de etapas en el servidor. Muestra progreso por tabla y registros; identifica la tabla si se agota el tiempo y descarta la copia incompleta. La extracción de ZIP de GDB reconoce separadores de Windows y obtiene la carpeta de la lista del ZIP sin recorrer archivos binarios internos. La prueba con el ZIP del usuario y el rendimiento real del servidor siguen pendientes.
+
+### Versión 2.13.0
+
+Informe de avance CICA en ventana independiente, con lectura directa de `sentencias.snc_cica_copy.cica_predio`, municipio de la fuente, totales por estado, barras de las etapas registradas, selección de zona y códigos CP (NPN 6–7), modo Cantidad/Porcentaje y detalle tabular. Los archivos CSV/GDB usan sus propios datos de predios para el informe. No se requiere la vista del ejemplo. Consultar el avance no cambia los filtros de validación ni añade consultas de seguimiento a la lectura del filtro avanzado.
+
+El panel Alcance a validar actualiza tarjetas y distribución con los predios incluidos al aplicar el filtro y conserva los totales originales para comparar. CICA oculta las opciones manuales de conexión/esquema y valida con la conexión interna sobre tablas temporales, sin depender de una selección anterior de QGIS ni usar tablas persistentes como sustituto de insumos faltantes. El Modelo Interno conserva sus opciones de conexión.

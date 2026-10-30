@@ -1,19 +1,47 @@
 """Prepare independent CICA CSV snapshots for temporary validation tables."""
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QAbstractItemView, QHeaderView, QComboBox, QDialog, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date, read_repository_cica_options, cica_selection
 from .cica_gdb import prepare_gdb
+from .current_references import municipal_names
+from pathlib import Path
 
 
 class CicaIngestionDialog(QDialog):
+    copyReadProgress = pyqtSignal(str)
+
     def __init__(self, parent=None, references=None, geodatabase=None):
         super().__init__(parent)
         self.setWindowTitle('Seleccionar fuente de datos CICA')
         self.replace_references = False
-        self.resize(820, 520)
+        self.resize(900, 800)
+        self.setMinimumSize(650, 540)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
+        self.setObjectName('cicaSourceDialog')
+        self.setStyleSheet("""
+            QDialog#cicaSourceDialog { background: #F3F6FA; }
+            QDialog#cicaSourceDialog QWidget { font-size: 13px; color: #17324D; }
+            QDialog#cicaSourceDialog QLabel { background: transparent; }
+            QDialog#cicaSourceDialog QWidget[card="true"] { background: white; border: 1px solid #E2EAF2; border-radius: 10px; }
+            QDialog#cicaSourceDialog QLabel[sectionTitle="true"] { font-weight: bold; font-size: 15px; color: #0066B3; }
+            QDialog#cicaSourceDialog QLabel[muted="true"] { color: #60758A; font-size: 12px; }
+            QDialog#cicaSourceDialog QComboBox, QDialog#cicaSourceDialog QLineEdit { background: #F8FBFE; color: #17324D; border: 1px solid #CBDCEA; border-radius: 5px; padding: 6px; min-height: 20px; }
+            QDialog#cicaSourceDialog QPushButton { background: white; color: #0066B3; border: 1px solid #BCD2E4; border-radius: 6px; padding: 7px 13px; font-weight: bold; min-height: 19px; }
+            QDialog#cicaSourceDialog QPushButton:hover { background: #EAF2FA; border-color: #0066B3; }
+            QDialog#cicaSourceDialog QPushButton[primary="true"] { background: #0066B3; color: white; border-color: #0066B3; }
+            QDialog#cicaSourceDialog QPushButton[primary="true"]:hover { background: #005493; }
+            QDialog#cicaSourceDialog QPushButton[readAction="true"] { background: #217346; color: white; border-color: #217346; }
+            QDialog#cicaSourceDialog QPushButton:disabled { color: #899BAB; background: #EEF2F6; border-color: #DCE5ED; }
+            QDialog#cicaSourceDialog QTreeWidget { background: white; alternate-background-color: #F3F8FC; color: #17324D; border: 1px solid #DCE6EF; border-radius: 5px; }
+            QDialog#cicaSourceDialog QTreeWidget::item { padding: 5px; min-height: 21px; }
+            QDialog#cicaSourceDialog QTreeWidget::item:selected { background: #DBEBF9; color: #17324D; }
+            QDialog#cicaSourceDialog QHeaderView::section { background: #EAF2FA; color: #0066B3; border: none; padding: 7px; font-weight: bold; }
+            QDialog#cicaSourceDialog QScrollArea { background: transparent; border: none; }
+            QDialog#cicaSourceDialog QWidget#sourceContent { background: #F3F6FA; }
+        """)
         self.prepared = {}
         self.prepared_gdb = None
         self.existing_gdb = geodatabase
@@ -21,85 +49,112 @@ class CicaIngestionDialog(QDialog):
         self.files = {}
         self.summary_cache = {}
         self.repository_options = []
+        self.municipality_catalog = municipal_names(Path(__file__).parent / "resources" / "data" / "divipola.xlsx")
         self.loaded_selection = None
-        layout = QVBoxLayout(self)
-        note = QLabel('Seleccione los CSV individualmente y la geodatabase (.gdb o .zip). Los archivos se usarán temporalmente durante la validación, sin modificar los originales. Puede reemplazar un archivo sin volver a seleccionar los demás.')
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        outer = QVBoxLayout(self); outer.setContentsMargins(18, 16, 18, 14); outer.setSpacing(10)
+        title = QLabel('Seleccione la base CICA a validar')
+        title.setStyleSheet('font-size: 20px; font-weight: bold; color: #0066B3;')
+        outer.addWidget(title)
+        subtitle = QLabel('Defina el origen, el municipio y las etapas antes de usar los datos.')
+        subtitle.setProperty('muted', True); subtitle.setWordWrap(True); outer.addWidget(subtitle)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        content = QWidget(); content.setObjectName('sourceContent')
+        layout = QVBoxLayout(content); layout.setContentsMargins(0, 0, 4, 0); layout.setSpacing(12)
+        scroll.setWidget(content); outer.addWidget(scroll, 1)
+
+        def card(title):
+            widget = QWidget(); widget.setProperty('card', True)
+            body = QVBoxLayout(widget); body.setContentsMargins(15, 12, 15, 12); body.setSpacing(9)
+            heading = QLabel(title); heading.setProperty('sectionTitle', True); body.addWidget(heading)
+            layout.addWidget(widget)
+            return widget, body
+
+        _, source_layout = card('1. Fuente de datos')
         self.source_mode = QComboBox()
         self.source_mode.addItems(['Archivos CSV del usuario', 'Copia base CICA'])
-        layout.addWidget(self.source_mode)
-        self.repository_date = QLabel()
-        self.repository_date.setWordWrap(True)
-        self.repository_date.setStyleSheet('QLabel { background: #EAF2FA; color: #0066B3; padding: 8px; border-radius: 5px; }')
-        self.repository_date.hide()
-        layout.addWidget(self.repository_date)
-        self.copy_filters = QWidget()
-        filter_layout = QVBoxLayout(self.copy_filters)
-        filter_layout.setContentsMargins(0, 0, 0, 0)
+        source_layout.addWidget(self.source_mode)
+        self.repository_date = QLabel(); self.repository_date.setWordWrap(True)
+        self.repository_date.setStyleSheet('QLabel { background: #EAF2FA; color: #0066B3; padding: 9px; border-radius: 5px; }')
+        self.repository_date.hide(); source_layout.addWidget(self.repository_date)
+        self.source_note = QLabel('Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.')
+        self.source_note.setProperty('muted', True); self.source_note.setWordWrap(True); source_layout.addWidget(self.source_note)
+
+        self.copy_filters, filter_layout = card('2. Municipio y etapas')
+        municipality_row = QHBoxLayout()
+        municipality_row.addWidget(QLabel('Municipio · DIVIPOLA'))
+        municipality_row.addStretch()
         self.load_options_button = QPushButton('Consultar municipios y etapas')
         self.load_options_button.clicked.connect(self.load_source_options)
-        filter_layout.addWidget(self.load_options_button)
-        self.municipality = QComboBox()
-        self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
-        filter_layout.addWidget(self.municipality)
-        self.stages = QTreeWidget()
-        self.stages.setHeaderLabels(['Etapas a validar', 'Predios'])
-        self.stages.setRootIsDecorated(False)
-        self.stages.setMinimumHeight(115)
+        municipality_row.addWidget(self.load_options_button); filter_layout.addLayout(municipality_row)
+        location_form = QFormLayout(); location_form.setSpacing(8)
+        self.department = QComboBox(); self.department.addItem('Todos los departamentos', '')
+        self.department.currentIndexChanged.connect(self.populate_municipalities)
+        location_form.addRow('Departamento', self.department)
+        self.municipality = QComboBox(); self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
+        location_form.addRow('Municipio', self.municipality)
+        filter_layout.addLayout(location_form)
+        self.stage_summary = QLabel('Consulte los municipios para ver las etapas disponibles.')
+        self.stage_summary.setProperty('muted', True); self.stage_summary.setWordWrap(True)
+        filter_layout.addWidget(self.stage_summary)
+        self.stages = QTreeWidget(); self.stages.setHeaderLabels(['Etapas a validar', 'Predios'])
+        self.stages.setRootIsDecorated(False); self.stages.setAlternatingRowColors(True)
+        self.stages.setSelectionMode(QAbstractItemView.NoSelection)
+        self.stages.setMinimumHeight(190); self.stages.setMaximumHeight(310)
+        self.stages.header().setStretchLastSection(False)
+        self.stages.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.stages.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         filter_layout.addWidget(self.stages)
         stage_buttons = QHBoxLayout()
         select_stages = QPushButton('Seleccionar todas'); clear_stages = QPushButton('Deseleccionar todas')
-        select_stages.clicked.connect(lambda: self.check_stages(True))
-        clear_stages.clicked.connect(lambda: self.check_stages(False))
-        stage_buttons.addWidget(select_stages); stage_buttons.addWidget(clear_stages)
+        select_stages.clicked.connect(lambda: self.check_stages(True)); clear_stages.clicked.connect(lambda: self.check_stages(False))
+        stage_buttons.addWidget(select_stages); stage_buttons.addWidget(clear_stages); stage_buttons.addStretch()
+        self.read_repository = QPushButton('Leer copia base CICA')
+        self.read_repository.setProperty('readAction', True)
+        self.read_repository.clicked.connect(self.choose_repository); stage_buttons.addWidget(self.read_repository)
         filter_layout.addLayout(stage_buttons)
         self.municipality.currentIndexChanged.connect(self.update_stages)
         self.stages.itemChanged.connect(self.source_filter_changed)
         self.copy_filters.hide()
-        layout.addWidget(self.copy_filters)
-        self.read_repository = QPushButton('Leer copia base CICA')
-        self.read_repository.clicked.connect(self.choose_repository)
-        self.read_repository.setVisible(False)
-        layout.addWidget(self.read_repository)
-        self.source_mode.currentIndexChanged.connect(self.change_source_mode)
-        self.csv_buttons = []
-        self.csv_rows = []
-        scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        content = QWidget(); form = QFormLayout(content)
+
+        self.csv_card, csv_layout = card('2. Archivos CSV')
+        form = QFormLayout(); form.setSpacing(9); csv_layout.addLayout(form)
+        self.csv_buttons = []; self.csv_rows = []
         for label, table in CSV_INPUTS.items():
-            field = QLineEdit(); field.setReadOnly(True)
+            field = QLineEdit(); field.setReadOnly(True); field.setPlaceholderText('Sin archivo seleccionado')
             if table in self.existing:
-                ref = self.existing[table]
-                field.setText(f'{ref.filename} · {ref.row_count} registros')
-            button = QPushButton('Cargar CSV…')
-            self.csv_buttons.append(button)
+                ref = self.existing[table]; field.setText(f'{ref.filename} · {ref.row_count} registros')
+            button = QPushButton('Seleccionar CSV…'); self.csv_buttons.append(button)
             button.clicked.connect(lambda _=False, key=label: self.choose_csv(key))
-            row_widget = QWidget()
-            row = QHBoxLayout(row_widget); row.setContentsMargins(0, 0, 0, 0)
+            row_widget = QWidget(); row = QHBoxLayout(row_widget); row.setContentsMargins(0, 0, 0, 0)
             row.addWidget(field, 1); row.addWidget(button)
-            row_label = QLabel(label)
-            form.addRow(row_label, row_widget)
-            self.csv_rows.append((row_label, row_widget))
-            self.files[label] = field
-        self.gdb = QLineEdit(); self.gdb.setReadOnly(True)
+            row_label = QLabel(label); form.addRow(row_label, row_widget)
+            self.csv_rows.append((row_label, row_widget)); self.files[label] = field
+
+        _, gdb_layout = card('3. Geodatabase CICA')
+        gdb_note = QLabel('Seleccione una carpeta .gdb o un ZIP que contenga una geodatabase.')
+        gdb_note.setWordWrap(True); gdb_note.setProperty('muted', True); gdb_layout.addWidget(gdb_note)
+        self.gdb = QLineEdit(); self.gdb.setReadOnly(True); self.gdb.setPlaceholderText('Sin geodatabase seleccionada')
         if self.existing_gdb:
             self.gdb.setText(f'{self.existing_gdb.filename} · {len(self.existing_gdb.layers)} capas/tablas')
-        choose_gdb = QPushButton('Seleccionar geodatabase…')
-        choose_gdb.clicked.connect(self.choose_gdb)
-        gdb_row = QHBoxLayout(); gdb_row.addWidget(self.gdb, 1); gdb_row.addWidget(choose_gdb)
-        form.addRow('Geodatabase CICA', gdb_row)
-        scroll.setWidget(content); layout.addWidget(scroll, 1)
-        self.predio_summary = QLabel()
-        self.predio_summary.setWordWrap(True)
-        self.predio_summary.setStyleSheet('QLabel { background: #EAF5EE; color: #217346; border: 1px solid #B8DAC5; border-radius: 6px; padding: 10px; }')
-        layout.addWidget(self.predio_summary)
-        self.status = QLabel('Sin esquema de destino. Los archivos estarán disponibles para las validaciones de esta sesión; los datos de trabajo de cada ejecución se eliminan al finalizarla.')
-        self.status.setWordWrap(True); layout.addWidget(self.status)
-        buttons = QHBoxLayout(); buttons.addStretch()
+        choose_gdb = QPushButton('Seleccionar GDB…'); choose_gdb.clicked.connect(self.choose_gdb)
+        gdb_row = QHBoxLayout(); gdb_row.addWidget(self.gdb, 1); gdb_row.addWidget(choose_gdb); gdb_layout.addLayout(gdb_row)
+
+        _, summary_layout = card('Resumen de la base seleccionada')
+        self.predio_summary = QLabel(); self.predio_summary.setWordWrap(True)
+        self.predio_summary.setStyleSheet('QLabel { background: #F0F7F3; color: #217346; padding: 10px; border-radius: 6px; }')
+        summary_layout.addWidget(self.predio_summary)
+        layout.addStretch()
+        self.status = QLabel('Seleccione los datos que usará en esta validación.')
+        self.status.setProperty('muted', True); self.status.setWordWrap(True); outer.addWidget(self.status)
+        self.copyReadProgress.connect(self.status.setText)
+        buttons = QHBoxLayout()
+        temporary = QLabel('Uso temporal · Sin cambios en los originales'); temporary.setProperty('muted', True)
+        buttons.addWidget(temporary); buttons.addStretch()
         cancel = QPushButton('Cancelar'); cancel.clicked.connect(self.reject)
-        apply = QPushButton('Usar fuente de datos'); apply.clicked.connect(self.validate_inputs)
-        buttons.addWidget(cancel); buttons.addWidget(apply); layout.addLayout(buttons)
+        apply = QPushButton('Usar fuente de datos'); apply.setProperty('primary', True); apply.clicked.connect(self.validate_inputs)
+        buttons.addWidget(cancel); buttons.addWidget(apply); outer.addLayout(buttons)
+        self.source_mode.currentIndexChanged.connect(self.change_source_mode)
         self.update_predio_summary()
 
     def update_predio_summary(self):
@@ -145,6 +200,8 @@ class CicaIngestionDialog(QDialog):
             self.files[label].setText(f'{ref.filename} · {ref.row_count} registros' if ref else '')
         self.read_repository.setVisible(index == 1)
         self.copy_filters.setVisible(index == 1)
+        self.csv_card.setVisible(index == 0)
+        self.source_note.setText('Lea la copia del municipio y las etapas que seleccione. Puede agregar una GDB para validar.' if index == 1 else 'Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.')
         self.repository_date.setVisible(index == 1)
         for label, row in self.csv_rows:
             label.setVisible(index == 0)
@@ -181,6 +238,9 @@ class CicaIngestionDialog(QDialog):
             self.setEnabled(True)
 
     def source_filter_changed(self, *_):
+        selected = [self.stages.topLevelItem(i) for i in range(self.stages.topLevelItemCount()) if self.stages.topLevelItem(i).checkState(0) == Qt.Checked]
+        count = sum(int(item.text(1).replace('.', '')) for item in selected)
+        self.stage_summary.setText(f'{len(selected)} de {self.stages.topLevelItemCount()} etapas seleccionadas · {count:,} predios'.replace(',', '.'))
         if self.loaded_selection is not None and self.selected_source_filter() != self.loaded_selection:
             self.status.setText('Cambió el municipio o las etapas. Pulse «Leer copia base CICA» para actualizar los datos.')
             self.predio_summary.setText('Resumen pendiente de actualizar con los nuevos filtros.')
@@ -205,21 +265,40 @@ class CicaIngestionDialog(QDialog):
         try:
             options = owner.report_task(read_repository_cica_options, params)
             self.repository_options = options
-            self.municipality.blockSignals(True)
-            self.municipality.clear()
-            self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
-            self.municipality.addItem('Todos los municipios', '')
-            municipalities = sorted({code for code, stage, count in options if code and len(code) == 5 and code.isdigit()})
-            for code in municipalities:
-                count = sum(count for municipality, stage, count in options if municipality == code)
-                self.municipality.addItem(f'{code} · {count:,} predios'.replace(',', '.'), code)
-            self.municipality.blockSignals(False)
-            self.update_stages()
+            self.department.blockSignals(True)
+            self.department.clear(); self.department.addItem('Todos los departamentos', '')
+            departments = {code[:2] for code, stage, count in options if code and len(code) == 5 and code.isdigit()}
+            def department_name(prefix):
+                return next((self.municipality_catalog[code][0] for code, stage, count in options if code.startswith(prefix) and code in self.municipality_catalog), 'Departamento sin nombre en catálogo')
+            for prefix in sorted(departments, key=lambda prefix: (department_name(prefix), prefix)):
+                self.department.addItem(f'{department_name(prefix)} · {prefix}', prefix)
+            self.department.blockSignals(False)
+            self.populate_municipalities()
             self.status.setText('Seleccione un municipio o Todos y marque las etapas a validar. Después pulse «Leer copia base CICA».')
         except Exception as error:
             QMessageBox.warning(self, 'No se pudieron consultar municipios y etapas', str(error))
         finally:
             self.setEnabled(True)
+
+    def populate_municipalities(self, *_):
+        department = self.department.currentData() or ''
+        municipalities = {code for code, stage, count in self.repository_options if code and len(code) == 5 and code.isdigit() and (not department or code.startswith(department))}
+        totals = {}
+        for code, stage, count in self.repository_options:
+            totals[code] = totals.get(code, 0) + count
+        self.municipality.blockSignals(True)
+        self.municipality.clear()
+        self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
+        if not department:
+            self.municipality.addItem('Todos los municipios', '')
+        for code in sorted(municipalities, key=lambda code: (*self.municipality_catalog.get(code, ('', 'Municipio sin nombre en catálogo')), code)):
+            dep_name, name = self.municipality_catalog.get(code, ('Departamento sin nombre', 'Municipio sin nombre en catálogo'))
+            label = f'{name} · {code} · {totals[code]:,} predios'.replace(',', '.')
+            if not department:
+                label = dep_name + ' / ' + label
+            self.municipality.addItem(label, code)
+        self.municipality.blockSignals(False)
+        self.update_stages()
 
     def update_stages(self, *_):
         self.stages.blockSignals(True)
@@ -233,6 +312,7 @@ class CicaIngestionDialog(QDialog):
         for stage, count in sorted(totals.items()):
             item = QTreeWidgetItem([stage or 'Sin etapa', f'{count:,}'.replace(',', '.')])
             item.setData(0, Qt.UserRole, stage)
+            item.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
             item.setCheckState(0, Qt.Checked)
             self.stages.addTopLevelItem(item)
         self.stages.blockSignals(False)
@@ -253,7 +333,7 @@ class CicaIngestionDialog(QDialog):
         self.setEnabled(False)
         self.status.setText('Leyendo las siete tablas de sentencias.snc_cica_copy…')
         try:
-            prepared = owner.report_task(prepare_repository_cica, params, selection['municipality'], selection['stages'])
+            prepared = owner.report_task(prepare_repository_cica, params, selection['municipality'], selection['stages'], progress=self.copyReadProgress.emit)
             for reference in self.prepared.values():
                 reference.close()
             self.prepared = prepared

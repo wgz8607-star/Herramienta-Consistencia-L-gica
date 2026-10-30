@@ -118,3 +118,28 @@ class CicaGdbTests(unittest.TestCase):
         dialog.reject(); dialog.clear_prepared()
         self.assertFalse(replacement.layers['cica_terreno'].csv_path.exists())
         self.assertTrue(original.layers['cica_terreno'].csv_path.exists())
+
+    def test_windows_zip_directory_markers_and_no_recursive_binary_scan(self):
+        path = Path(self.temp.name) / 'windows.gdb.zip'
+        with zipfile.ZipFile(path, 'w') as archive:
+            archive.writestr('carpeta\\entrada.gdb\\', '')
+            for file in self.source.iterdir():
+                if file.is_file():
+                    archive.write(file, 'carpeta\\entrada.gdb\\' + file.name)
+        # Reproduce Windows builds rejecting scandir on FileGDB binary files.
+        # Finding the GDB root must not recurse through those files at all.
+        with patch.object(Path, 'rglob', side_effect=OSError(267, 'El nombre del directorio no es válido')):
+            prepared = self.prepared(path)
+        self.assertEqual(prepared.layers['cica_terreno'].row_count, 1)
+        self.assertEqual(prepared.layers['cica_terreno'].srid, 4326)
+
+    def test_windows_traversal_and_multiple_gdb_roots_are_rejected(self):
+        for name, entries in [('windows_escape.zip', ['..\\escape.gdb\\a.gdbtable']),
+                              ('many.zip', ['one.gdb/a.gdbtable', 'two.gdb/b.gdbtable'])]:
+            path = Path(self.temp.name) / name
+            with zipfile.ZipFile(path, 'w') as archive:
+                for entry in entries:
+                    archive.writestr(entry, 'test')
+            with self.assertRaises(ValueError):
+                prepare_gdb(path)
+        self.assertFalse((Path(self.temp.name) / 'escape.gdb').exists())

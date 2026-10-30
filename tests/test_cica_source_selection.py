@@ -102,9 +102,13 @@ class CicaSelectionTests(unittest.TestCase):
             for call in data.execute.call_args_list:
                 query = render(call.args[0])
                 self.assertIn(' WHERE ', query)
-                self.assertIn("'08421'", query)
-                self.assertIn("'ASIGNADO'", query)
-                self.assertIn("'TRAMITADO'", query)
+                self.assertIn("'08421%'", query)
+                self.assertNotIn('IN (SELECT', query)
+                if '"cica_predio"' in query:
+                    self.assertIn("'ASIGNADO'", query)
+                    self.assertIn("'TRAMITADO'", query)
+                else:
+                    self.assertNotIn('etapa', query)
         finally:
             for reference in prepared.values(): reference.close()
 
@@ -125,3 +129,89 @@ class CicaSelectionTests(unittest.TestCase):
             dialog.validate_inputs()
         warning.assert_called_once()
         self.assertNotEqual(dialog.result(), dialog.Accepted)
+
+    def test_department_limits_available_municipalities_and_keeps_divipola(self):
+        from qgis.core import QgsApplication
+        from qgis.PyQt.QtWidgets import QWidget
+        from qgis_control_calidad.ingestion import CicaIngestionDialog
+        class Owner(QWidget):
+            def repository_connection_params(self): return {'dbname': 'sentencias'}
+            def report_task(self, function, params):
+                return [('08421', 'ASIGNADO', 3), ('08421', 'TRAMITADO', 2), ('13006', 'ASIGNADO', 7)]
+        app = QgsApplication.instance() or QgsApplication([], False)
+        owner = Owner(); self.addCleanup(owner.close)
+        dialog = CicaIngestionDialog(owner); self.addCleanup(dialog.close)
+        dialog.load_source_options()
+        self.assertGreaterEqual(dialog.municipality.findData(''), 0)
+        self.assertIn('ATLÁNTICO', dialog.department.itemText(dialog.department.findData('08')))
+        dialog.department.setCurrentIndex(dialog.department.findData('08'))
+        self.assertEqual(dialog.municipality.findData('13006'), -1)
+        self.assertIn('LURUACO', dialog.municipality.itemText(dialog.municipality.findData('08421')))
+        dialog.municipality.setCurrentIndex(dialog.municipality.findData('08421'))
+        self.assertEqual(dialog.selected_source_filter()['municipality'], '08421')
+        self.assertIn('5 predios', dialog.stage_summary.text())
+        dialog.department.setCurrentIndex(dialog.department.findData('13'))
+        self.assertEqual(dialog.municipality.findData('08421'), -1)
+        self.assertIn('ACHÍ', dialog.municipality.itemText(dialog.municipality.findData('13006')))
+        self.assertEqual(dialog.stages.topLevelItemCount(), 0)
+
+    def test_related_tables_use_selected_predios_without_repeating_stage_query(self):
+        import csv
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        from qgis_control_calidad.cica_data import TABLES, prepare_repository_cica
+        connection = MagicMock(); control = MagicMock()
+        control.__enter__.return_value = control
+        control.fetchall.side_effect = [[(table,) for table in TABLES.values()]] + [[('numero_predial',), ('etapa',)] for _ in TABLES]
+        cursors = []
+        def cursor_factory(**kwargs):
+            if not kwargs: return control
+            data = MagicMock(); data.__enter__.return_value = data
+            data.description = [SimpleNamespace(name='numero_predial'), SimpleNamespace(name='etapa')]
+            rows = [('0842101000001', 'ASIGNADO')]
+            if kwargs['name'] != 'snapshot_cica_predio':
+                rows += [('0842101000002', 'TRAMITADO')]
+            data.fetchmany.side_effect = [rows, []]
+            cursors.append((kwargs['name'], data))
+            return data
+        connection.cursor.side_effect = cursor_factory
+        progress = []
+        with patch('psycopg2.connect', return_value=connection):
+            prepared = prepare_repository_cica({}, '08421', ('ASIGNADO',), progress=progress.append)
+        try:
+            self.assertEqual(cursors[0][0], 'snapshot_cica_predio')
+            self.assertEqual(len(progress), 7)
+            for ref in prepared.values():
+                self.assertEqual(ref.row_count, 1)
+                with ref.csv_path.open() as stream:
+                    self.assertEqual(next(csv.reader(stream))[0], '0842101000001')
+            queries = [render(cursor.execute.call_args.args[0]) for name, cursor in cursors]
+            self.assertEqual(sum('COALESCE(etapa' in query for query in queries), 1)
+            self.assertFalse(any('SELECT btrim' in query for query in queries))
+        finally:
+            for ref in prepared.values(): ref.close()
+
+    def test_timeout_identifies_failed_table_and_discards_partial_copy(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        from qgis_control_calidad.cica_data import TABLES, prepare_repository_cica
+        class Timeout(Exception):
+            pgcode = '57014'
+        connection = MagicMock(); control = MagicMock(); data = MagicMock()
+        control.__enter__.return_value = control; data.__enter__.return_value = data
+        control.fetchall.side_effect = [[(table,) for table in TABLES.values()]] + [[('numero_predial',), ('etapa',)] for _ in TABLES]
+        data.description = [SimpleNamespace(name='numero_predial'), SimpleNamespace(name='etapa')]
+        data.fetchmany.side_effect = [[('0842101000001', 'ASIGNADO')], [], Timeout('timeout')]
+        connection.cursor.side_effect = lambda **kwargs: data if kwargs else control
+        closed = []
+        from qgis_control_calidad.reference_data import PreparedReference
+        original_close = PreparedReference.close
+        def record_close(reference):
+            closed.append(reference.csv_path)
+            original_close(reference)
+        with patch('psycopg2.connect', return_value=connection), patch.object(PreparedReference, 'close', record_close):
+            with self.assertRaisesRegex(ValueError, 'cica_contacto.*tiempo permitido'):
+                prepare_repository_cica({}, '08421', ('ASIGNADO',))
+        self.assertEqual(len(closed), 1)
+        self.assertFalse(closed[0].exists())
+        connection.close.assert_called_once()

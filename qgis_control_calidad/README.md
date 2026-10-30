@@ -504,3 +504,7 @@ Selección de fuente CICA desde CSV/GDB o copia temporal de las siete tablas de 
 ### Versión 2.12.0
 
 Copia base CICA muestra fecha y hora desde `snc_cica_crudo._control.fecha_marca` y oculta los campos CSV. Incluye consulta de municipios por DIVIPOLA y selección múltiple de etapas, con opción de todos los municipios. Las copias se leen filtradas y se valida la GDB sobre los mismos predios. Las referencias se restringen al municipio, manteniendo las condiciones originales de las reglas. Cambiar la selección exige volver a leer la copia. Los parámetros seleccionados forman parte de la confirmación y de la identidad de revisión.
+
+### Versión 2.12.1
+
+Ventana de fuente CICA reorganizada en bloques, con selección Departamento → Municipio usando el catálogo DIVIPOLA y conteo de etapas marcadas. La copia consulta primero los predios seleccionados y reutiliza su NPN al preparar las tablas relacionadas, evitando repetir la subconsulta de etapas en el servidor. Muestra progreso por tabla y registros; identifica la tabla si se agota el tiempo y descarta la copia incompleta. La extracción de ZIP de GDB reconoce separadores de Windows y obtiene la carpeta de la lista del ZIP sin recorrer archivos binarios internos. La prueba con el ZIP del usuario y el rendimiento real del servidor siguen pendientes.

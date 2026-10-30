@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import stat
 import tempfile
@@ -43,20 +43,38 @@ def extract_gdb(source, directory):
         raise ValueError('Seleccione una carpeta .gdb o un ZIP que contenga una geodatabase.')
     destination = Path(directory).resolve()
     with zipfile.ZipFile(source) as archive:
+        entries = []
+        roots = set()
         for entry in archive.infolist():
-            path = (destination / entry.filename.replace('\\', '/')).resolve()
-            if not path.is_relative_to(destination) or stat.S_ISLNK(entry.external_attr >> 16):
+            # ZIPs created on Windows can use backslashes, including directory
+            # markers which ZipInfo.is_dir() does not recognise.
+            name = entry.filename.replace('\\', '/')
+            relative = PurePosixPath(name)
+            if (relative.is_absolute() or '..' in relative.parts or
+                    any(':' in part for part in relative.parts) or
+                    stat.S_ISLNK(entry.external_attr >> 16)):
                 raise ValueError('El ZIP contiene una ruta no admitida.')
-            if entry.is_dir():
+            is_directory = name.endswith('/') or stat.S_ISDIR(entry.external_attr >> 16)
+            path = destination.joinpath(*relative.parts).resolve()
+            if not path.is_relative_to(destination):
+                raise ValueError('El ZIP contiene una ruta no admitida.')
+            entries.append((entry, path, is_directory))
+            # Discover GDB roots from the archive manifest instead of walking
+            # inside FileGDB binary files (WinError 267 on some Windows builds).
+            directory_parts = relative.parts if is_directory else relative.parts[:-1]
+            for index, part in enumerate(directory_parts):
+                if part.lower().endswith('.gdb'):
+                    roots.add(relative.parts[:index + 1])
+        if len(roots) != 1:
+            raise ValueError('El ZIP debe contener exactamente una carpeta .gdb.')
+        for entry, path, is_directory in entries:
+            if is_directory:
                 path.mkdir(parents=True, exist_ok=True)
             else:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(entry) as input_file, path.open('wb') as output:
                     shutil.copyfileobj(input_file, output)
-    candidates = sorted(p for p in destination.rglob('*') if p.is_dir() and p.suffix.lower() == '.gdb')
-    if len(candidates) != 1:
-        raise ValueError('El ZIP debe contener exactamente una carpeta .gdb.')
-    return candidates[0]
+    return destination.joinpath(*next(iter(roots)))
 
 
 def spatial_srid(layer):
@@ -170,6 +188,10 @@ def prepare_gdb(filename):
             raise ValueError('La geodatabase no contiene capas o tablas legibles.')
         return PreparedGdb(Path(filename).name, layers, digest.hexdigest(), directory)
     except Exception:
+        # Close GDAL handles before deleting temporary files on Windows.
+        feature = None
+        layer = None
+        dataset = None
         directory.cleanup()
         raise
     finally:

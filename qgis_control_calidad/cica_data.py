@@ -132,12 +132,13 @@ def resolve_csv_tables(query, schema, references, spatial_tables=()):
     return ''.join(pieces)
 
 
-def prepare_repository_cica(params, municipality="", stages=()):
+def prepare_repository_cica(params, municipality="", stages=(), progress=None):
     """Read all seven CICA tables in one consistent, read-only snapshot."""
     from contextlib import closing
     import psycopg2
     selection = cica_selection(municipality, stages)
     prepared = {}
+    selected_predios = set()
     try:
         with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
             connection.set_session(readonly=True, isolation_level='REPEATABLE READ')
@@ -149,12 +150,16 @@ def prepare_repository_cica(params, municipality="", stages=()):
                 missing = set(TABLES.values()) - available
                 if missing:
                     raise ValueError('Faltan tablas o permisos de lectura en sentencias.snc_cica_copy: ' + ', '.join(sorted(missing)))
-                for table in TABLES.values():
+                tables = ['cica_predio'] + [table for table in TABLES.values() if table != 'cica_predio']
+                for table_index, table in enumerate(tables, 1):
+                    if progress:
+                        progress(f'Leyendo {table} ({table_index}/7)…')
                     directory = tempfile.TemporaryDirectory(prefix='qgis_cica_repository_')
                     try:
                         path = Path(directory.name) / 'data.csv'
                         digest = hashlib.sha256()
                         count = 0
+                        scanned = 0
                         with connection.cursor(name='snapshot_' + table) as cursor:
                             query = sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier('snc_cica_copy'), sql.Identifier(table))
                             if municipality or stages:
@@ -164,17 +169,38 @@ def prepare_repository_cica(params, municipality="", stages=()):
                                 column = next((name for name in ('numero_predial', 'numero_predial_nacional') if name in columns), None)
                                 if not column:
                                     raise ValueError(table + ': no contiene NPN para aplicar el municipio y las etapas. No se leerá sin filtro.')
-                                query += sql.SQL(' WHERE {}').format(cica_member_predicate(column, selection, 'snc_cica_copy'))
+                                conditions = []
+                                if table != 'cica_predio' and not selected_predios:
+                                    conditions.append(sql.SQL('FALSE'))
+                                if municipality:
+                                    conditions.append(sql.SQL('btrim({}::text) LIKE {}').format(sql.Identifier(column), sql.Literal(municipality + '%')))
+                                if table == 'cica_predio' and stages:
+                                    if 'etapa' not in columns:
+                                        raise ValueError('cica_predio: no contiene el campo etapa para filtrar.')
+                                    conditions.append(sql.SQL("COALESCE(etapa::text, '') IN ({})").format(sql.SQL(', ').join(sql.Literal(stage) for stage in selection['stages'])))
+                                if conditions:
+                                    query += sql.SQL(' WHERE {}').format(sql.SQL(' AND ').join(conditions))
                             cursor.execute(query)
                             rows = cursor.fetchmany(1000)
                             columns = tuple(column_name(item.name, index) for index, item in enumerate(cursor.description, 1))
                             if len(set(columns)) != len(columns):
                                 raise ValueError(table + ': columnas duplicadas después de normalizarlas.')
+                            npn_index = next((columns.index(name) for name in ('numero_predial', 'numero_predial_nacional') if name in columns), None)
                             digest.update(json.dumps(columns).encode())
                             with path.open('w', encoding='utf-8', newline='') as stream:
                                 writer = csv.writer(stream, quoting=csv.QUOTE_ALL)
                                 while rows:
                                     for row in rows:
+                                        scanned += 1
+                                        if progress and scanned % 5000 == 0:
+                                            progress(f'{table} ({table_index}/7): {scanned:,} registros leídos · {count:,} incluidos'.replace(',', '.'))
+                                        key = str(row[npn_index]).strip() if npn_index is not None and row[npn_index] is not None else None
+                                        if municipality or stages:
+                                            if table == 'cica_predio':
+                                                if key is not None:
+                                                    selected_predios.add(key)
+                                            elif key is None or key not in selected_predios:
+                                                continue
                                         values = ['' if value is None else str(value) for value in row]
                                         writer.writerow(values)
                                         digest.update(json.dumps(values, ensure_ascii=False).encode())
@@ -182,8 +208,10 @@ def prepare_repository_cica(params, municipality="", stages=()):
                                         count += 1
                                     rows = cursor.fetchmany(1000)
                         prepared[table] = PreparedReference(table, 'sentencias.snc_cica_copy.' + table, columns, count, digest.hexdigest(), path, directory)
-                    except Exception:
+                    except Exception as error:
                         directory.cleanup()
+                        if getattr(error, 'pgcode', None) == '57014':
+                            raise ValueError(f'La lectura de {table} excedió el tiempo permitido por el servidor. No se aplicó una copia incompleta. Seleccione un municipio o solicite revisar el rendimiento de esta tabla.') from error
                         raise
         return prepared
     except Exception:

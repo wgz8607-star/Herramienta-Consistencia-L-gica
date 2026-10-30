@@ -499,4 +499,8 @@ Se elimina la hoja Estadística de revisión de los archivos de detalle. Las est
 
 ### Versión 2.11.0
 
-Selección de fuente CICA desde CSV/GDB o copia temporal de las siete tablas de `sentencias.snc_cica_copy`. Resumen de activos y cancelados. Fecha de marca desde `snc_cica_crudo.control`. Seguimiento CICA publicado en tabla; las gráficas de los bocetos siguen como propuesta visual.
+Selección de fuente CICA desde CSV/GDB o copia temporal de las siete tablas de `sentencias.snc_cica_copy`. Resumen de activos y cancelados. Fecha de marca desde `snc_cica_crudo._control`. Seguimiento CICA publicado en tabla; las gráficas de los bocetos siguen como propuesta visual.
+
+### Versión 2.12.0
+
+Copia base CICA muestra fecha y hora desde `snc_cica_crudo._control.fecha_marca` y oculta los campos CSV. Incluye consulta de municipios por DIVIPOLA y selección múltiple de etapas, con opción de todos los municipios. Las copias se leen filtradas y se valida la GDB sobre los mismos predios. Las referencias se restringen al municipio, manteniendo las condiciones originales de las reglas. Cambiar la selección exige volver a leer la copia. Los parámetros seleccionados forman parte de la confirmación y de la identidad de revisión.

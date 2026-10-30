@@ -201,7 +201,7 @@ class RuleWorker(QObject):
     finished = pyqtSignal()
     message = pyqtSignal(str)
 
-    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None, cica_references=None, cica_gdb=None, current_reference=None, repository_params=None, territorial_scope="all", territorial_prefixes=(), model="CICA"):
+    def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None, cica_references=None, cica_gdb=None, current_reference=None, repository_params=None, territorial_scope="all", territorial_prefixes=(), model="CICA", cica_selection=None):
         super().__init__()
         self.params = params
         self.schema = schema
@@ -216,6 +216,7 @@ class RuleWorker(QObject):
         self.references = dict(references or {})
         self.cica_references = dict(cica_references or {})
         self.cica_gdb = cica_gdb
+        self.cica_selection = cica_selection or {}
         self.rules = rules
         self.general_report_path = general_report_path
 
@@ -260,10 +261,10 @@ class RuleWorker(QObject):
                 for table, reference in sorted(self.cica_references.items()):
                     self.message.emit(f'Cargando {table} en tabla temporal de la sesión…')
                     install_csv(connection, reference, self.schema, self.cica_gdb.layers.get(table) if self.cica_gdb else None)
-                if self.territorial_scope != 'all' or self.territorial_prefixes:
+                if self.territorial_scope != 'all' or self.territorial_prefixes or self.cica_selection:
                     temporary_tables = set(self.cica_references) | (set(self.cica_gdb.layers) if self.cica_gdb else set())
                     self.scope_views = install_scope(connection, self.schema, temporary_tables,
-                                                     [TEMP_TABLES[kind] for kind in self.references], self.territorial_scope, self.territorial_prefixes, self.validation_model)
+                                                     [TEMP_TABLES[kind] for kind in self.references], self.territorial_scope, self.territorial_prefixes, self.validation_model, self.cica_selection)
                 if self.references or self.cica_references or self.cica_gdb or self.scope_views:
                     # Commit setup once so a failing rule cannot roll back the tables.
                     connection.commit()
@@ -349,6 +350,7 @@ class ControlCalidadDialog(QDialog):
         self.filter_reading = False
         self.temporary_references = {}
         self.cica_references = {}
+        self.cica_selection = {}
         self.cica_gdb = None
         self.pending_format = None
         self.completed_format = None
@@ -1093,7 +1095,7 @@ class ControlCalidadDialog(QDialog):
                 try:
                     if not repository_params:
                         raise ValueError('Falta acceso a la base sentencias.')
-                    data['cica_stages'] = self.report_task(read_cica_stages, repository_params)
+                    data['cica_stages'] = self.report_task(read_cica_stages, repository_params, self.cica_selection.get('municipality', ''))
                 except Exception as error:
                     data['cica_stages_error'] = str(error)
             self.filter_statistics = data
@@ -1111,6 +1113,7 @@ class ControlCalidadDialog(QDialog):
         try:
             if dialog.exec() == QDialog.Accepted:
                 self.clear_territorial_prefixes()
+                self.cica_selection = dialog.selected_source_filter() if dialog.source_mode.currentIndex() == 1 else {}
                 if dialog.replace_references:
                     for reference in self.cica_references.values():
                         reference.close()
@@ -1436,6 +1439,9 @@ class ControlCalidadDialog(QDialog):
             ('Manzanas / veredas (NPN 1–17)', ', '.join(self.scope_prefixes) or 'Todas las del alcance seleccionado'),
         ]
         if self.model.currentText() == 'CICA':
+            if self.cica_selection:
+                rows.append(('Municipio CICA (DIVIPOLA)', self.cica_selection.get('municipality') or 'Todos'))
+                rows.append(('Etapas CICA', ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ())) or 'Todas'))
             if self.cica_gdb:
                 rows.append(('Geodatabase CICA', self.cica_gdb.filename))
             if self.cica_references:
@@ -1517,6 +1523,10 @@ class ControlCalidadDialog(QDialog):
         if current_reference and repository_params is None:
             return
         if current_reference:
+            cica_municipality = self.cica_selection.get('municipality') if self.model.currentText() == 'CICA' else None
+            if cica_municipality and current_reference['divipola'] != cica_municipality:
+                QMessageBox.warning(self, 'Municipio diferente', 'El municipio de R1 y R2 Vigente no coincide con el DIVIPOLA seleccionado en Copia base CICA.')
+                return
             schema_codes = set(re.findall(r'(?<!\d)(\d{5})(?!\d)', schema))
             if len(schema_codes) == 1 and current_reference['divipola'] not in schema_codes:
                 QMessageBox.warning(self, 'Municipio diferente', 'El DIVIPOLA seleccionado para R1 y R2 Vigente no coincide con el código del esquema a validar.')
@@ -1568,6 +1578,8 @@ class ControlCalidadDialog(QDialog):
         cica_gdb = self.cica_gdb if self.model.currentText() == 'CICA' else None
         if cica_gdb:
             self.review_context['cica_gdb'] = cica_gdb.fingerprint
+        if self.model.currentText() == 'CICA' and self.cica_selection:
+            self.review_context['cica_selection'] = self.cica_selection
         if cica:
             self.review_context['cica_csv'] = {table: reference.fingerprint for table, reference in sorted(cica.items())}
         self.table.setRowCount(0)
@@ -1585,7 +1597,7 @@ class ControlCalidadDialog(QDialog):
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
         temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
-        self.worker = RuleWorker(params, schema, "", "", rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb, current_reference=current_reference, repository_params=repository_params, territorial_scope=scope, territorial_prefixes=self.scope_prefixes, model=self.model.currentText())
+        self.worker = RuleWorker(params, schema, "", "", rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb, current_reference=current_reference, repository_params=repository_params, territorial_scope=scope, territorial_prefixes=self.scope_prefixes, model=self.model.currentText(), cica_selection=self.cica_selection if self.model.currentText() == 'CICA' else None)
         self.worker.reference_context.connect(self.review_context.update)
         self.worker.message.connect(self.status.setText)
         self.reference_mode.setEnabled(False)

@@ -194,16 +194,19 @@ CICA_STAGE_FIELDS = ('divipola', 'zona', 'total_predios', 'total_reconocido',
                      'cancelados', 'fecha_actualizacion', 'codigos_npn_existentes')
 
 
-def read_cica_stages(params):
+def read_cica_stages(params, municipality=""):
     """Read the published monitoring view without altering its aggregates."""
     with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
         connection.set_session(readonly=True)
         with connection, connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout = '60s'")
-            cursor.execute("""SELECT divipola, zona, total_predios, total_reconocido,
+            query = """SELECT divipola, zona, total_predios, total_reconocido,
                 total_control_calidad, con_areas_geo, cargados_snc, cancelados,
                 fecha_actualizacion, codigos_npn_existentes
                 FROM snc_cica_copy.vw_seguimiento_predios_2026
+                {municipality_filter}
                 ORDER BY divipola, CASE zona WHEN 'Urbano' THEN 1
-                WHEN 'Centro poblado' THEN 2 WHEN 'Rural' THEN 3 ELSE 4 END""")
+                WHEN 'Centro poblado' THEN 2 WHEN 'Rural' THEN 3 ELSE 4 END"""
+            query = query.replace('{municipality_filter}', "WHERE lpad(divipola::text, 5, '0') = %s" if municipality else '')
+            cursor.execute(query, (municipality,) if municipality else ())
             return cursor.fetchall()

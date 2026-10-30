@@ -132,10 +132,11 @@ def resolve_csv_tables(query, schema, references, spatial_tables=()):
     return ''.join(pieces)
 
 
-def prepare_repository_cica(params):
+def prepare_repository_cica(params, municipality="", stages=()):
     """Read all seven CICA tables in one consistent, read-only snapshot."""
     from contextlib import closing
     import psycopg2
+    selection = cica_selection(municipality, stages)
     prepared = {}
     try:
         with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
@@ -155,7 +156,16 @@ def prepare_repository_cica(params):
                         digest = hashlib.sha256()
                         count = 0
                         with connection.cursor(name='snapshot_' + table) as cursor:
-                            cursor.execute(sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier('snc_cica_copy'), sql.Identifier(table)))
+                            query = sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier('snc_cica_copy'), sql.Identifier(table))
+                            if municipality or stages:
+                                with connection.cursor() as fields_cursor:
+                                    fields_cursor.execute('SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name=%s', ('snc_cica_copy', table))
+                                    columns = {row[0] for row in fields_cursor.fetchall()}
+                                column = next((name for name in ('numero_predial', 'numero_predial_nacional') if name in columns), None)
+                                if not column:
+                                    raise ValueError(table + ': no contiene NPN para aplicar el municipio y las etapas. No se leerá sin filtro.')
+                                query += sql.SQL(' WHERE {}').format(cica_member_predicate(column, selection, 'snc_cica_copy'))
+                            cursor.execute(query)
                             rows = cursor.fetchmany(1000)
                             columns = tuple(column_name(item.name, index) for index, item in enumerate(cursor.description, 1))
                             if len(set(columns)) != len(columns):
@@ -204,13 +214,46 @@ def read_repository_cica_date(params):
         connection.set_session(readonly=True)
         with connection, connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout = '15s'")
-            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position", ('snc_cica_crudo', 'control'))
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position", ('snc_cica_crudo', '_control'))
             columns = [row[0] for row in cursor.fetchall()]
             candidates = [name for name in columns if re.sub(r'[^a-z0-9]', '', name.lower()) == 'fechamarca']
             if len(candidates) != 1:
-                raise ValueError('No se encontró un campo único fecha_marca en snc_cica_crudo.control, o no tiene permisos de lectura.')
+                raise ValueError('No se encontró un campo único fecha_marca en snc_cica_crudo._control, o no tiene permisos de lectura.')
             cursor.execute(sql.SQL('SELECT {} FROM {}.{} WHERE {} IS NOT NULL ORDER BY {} DESC LIMIT 1').format(
-                sql.Identifier(candidates[0]), sql.Identifier('snc_cica_crudo'), sql.Identifier('control'),
+                sql.Identifier(candidates[0]), sql.Identifier('snc_cica_crudo'), sql.Identifier('_control'),
                 sql.Identifier(candidates[0]), sql.Identifier(candidates[0])))
             row = cursor.fetchone()
             return row[0] if row else None
+
+
+def cica_selection(municipality='', stages=()):
+    if municipality and not re.fullmatch(r'[0-9]{5}', municipality):
+        raise ValueError('El DIVIPOLA debe contener cinco dígitos.')
+    if any(not isinstance(stage, str) for stage in stages):
+        raise ValueError('Las etapas no son válidas.')
+    return {'municipality': municipality, 'stages': tuple(sorted(set(stages)))}
+
+
+def cica_member_predicate(column, selection, namespace):
+    """Membership in selected predios; stage restrictions apply through predio."""
+    conditions = []
+    if selection['municipality']:
+        conditions.append(sql.SQL('substring(btrim(numero_predial::text), 1, 5) = {}').format(sql.Literal(selection['municipality'])))
+    if selection['stages']:
+        conditions.append(sql.SQL("COALESCE(etapa::text, '') IN ({})").format(sql.SQL(', ').join(sql.Literal(stage) for stage in selection['stages'])))
+    where = sql.SQL(' AND ').join(conditions) if conditions else sql.SQL('TRUE')
+    return sql.SQL('btrim({}::text) IN (SELECT btrim(numero_predial::text) FROM {}.cica_predio WHERE {})').format(
+        sql.Identifier(column), sql.Identifier(namespace), where)
+
+
+def read_repository_cica_options(params):
+    from contextlib import closing
+    import psycopg2
+    with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '60s'")
+            cursor.execute("""SELECT substring(btrim(numero_predial::text), 1, 5),
+                COALESCE(etapa::text, ''), count(*) FROM snc_cica_copy.cica_predio
+                GROUP BY 1, 2 ORDER BY 1, 2""")
+            return cursor.fetchall()

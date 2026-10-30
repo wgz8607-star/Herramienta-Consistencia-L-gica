@@ -131,9 +131,10 @@ class RepositoryCicaDateTests(unittest.TestCase):
         with patch('psycopg2.connect', return_value=connection):
             self.assertEqual(read_repository_cica_date({}), stamp)
         connection.set_session.assert_called_once_with(readonly=True)
+        self.assertEqual(cursor.execute.call_args_list[1].args[1], ('snc_cica_crudo', '_control'))
         from test_temporary_references import render
         query = render(cursor.execute.call_args[0][0])
-        self.assertIn('"snc_cica_crudo"."control"', query)
+        self.assertIn('"snc_cica_crudo"."_control"', query)
         self.assertIn('ORDER BY "fecha_marca" DESC LIMIT 1', query)
         connection.close.assert_called_once()
 
@@ -155,3 +156,39 @@ class RepositoryCicaDateTests(unittest.TestCase):
         cursor.fetchone.return_value = None
         with patch('psycopg2.connect', return_value=connection):
             self.assertIsNone(read_repository_cica_date({}))
+
+
+class CopySourcePresentationTests(unittest.TestCase):
+    def test_copy_hides_csv_rows_and_keeps_gdb_available(self):
+        from qgis.core import QgsApplication
+        from qgis_control_calidad.ingestion import CicaIngestionDialog
+        app = QgsApplication.instance() or QgsApplication([], False)
+        dialog = CicaIngestionDialog()
+        self.assertEqual(dialog.source_mode.itemText(1), 'Copia base CICA')
+        dialog.source_mode.setCurrentIndex(1)
+        for label, row in dialog.csv_rows:
+            self.assertTrue(label.isHidden())
+            self.assertTrue(row.isHidden())
+        self.assertFalse(dialog.gdb.isHidden())
+        dialog.source_mode.setCurrentIndex(0)
+        for label, row in dialog.csv_rows:
+            self.assertFalse(label.isHidden())
+            self.assertFalse(row.isHidden())
+        dialog.close()
+
+    def test_copy_label_shows_date_and_time(self):
+        from datetime import datetime
+        from qgis.core import QgsApplication
+        from qgis.PyQt.QtWidgets import QWidget
+        from qgis_control_calidad.ingestion import CicaIngestionDialog
+        class Owner(QWidget):
+            def repository_connection_params(self):
+                return {'dbname': 'sentencias'}
+            def report_task(self, function, params):
+                return datetime(2026, 10, 30, 8, 15, 2)
+        app = QgsApplication.instance() or QgsApplication([], False)
+        owner = Owner()
+        dialog = CicaIngestionDialog(owner)
+        dialog.source_mode.setCurrentIndex(1)
+        self.assertEqual(dialog.repository_date.text(), 'Copia base CICA — 30/10/2026 · 08:15:02')
+        dialog.close();owner.close()

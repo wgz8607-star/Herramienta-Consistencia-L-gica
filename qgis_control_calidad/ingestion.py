@@ -1,9 +1,10 @@
 """Prepare independent CICA CSV snapshots for temporary validation tables."""
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QDialog, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
-from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date
+from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date, read_repository_cica_options, cica_selection
 from .cica_gdb import prepare_gdb
 
 
@@ -19,24 +20,51 @@ class CicaIngestionDialog(QDialog):
         self.existing = dict(references or {})
         self.files = {}
         self.summary_cache = {}
+        self.repository_options = []
+        self.loaded_selection = None
         layout = QVBoxLayout(self)
         note = QLabel('Seleccione los CSV individualmente y la geodatabase (.gdb o .zip). Los archivos se usarán temporalmente durante la validación, sin modificar los originales. Puede reemplazar un archivo sin volver a seleccionar los demás.')
         note.setWordWrap(True)
         layout.addWidget(note)
         self.source_mode = QComboBox()
-        self.source_mode.addItems(['Archivos CSV del usuario', 'sentencias.snc_cica_copy'])
+        self.source_mode.addItems(['Archivos CSV del usuario', 'Copia base CICA'])
         layout.addWidget(self.source_mode)
         self.repository_date = QLabel()
         self.repository_date.setWordWrap(True)
         self.repository_date.setStyleSheet('QLabel { background: #EAF2FA; color: #0066B3; padding: 8px; border-radius: 5px; }')
         self.repository_date.hide()
         layout.addWidget(self.repository_date)
-        self.read_repository = QPushButton('Leer tablas de sentencias.snc_cica_copy')
+        self.copy_filters = QWidget()
+        filter_layout = QVBoxLayout(self.copy_filters)
+        filter_layout.setContentsMargins(0, 0, 0, 0)
+        self.load_options_button = QPushButton('Consultar municipios y etapas')
+        self.load_options_button.clicked.connect(self.load_source_options)
+        filter_layout.addWidget(self.load_options_button)
+        self.municipality = QComboBox()
+        self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
+        filter_layout.addWidget(self.municipality)
+        self.stages = QTreeWidget()
+        self.stages.setHeaderLabels(['Etapas a validar', 'Predios'])
+        self.stages.setRootIsDecorated(False)
+        self.stages.setMinimumHeight(115)
+        filter_layout.addWidget(self.stages)
+        stage_buttons = QHBoxLayout()
+        select_stages = QPushButton('Seleccionar todas'); clear_stages = QPushButton('Deseleccionar todas')
+        select_stages.clicked.connect(lambda: self.check_stages(True))
+        clear_stages.clicked.connect(lambda: self.check_stages(False))
+        stage_buttons.addWidget(select_stages); stage_buttons.addWidget(clear_stages)
+        filter_layout.addLayout(stage_buttons)
+        self.municipality.currentIndexChanged.connect(self.update_stages)
+        self.stages.itemChanged.connect(self.source_filter_changed)
+        self.copy_filters.hide()
+        layout.addWidget(self.copy_filters)
+        self.read_repository = QPushButton('Leer copia base CICA')
         self.read_repository.clicked.connect(self.choose_repository)
         self.read_repository.setVisible(False)
         layout.addWidget(self.read_repository)
         self.source_mode.currentIndexChanged.connect(self.change_source_mode)
         self.csv_buttons = []
+        self.csv_rows = []
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
         content = QWidget(); form = QFormLayout(content)
         for label, table in CSV_INPUTS.items():
@@ -47,8 +75,13 @@ class CicaIngestionDialog(QDialog):
             button = QPushButton('Cargar CSV…')
             self.csv_buttons.append(button)
             button.clicked.connect(lambda _=False, key=label: self.choose_csv(key))
-            row = QHBoxLayout(); row.addWidget(field, 1); row.addWidget(button)
-            form.addRow(label, row); self.files[label] = field
+            row_widget = QWidget()
+            row = QHBoxLayout(row_widget); row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(field, 1); row.addWidget(button)
+            row_label = QLabel(label)
+            form.addRow(row_label, row_widget)
+            self.csv_rows.append((row_label, row_widget))
+            self.files[label] = field
         self.gdb = QLineEdit(); self.gdb.setReadOnly(True)
         if self.existing_gdb:
             self.gdb.setText(f'{self.existing_gdb.filename} · {len(self.existing_gdb.layers)} capas/tablas')
@@ -96,7 +129,7 @@ class CicaIngestionDialog(QDialog):
                 text = f"Predios activos: {number(counts['active'])} · Predios cancelados: {number(counts['cancelled'])}"
                 if counts['other']:
                     text += f" · Otros estados o sin estado: {number(counts['other'])}"
-            self.predio_summary.setText(source + '\n' + text + '\nTotales generales, sin filtros. Conteo de registros de cica_predio.')
+            self.predio_summary.setText(source + '\n' + text + ('\nTotales de la copia leída con el municipio y etapas seleccionados.' if repository else '\nTotales generales, sin filtros.') + ' Conteo de registros de cica_predio.')
         except Exception as error:
             self.predio_summary.setText('Estadística general no disponible: ' + str(error))
         finally:
@@ -111,38 +144,108 @@ class CicaIngestionDialog(QDialog):
             ref = self.existing.get(table)
             self.files[label].setText(f'{ref.filename} · {ref.row_count} registros' if ref else '')
         self.read_repository.setVisible(index == 1)
+        self.copy_filters.setVisible(index == 1)
         self.repository_date.setVisible(index == 1)
-        if index == 1:
-            self.refresh_repository_date()
+        for label, row in self.csv_rows:
+            label.setVisible(index == 0)
+            row.setVisible(index == 0)
         for button in self.csv_buttons:
             button.setEnabled(index == 0)
+        if index == 1:
+            self.refresh_repository_date()
         self.update_predio_summary()
 
     def refresh_repository_date(self, params=None):
         self.repository_date.setText('Consultando fecha de marca de la copia espejo…')
         owner = self.parent()
         if owner is None or not hasattr(owner, 'repository_connection_params'):
-            self.repository_date.setText('Fecha de marca: no disponible. Requiere conexión a sentencias.')
+            self.repository_date.setText('Copia base CICA — Fecha y hora no disponibles. Requiere conexión a sentencias.')
             return
         params = params or owner.repository_connection_params()
         if not params:
-            self.repository_date.setText('Fecha de marca: no disponible. Falta acceso a sentencias.')
+            self.repository_date.setText('Copia base CICA — Fecha y hora no disponibles. Falta acceso a sentencias.')
             return
         self.setEnabled(False)
         try:
             value = owner.report_task(read_repository_cica_date, params)
             if value is None:
-                message = 'Fecha de marca: sin fecha registrada.'
+                message = 'Copia base CICA — Fecha y hora sin registrar.'
             else:
                 date = value.strftime('%d/%m/%Y · %H:%M:%S %Z').strip() if hasattr(value, 'hour') else value.strftime('%d/%m/%Y') if hasattr(value, 'strftime') else str(value)
-                message = 'Última fecha de marca de la copia espejo: ' + date
-            self.repository_date.setText(message + '\nOrigen: sentencias.snc_cica_crudo.control · fecha_marca')
+                message = 'Copia base CICA — ' + date
+            self.repository_date.setText(message)
+            self.repository_date.setToolTip('Origen: sentencias.snc_cica_crudo._control')
         except Exception as error:
-            self.repository_date.setText('Fecha de marca no disponible: ' + str(error))
+            self.repository_date.setText('Copia base CICA — Fecha y hora no disponibles: ' + str(error))
         finally:
             self.setEnabled(True)
 
+    def source_filter_changed(self, *_):
+        if self.loaded_selection is not None and self.selected_source_filter() != self.loaded_selection:
+            self.status.setText('Cambió el municipio o las etapas. Pulse «Leer copia base CICA» para actualizar los datos.')
+            self.predio_summary.setText('Resumen pendiente de actualizar con los nuevos filtros.')
+
+    def selected_source_filter(self):
+        return cica_selection(self.municipality.currentData() or '',
+            [self.stages.topLevelItem(i).data(0, Qt.UserRole) for i in range(self.stages.topLevelItemCount())
+             if self.stages.topLevelItem(i).checkState(0) == Qt.Checked])
+
+    def check_stages(self, checked):
+        for i in range(self.stages.topLevelItemCount()):
+            self.stages.topLevelItem(i).setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+
+    def load_source_options(self):
+        owner = self.parent()
+        if owner is None:
+            return
+        params = owner.repository_connection_params()
+        if not params:
+            return
+        self.setEnabled(False)
+        try:
+            options = owner.report_task(read_repository_cica_options, params)
+            self.repository_options = options
+            self.municipality.blockSignals(True)
+            self.municipality.clear()
+            self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
+            self.municipality.addItem('Todos los municipios', '')
+            municipalities = sorted({code for code, stage, count in options if code and len(code) == 5 and code.isdigit()})
+            for code in municipalities:
+                count = sum(count for municipality, stage, count in options if municipality == code)
+                self.municipality.addItem(f'{code} · {count:,} predios'.replace(',', '.'), code)
+            self.municipality.blockSignals(False)
+            self.update_stages()
+            self.status.setText('Seleccione un municipio o Todos y marque las etapas a validar. Después pulse «Leer copia base CICA».')
+        except Exception as error:
+            QMessageBox.warning(self, 'No se pudieron consultar municipios y etapas', str(error))
+        finally:
+            self.setEnabled(True)
+
+    def update_stages(self, *_):
+        self.stages.blockSignals(True)
+        self.stages.clear()
+        municipality = self.municipality.currentData()
+        totals = {}
+        if municipality is not None:
+            for code, stage, count in self.repository_options:
+                if not municipality or code == municipality:
+                    totals[stage] = totals.get(stage, 0) + count
+        for stage, count in sorted(totals.items()):
+            item = QTreeWidgetItem([stage or 'Sin etapa', f'{count:,}'.replace(',', '.')])
+            item.setData(0, Qt.UserRole, stage)
+            item.setCheckState(0, Qt.Checked)
+            self.stages.addTopLevelItem(item)
+        self.stages.blockSignals(False)
+        self.source_filter_changed()
+
     def choose_repository(self):
+        if self.municipality.currentData() is None:
+            QMessageBox.warning(self, 'Seleccione municipio', 'Consulte los municipios y etapas y seleccione un DIVIPOLA o Todos los municipios.')
+            return
+        selection = self.selected_source_filter()
+        if not selection['stages']:
+            QMessageBox.warning(self, 'Seleccione etapas', 'Marque al menos una etapa para validar.')
+            return
         owner = self.parent()
         params = owner.repository_connection_params()
         if not params:
@@ -150,11 +253,12 @@ class CicaIngestionDialog(QDialog):
         self.setEnabled(False)
         self.status.setText('Leyendo las siete tablas de sentencias.snc_cica_copy…')
         try:
-            prepared = owner.report_task(prepare_repository_cica, params)
+            prepared = owner.report_task(prepare_repository_cica, params, selection['municipality'], selection['stages'])
             for reference in self.prepared.values():
                 reference.close()
             self.prepared = prepared
             self.replace_references = True
+            self.loaded_selection = selection
             for label, table in CSV_INPUTS.items():
                 ref = prepared[table]
                 self.files[label].setText(f'{ref.filename} · {ref.row_count} registros')
@@ -213,7 +317,7 @@ class CicaIngestionDialog(QDialog):
         self.status.setText('Geodatabase preparada. Pulse «Usar fuente de datos» para aplicarla. Si una tabla también tiene CSV seleccionado, se utiliza el CSV.')
 
     def validate_inputs(self):
-        if self.source_mode.currentIndex() == 1 and not self.replace_references:
+        if self.source_mode.currentIndex() == 1 and (not self.replace_references or self.loaded_selection != self.selected_source_filter()):
             QMessageBox.warning(self, 'Fuente pendiente', 'Pulse «Leer tablas» antes de usar esta fuente.')
             return
         if not (self.prepared or self.existing or self.prepared_gdb or self.existing_gdb):

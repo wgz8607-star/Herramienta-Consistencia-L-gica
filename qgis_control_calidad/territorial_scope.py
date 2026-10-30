@@ -46,11 +46,12 @@ def normalize_prefixes(prefixes):
     return values
 
 
-def install_scope(connection, schema, temporary_tables, references, scope, prefixes=(), model="CICA"):
+def install_scope(connection, schema, temporary_tables, references, scope, prefixes=(), model="CICA", cica_filter=None):
     if scope not in SCOPES:
         raise ValueError('Seleccione el alcance de validación de CICA.')
     prefixes = normalize_prefixes(prefixes)
-    if scope == 'all' and not prefixes:
+    cica_filter = cica_filter or {}
+    if scope == 'all' and not prefixes and not cica_filter:
         return {}
     sources = set()
     with connection.cursor() as cursor:
@@ -72,8 +73,17 @@ def install_scope(connection, schema, temporary_tables, references, scope, prefi
                 continue
             predio_found |= table == predio
             view = f'validation_scope_{index}'
+            condition = predicate(column, scope, prefixes)
+            if cica_filter:
+                from .cica_data import cica_member_predicate
+                if table in references:
+                    if cica_filter.get('municipality'):
+                        condition = sql.SQL('({}) AND substring(btrim({}::text), 1, 5) = {}').format(condition, sql.Identifier(column), sql.Literal(cica_filter['municipality']))
+                else:
+                    predio_namespace = 'pg_temp' if predio in temporary_tables else schema
+                    condition = sql.SQL('({}) AND ({})').format(condition, cica_member_predicate(column, cica_filter, predio_namespace))
             cursor.execute(sql.SQL('CREATE TEMP VIEW {} AS SELECT * FROM {} WHERE {}').format(
-                sql.Identifier(view), sql.Identifier(namespace, table), predicate(column, scope, prefixes)))
+                sql.Identifier(view), sql.Identifier(namespace, table), condition))
             mapping[(namespace, table)] = view
         if not predio_found:
             raise ValueError(f'No se encontró {predio} con NPN para aplicar el filtro territorial.')

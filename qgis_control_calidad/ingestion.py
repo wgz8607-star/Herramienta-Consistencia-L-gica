@@ -394,25 +394,9 @@ class CicaIngestionDialog(QDialog):
                     prepared = owner.report_task(prepare_gdb, path, crs_overrides=overrides) if owner is not None and hasattr(owner, 'report_task') else prepare_gdb(path, crs_overrides=overrides)
                     break
                 except UnidentifiedGdbCrs as unresolved:
-                    from qgis.core import QgsCoordinateReferenceSystem
-                    from qgis.gui import QgsProjectionSelectionDialog
-                    self.setEnabled(True)
-                    picker = QgsProjectionSelectionDialog(self)
-                    picker.setWindowTitle('Sistema de referencia · ' + unresolved.layer_name)
-                    picker.setMessage('Capa: ' + unresolved.layer_name + '\nReferencia del archivo: ' + str(unresolved.reference_name) + '\nSeleccione el sistema de referencia real de esta capa. Se asignará a la copia temporal sin reproyectar las coordenadas. El archivo original no se modifica.')
-                    picker.setCrs(QgsCoordinateReferenceSystem())
-                    if picker.exec_() != QDialog.Accepted:
-                        self.status.setText('Cargue de GDB cancelado: falta definir el sistema de referencia de ' + unresolved.layer_name)
-                        return
-                    crs = picker.crs()
-                    if not crs.isValid() or not crs.authid().startswith('EPSG:'):
-                        QMessageBox.warning(self, 'Sistema de referencia pendiente', 'Seleccione un sistema con código EPSG para la capa.')
-                        continue
-                    code = int(crs.authid().split(':')[1])
-                    overrides[unresolved.layer_name] = code
+                    overrides[unresolved.layer_name] = 9377
                     if unresolved.wkt:
-                        overrides[('wkt', unresolved.wkt)] = code
-                    self.setEnabled(False)
+                        overrides[('wkt', unresolved.wkt)] = 9377
         except Exception as error:
             QMessageBox.warning(self, 'No se cargó la geodatabase', str(error))
             return

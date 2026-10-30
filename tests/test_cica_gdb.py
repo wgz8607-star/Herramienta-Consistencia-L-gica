@@ -209,18 +209,17 @@ class CicaGdbTests(unittest.TestCase):
         self.assertEqual(spatial_srid(layer), 9377)
         reference.IsSame.assert_called_once_with(candidate)
 
-    def test_cancel_crs_selection_preserves_previous_gdb(self):
+    def test_unidentified_crs_assigns_9377_without_dialog(self):
         from qgis_control_calidad.cica_gdb import UnidentifiedGdbCrs
         prepared = self.prepared()
-        dialog = CicaIngestionDialog(geodatabase=prepared)
+        dialog = CicaIngestionDialog()
         with patch('qgis_control_calidad.ingestion.QFileDialog.getOpenFileName', return_value=('entrada.zip', '')), \
-             patch('qgis_control_calidad.ingestion.prepare_gdb', side_effect=UnidentifiedGdbCrs('U_CONSTRUCCION')), \
+             patch('qgis_control_calidad.ingestion.prepare_gdb', side_effect=[UnidentifiedGdbCrs('U_CONSTRUCCION'), prepared]) as loader, \
              patch('qgis.gui.QgsProjectionSelectionDialog') as picker:
-            picker.return_value.exec_.return_value = dialog.Rejected
             dialog.choose_gdb()
-        self.assertIsNone(dialog.prepared_gdb)
-        self.assertIs(dialog.existing_gdb, prepared)
+        picker.assert_not_called()
+        self.assertEqual(loader.call_count, 2)
+        self.assertEqual(loader.call_args.kwargs['crs_overrides']['U_CONSTRUCCION'], 9377)
+        self.assertIs(dialog.prepared_gdb, prepared)
         self.assertTrue(dialog.isEnabled())
-        self.assertIn('cancelado', dialog.status.text())
-        self.assertTrue(prepared.layers['cica_terreno'].csv_path.exists())
         dialog.close()

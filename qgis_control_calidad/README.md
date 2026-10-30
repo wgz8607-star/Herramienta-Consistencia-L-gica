@@ -522,3 +522,7 @@ Botón Interrumpir junto a Ejecutar validación: cancela únicamente la consulta
 El informe CICA usa el diseño aprobado y los criterios suministrados para reconocimiento, control de calidad, áreas positivas excluyendo cancelados y VALIDADO con estado_control DESCARGADO_AL_SNC para cargados al SNC. Incluye selección por zona/CP y consulta paginada de NPN. La GDB se oculta y excluye en CICA Cargue SNC; para validaciones del modelo, un EPSG no identificable puede seleccionarse explícitamente sin reproyectar ni modificar el original. Gestión de Excepciones sigue el orden de Resultados.
 
 Verificación automatizada y apertura del ZIP extraído completadas. El caso real de SITIONUEVO y el rendimiento del servidor siguen pendientes de comprobar en el entorno del usuario.
+
+### Versión 2.14.1
+
+Cuando una capa GDB no tiene EPSG identificable, se asigna automáticamente EPSG:9377 a la copia temporal, sin alerta ni selector. No se reproyectan coordenadas ni se modifica el archivo original.

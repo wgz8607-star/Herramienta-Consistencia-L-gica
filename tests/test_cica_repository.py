@@ -205,7 +205,8 @@ class DirectMonitoringTests(unittest.TestCase):
         cursor.fetchall.return_value = []
         with patch('psycopg2.connect', return_value=connection):
             data = read_cica_stages({}, '08421', include_source=True)
-        self.assertEqual(data, {'source': 'sentencias.snc_cica_copy.cica_predio', 'rows': []})
+        self.assertEqual(data['source'], 'sentencias.snc_cica_copy.cica_predio')
+        self.assertEqual(data['rows'], [])
         self.assertIn('FROM snc_cica_copy.cica_predio', cursor.execute.call_args.args[0])
         self.assertNotIn('vw_seguimiento', cursor.execute.call_args.args[0])
         self.assertEqual(cursor.execute.call_args.args[1], ('08421%',))
@@ -237,7 +238,7 @@ class DirectMonitoringTests(unittest.TestCase):
         with patch('psycopg2.connect', return_value=connection):
             read_cica_stages({}, '08421')
         query, args = cursor.execute.call_args.args
-        query = query.replace('::text', '').replace(' ~ ', ' REGEXP ').replace('%s', '?')
+        query = query.replace('::text', '').replace('::numeric', '').replace(' ~ ', ' REGEXP ').replace('%s', '?')
         db = sqlite3.connect(':memory:')
         self.addCleanup(db.close)
         db.create_function('btrim', 1, lambda value: value.strip() if value else value)
@@ -250,7 +251,7 @@ class DirectMonitoringTests(unittest.TestCase):
             ('0842102000002', 'ACTIVO', 'ASIGNADO'),
             ('0842100000001', 'OTRO', None),
             ('1300601000001', 'ACTIVO', 'ASIGNADO')])
-        self.assertEqual(db.execute(query, args).fetchall(), [
+        self.assertEqual([row[:8] for row in db.execute(query, args).fetchall()], [
             ('08421', 'Urbano', '01', 'TRAMITADO', 1, 1, 0, 0),
             ('08421', 'Centro poblado', '02', 'ASIGNADO', 2, 1, 1, 0),
             ('08421', 'Rural', '00', '', 1, 0, 0, 1)])

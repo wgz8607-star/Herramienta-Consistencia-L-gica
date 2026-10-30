@@ -205,17 +205,47 @@ CICA_STAGE_FIELDS = ('divipola', 'zona', 'codigo_zona', 'etapa', 'total_predios'
                      'activos', 'cancelados', 'otros_estados')
 
 
+RECOGNITION_EXCLUDED = ('SIN_ASIGNAR', 'PRE_ASIGNADO', 'ASIGNADO', 'PARA_DISPOSITIVO', 'EN_DISPOSITIVO')
+QUALITY_STAGES = ('CONTROL_CALIDAD_GENERAL', 'CONTROL_CALIDAD_GRUPO', 'DEVUELTO', 'RECHAZADO', 'VALIDADO')
+PROGRESS_METRICS = ('recognized_active', 'recognized_cancelled', 'quality_active', 'quality_cancelled',
+                    'with_areas', 'snc', 'recognized_total', 'quality_total')
+
+
+def progress_bundle(source, rows, metric_counts, areas_available, snc_available):
+    indicators = []
+    for (divipola, zone, code), counts in sorted(metric_counts.items()):
+        data = dict(zip(PROGRESS_METRICS, counts))
+        data.update(divipola=divipola, zona=zone, codigo_zona=code)
+        if not areas_available: data['with_areas'] = None
+        if not snc_available: data['snc'] = None
+        indicators.append(data)
+    return {'source': source, 'rows': rows, 'indicator_rows': indicators,
+            'areas_available': areas_available, 'snc_available': snc_available}
+
+
 def read_cica_stages(params, municipality="", include_source=False):
-    """Aggregate actual predio stages and states; no pre-existing view required."""
+    """Compute the agreed indicators directly from cica_predio in one aggregate."""
     with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
         connection.set_session(readonly=True)
         with connection, connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout = '60s'")
+            cursor.execute('SELECT column_name, data_type FROM information_schema.columns WHERE table_schema=%s AND table_name=%s', ('snc_cica_copy', 'cica_predio'))
+            fields = {row[0]: row[1] for row in cursor.fetchall()}
+            area_field = next((name for name in ('area_geo_num', 'area_geografica') if name in fields), None)
+            area_sql = 'NULL::numeric'
+            if area_field:
+                if fields[area_field] in ('smallint', 'integer', 'bigint', 'numeric', 'real', 'double precision'):
+                    area_sql = area_field + '::numeric'
+                else:
+                    area_sql = "CASE WHEN replace(btrim(" + area_field + "::text), ',', '.') ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$' THEN replace(btrim(" + area_field + "::text), ',', '.')::numeric END"
+            control_sql = 'estado_control::text' if 'estado_control' in fields else 'NULL::text'
+            recognized = "etapa_original NOT IN ('SIN_ASIGNAR','PRE_ASIGNADO','ASIGNADO','PARA_DISPOSITIVO','EN_DISPOSITIVO')"
+            quality = "etapa_original IN ('CONTROL_CALIDAD_GENERAL','CONTROL_CALIDAD_GRUPO','DEVUELTO','RECHAZADO','VALIDADO')"
             query = """WITH datos AS (
                 SELECT substring(btrim(numero_predial::text), 1, 5) AS divipola,
                        substring(btrim(numero_predial::text), 6, 2) AS codigo_zona,
-                       COALESCE(etapa::text, '') AS etapa,
-                       upper(btrim(estado::text)) AS estado
+                       COALESCE(etapa::text, '') AS etapa, etapa::text AS etapa_original,
+                       estado::text AS estado, {control_sql} AS estado_control, {area_sql} AS area_geo_num
                 FROM snc_cica_copy.cica_predio
                 {municipality_filter}
             ), zonas AS (
@@ -226,41 +256,117 @@ def read_cica_stages(params, municipality="", include_source=False):
             ) SELECT divipola, zona, codigo_zona, etapa, count(*),
                 count(*) FILTER (WHERE estado = 'ACTIVO'),
                 count(*) FILTER (WHERE estado = 'CANCELADO'),
-                count(*) FILTER (WHERE estado IS NULL OR estado NOT IN ('ACTIVO', 'CANCELADO'))
+                count(*) FILTER (WHERE estado IS NULL OR estado NOT IN ('ACTIVO', 'CANCELADO')),
+                count(*) FILTER (WHERE {recognized} AND estado = 'ACTIVO'),
+                count(*) FILTER (WHERE {recognized} AND estado = 'CANCELADO'),
+                count(*) FILTER (WHERE {quality} AND estado = 'ACTIVO'),
+                count(*) FILTER (WHERE {quality} AND estado = 'CANCELADO'),
+                count(*) FILTER (WHERE area_geo_num > 0 AND estado IS DISTINCT FROM 'CANCELADO'),
+                count(*) FILTER (WHERE etapa_original = 'VALIDADO' AND estado_control = 'DESCARGADO_AL_SNC'),
+                count(*) FILTER (WHERE {recognized}), count(*) FILTER (WHERE {quality})
             FROM zonas GROUP BY divipola, zona, codigo_zona, etapa
             ORDER BY divipola, CASE zona WHEN 'Urbano' THEN 1
                 WHEN 'Centro poblado' THEN 2 WHEN 'Rural' THEN 3 ELSE 4 END,
-                codigo_zona, etapa"""
-            query = query.replace('{municipality_filter}', 'WHERE btrim(numero_predial::text) LIKE %s' if municipality else '')
+                codigo_zona, etapa""".format(control_sql=control_sql, area_sql=area_sql, recognized=recognized, quality=quality,
+                    municipality_filter='WHERE btrim(numero_predial::text) LIKE %s' if municipality else '')
             cursor.execute(query, (municipality + '%',) if municipality else ())
-            rows = cursor.fetchall()
-            return {'source': 'sentencias.snc_cica_copy.cica_predio', 'rows': rows} if include_source else rows
+            raw_rows = cursor.fetchall()
+            rows = [tuple(row[:8]) for row in raw_rows]
+            metrics = {}
+            for row in raw_rows:
+                if len(row) < 16: continue
+                values = metrics.setdefault(tuple(row[:3]), [0] * len(PROGRESS_METRICS))
+                for index, count in enumerate(row[8:16]): values[index] += count
+            data = progress_bundle('sentencias.snc_cica_copy.cica_predio', rows, metrics, bool(area_field), 'estado_control' in fields)
+            return data if include_source else rows
 
 
 def cica_stages_from_snapshot(snapshot):
-    """Use the selected CSV/GDB for file mode instead of consulting the mirror."""
+    """Apply the same indicator definitions to the selected CSV or GDB."""
+    from decimal import Decimal, InvalidOperation
     column = next((name for name in NPN_COLUMNS if name in snapshot.columns), None)
-    if column is None:
-        raise ValueError('La base CICA no contiene una columna NPN.')
+    if column is None: raise ValueError('La base CICA no contiene una columna NPN.')
+    npn_index = snapshot.columns.index(column)
+    def index(name): return snapshot.columns.index(name) if name in snapshot.columns else None
+    stage_index, state_index, control_index = index('etapa'), index('estado'), index('estado_control')
+    area_index = next((index(name) for name in ('area_geo_num', 'area_geografica') if index(name) is not None), None)
+    if state_index is None: raise ValueError('La base CICA no contiene el campo estado para el seguimiento.')
+    groups, metrics = {}, {}
+    labels = {'urban': 'Urbano', 'center': 'Centro poblado', 'rural': 'Rural', 'unknown': 'Sin alcance'}
+    order = {'Urbano': 1, 'Centro poblado': 2, 'Rural': 3, 'Sin alcance': 4}
+    with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
+        for row in csv.reader(stream):
+            value = lambda i: row[i] if i is not None and len(row) > i else None
+            npn = (value(npn_index) or '').strip()
+            stage, state = value(stage_index), value(state_index)
+            zone = labels[sector_scope(npn)]
+            key = (npn[:5], zone, npn[5:7])
+            group = groups.setdefault((*key, stage or ''), Counter())
+            group['total'] += 1
+            group['active' if state == 'ACTIVO' else 'cancelled' if state == 'CANCELADO' else 'other'] += 1
+            recognized = stage is not None and stage not in RECOGNITION_EXCLUDED
+            quality = stage in QUALITY_STAGES
+            try:
+                area_positive = Decimal((value(area_index) or '').strip().replace(',', '.')) > 0
+            except (InvalidOperation, ValueError):
+                area_positive = False
+            flags = (recognized and state == 'ACTIVO', recognized and state == 'CANCELADO',
+                     quality and state == 'ACTIVO', quality and state == 'CANCELADO',
+                     area_positive and state != 'CANCELADO',
+                     stage == 'VALIDADO' and value(control_index) == 'DESCARGADO_AL_SNC', recognized, quality)
+            counts = metrics.setdefault(key, [0] * len(PROGRESS_METRICS))
+            for i, flag in enumerate(flags): counts[i] += int(flag)
+    rows = [(*key, group['total'], group['active'], group['cancelled'], group['other']) for key, group in groups.items()]
+    rows.sort(key=lambda row: (row[0], order[row[1]], row[2], row[3]))
+    return progress_bundle(getattr(snapshot, 'filename', 'Geodatabase CICA · cica_predio'), rows, metrics, area_index is not None, control_index is not None)
+
+
+def read_cica_predio_details(params, municipality='', zone='', cp='', offset=0):
+    """Read a bounded page of actual NPNs on demand, without a summary view."""
+    from .cica_data import cica_selection
+    cica_selection(municipality)
+    if zone not in ('', 'Urbano', 'Rural', 'Centro poblado') or offset < 0:
+        raise ValueError('Selección del detalle CICA no válida.')
+    if cp and (not re.fullmatch(r'[0-9]{2}', cp) or cp <= '01'):
+        raise ValueError('Código de centro poblado no válido.')
+    conditions, args = [], []
+    sector = 'substring(btrim(numero_predial::text), 6, 2)'
+    if municipality:
+        conditions.append('btrim(numero_predial::text) LIKE %s'); args.append(municipality + '%')
+    if zone == 'Urbano': conditions.append(sector + " = '01'")
+    if zone == 'Rural': conditions.append(sector + " = '00'")
+    if zone == 'Centro poblado':
+        conditions.append(sector + " ~ '^[0-9][0-9]$' AND " + sector + " > '01'")
+        if cp: conditions.append(sector + ' = %s'); args.append(cp)
+    query = """SELECT btrim(numero_predial::text), COALESCE(etapa::text, ''),
+        COALESCE(upper(btrim(estado::text)), ''), count(*)
+        FROM snc_cica_copy.cica_predio {where}
+        GROUP BY 1, 2, 3 ORDER BY 1, 2, 3 LIMIT 501 OFFSET %s""".format(where='WHERE ' + ' AND '.join(conditions) if conditions else '')
+    args.append(offset)
+    with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '60s'")
+            cursor.execute(query, tuple(args)); rows = cursor.fetchall()
+    return {'rows': rows[:500], 'has_more': len(rows) > 500}
+
+
+def cica_predio_details_from_snapshot(snapshot, zone='', cp='', offset=0):
+    column = next((name for name in NPN_COLUMNS if name in snapshot.columns), None)
+    if column is None: raise ValueError('La base CICA no contiene una columna NPN.')
     npn_index = snapshot.columns.index(column)
     stage_index = snapshot.columns.index('etapa') if 'etapa' in snapshot.columns else None
     state_index = snapshot.columns.index('estado') if 'estado' in snapshot.columns else None
-    if state_index is None:
-        raise ValueError('La base CICA no contiene el campo estado para el seguimiento.')
-    groups = {}
+    scopes = {'Urbano': 'urban', 'Rural': 'rural', 'Centro poblado': 'center'}
+    groups = Counter()
     with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
         for row in csv.reader(stream):
             npn = row[npn_index].strip() if len(row) > npn_index else ''
+            if zone and sector_scope(npn) != scopes.get(zone): continue
+            if zone == 'Centro poblado' and cp and npn[5:7] != cp: continue
             stage = row[stage_index] if stage_index is not None and len(row) > stage_index else ''
-            key = (npn[:5], npn[5:7], stage)
-            values = groups.setdefault(key, Counter())
-            values['total'] += 1
-            values[classify_status(row[state_index] if len(row) > state_index else None)] += 1
-    rows = []
-    labels = {'urban': 'Urbano', 'center': 'Centro poblado', 'rural': 'Rural', 'unknown': 'Sin alcance'}
-    order = {'Urbano': 1, 'Centro poblado': 2, 'Rural': 3, 'Sin alcance': 4}
-    for (code, sector, stage), counts in groups.items():
-        zone = labels[sector_scope(code + sector)]
-        rows.append((code, zone, sector, stage, counts['total'], counts['active'], counts['cancelled'], counts['other']))
-    return {'source': getattr(snapshot, 'filename', 'Geodatabase CICA · cica_predio'),
-            'rows': sorted(rows, key=lambda row: (row[0], order[row[1]], row[2], row[3]))}
+            state = row[state_index].strip().upper() if state_index is not None and len(row) > state_index else ''
+            groups[(npn, stage, state)] += 1
+    import heapq
+    keys = heapq.nsmallest(offset + 501, groups)
+    return {'rows': [(*key, groups[key]) for key in keys[offset:offset + 500]], 'has_more': len(keys) > offset + 500}

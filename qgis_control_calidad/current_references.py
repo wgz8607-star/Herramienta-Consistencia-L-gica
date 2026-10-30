@@ -1,5 +1,5 @@
 """Read municipal references from sentencias.r1_r2; never modify their source."""
-from contextlib import closing
+from contextlib import closing, contextmanager
 import csv
 from datetime import datetime
 import hashlib
@@ -72,7 +72,17 @@ def needed_references(rules, report=None):
     return {kind for kind in REQUIRED if any('{tabla_' + kind.lower() + '}' in text or '{esquema_' + kind.lower() + '}' in text for text in texts)}
 
 
-def prepare_current_references(params, selection, kinds):
+@contextmanager
+def _reference_connection(params, on_connection=None):
+    with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+        try:
+            if on_connection: on_connection(connection)
+            yield connection
+        finally:
+            if on_connection: on_connection(None)
+
+
+def prepare_current_references(params, selection, kinds, cancel_check=None, on_connection=None):
     """Snapshot required tables consistently, keeping leading zeroes as stored text."""
     if psycopg2 is None:
         raise RuntimeError('Se requiere psycopg2 para leer las referencias vigentes.')
@@ -85,10 +95,11 @@ def prepare_current_references(params, selection, kinds):
                 raise ValueError(f'{kind} no está disponible para el municipio y fecha seleccionados.')
         if not kinds:
             return prepared
-        with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+        with _reference_connection(params, on_connection) as connection:
             connection.set_session(readonly=True, isolation_level='REPEATABLE READ')
             with connection:
                 for kind in sorted(kinds):
+                    if cancel_check: cancel_check()
                     table = selection['tables'][kind]
                     directory = tempfile.TemporaryDirectory(prefix='qgis_vigente_')
                     try:
@@ -108,6 +119,7 @@ def prepare_current_references(params, selection, kinds):
                             with path.open('w', encoding='utf-8', newline='') as output:
                                 writer = csv.writer(output, quoting=csv.QUOTE_ALL)
                                 while True:
+                                    if cancel_check: cancel_check()
                                     rows = cursor.fetchmany(1000)
                                     if not rows:
                                         break

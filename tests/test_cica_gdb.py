@@ -143,3 +143,84 @@ class CicaGdbTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare_gdb(path)
         self.assertFalse((Path(self.temp.name) / 'escape.gdb').exists())
+
+    def test_snc_source_hides_gdb_and_ignores_previously_loaded_gdb(self):
+        prepared = self.prepared()
+        dialog = CicaIngestionDialog(geodatabase=prepared, allow_gdb=False)
+        self.assertTrue(dialog.gdb_card.isHidden())
+        self.assertIsNone(dialog.existing_gdb)
+        with patch('qgis_control_calidad.ingestion.QFileDialog.getOpenFileName') as picker:
+            dialog.choose_gdb()
+        picker.assert_not_called()
+        with patch('qgis_control_calidad.ingestion.QMessageBox.warning'):
+            dialog.validate_inputs()
+        self.assertNotEqual(dialog.result(), dialog.Accepted)
+        dialog.clear_prepared(); dialog.close()
+        self.assertTrue(prepared.layers['cica_terreno'].csv_path.exists())
+
+    def test_main_snc_omits_gdb_from_inputs_and_confirmation_but_preserves_it(self):
+        prepared = self.prepared()
+        widget = module.ControlCalidadDialog()
+        self.addCleanup(widget.close)
+        widget.model.setCurrentText('CICA')
+        widget.cica_gdb = prepared
+        widget.environment.blockSignals(True)
+        widget.environment.setCurrentText(module.SNC_ENVIRONMENT)
+        widget.environment.blockSignals(False)
+        self.assertIsNone(widget.active_cica_gdb())
+        rows = dict(widget.validation_confirmation_metadata({'dbname': 'sentencias'}, 'pg_temp', [], None))
+        self.assertNotIn('Geodatabase CICA', rows)
+        widget.environment.blockSignals(True)
+        widget.environment.setCurrentText('Validaciones del modelo')
+        widget.environment.blockSignals(False)
+        self.assertIs(widget.active_cica_gdb(), prepared)
+        rows = dict(widget.validation_confirmation_metadata({'dbname': 'sentencias'}, 'pg_temp', [], None))
+        self.assertIn('Geodatabase CICA', rows)
+
+    def test_missing_epsg_accepts_explicit_temporary_crs_without_changing_source(self):
+        from qgis_control_calidad.cica_gdb import UnidentifiedGdbCrs
+        before = {file.name: file.read_bytes() for file in self.source.iterdir() if file.is_file()}
+        with patch('qgis_control_calidad.cica_gdb.spatial_srid', return_value=0):
+            with self.assertRaises(UnidentifiedGdbCrs) as failure:
+                prepare_gdb(self.source)
+            self.assertEqual(failure.exception.layer_name, 'cica_terreno')
+            self.assertTrue(failure.exception.wkt)
+            prepared = prepare_gdb(self.source, crs_overrides={'cica_terreno': 4326})
+        self.addCleanup(prepared.close)
+        layer = prepared.layers['cica_terreno']
+        self.assertEqual(layer.srid, 4326)
+        with layer.csv_path.open() as stream:
+            row = next(csv.reader(stream))
+        self.assertTrue(row[layer.columns.index(layer.geometry_column)].startswith('SRID=4326;'))
+        self.assertEqual(before, {file.name: file.read_bytes() for file in self.source.iterdir() if file.is_file()})
+
+    def test_crs_equivalence_is_accepted_even_with_lower_match_confidence(self):
+        from unittest.mock import MagicMock
+        from qgis_control_calidad.cica_gdb import spatial_srid
+        layer = MagicMock(); reference = layer.GetSpatialRef.return_value
+        reference.Clone.return_value = reference
+        reference.AutoIdentifyEPSG.side_effect = RuntimeError('No authority')
+        reference.GetAuthorityName.return_value = None
+        candidate = MagicMock()
+        candidate.GetAuthorityName.return_value = 'EPSG'
+        candidate.GetAuthorityCode.return_value = '9377'
+        reference.FindMatches.return_value = [(candidate, 70)]
+        reference.IsSame.return_value = True
+        self.assertEqual(spatial_srid(layer), 9377)
+        reference.IsSame.assert_called_once_with(candidate)
+
+    def test_cancel_crs_selection_preserves_previous_gdb(self):
+        from qgis_control_calidad.cica_gdb import UnidentifiedGdbCrs
+        prepared = self.prepared()
+        dialog = CicaIngestionDialog(geodatabase=prepared)
+        with patch('qgis_control_calidad.ingestion.QFileDialog.getOpenFileName', return_value=('entrada.zip', '')), \
+             patch('qgis_control_calidad.ingestion.prepare_gdb', side_effect=UnidentifiedGdbCrs('U_CONSTRUCCION')), \
+             patch('qgis.gui.QgsProjectionSelectionDialog') as picker:
+            picker.return_value.exec_.return_value = dialog.Rejected
+            dialog.choose_gdb()
+        self.assertIsNone(dialog.prepared_gdb)
+        self.assertIs(dialog.existing_gdb, prepared)
+        self.assertTrue(dialog.isEnabled())
+        self.assertIn('cancelado', dialog.status.text())
+        self.assertTrue(prepared.layers['cica_terreno'].csv_path.exists())
+        dialog.close()

@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import shutil
 import traceback
+import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from html import escape
@@ -35,6 +37,7 @@ from .territorial_statistics import read_filter_statistics
 from .templates import validation_format, DOWNLOAD_NAMES
 from .report_identifiers import PREDIO_HEADER, is_predio_field, predio_value, rule_sheet_label, rule_sort_key, sql_report_fields
 from .reference import ReferenceDialog
+from .validation_performance import optimize_temporary_tables, set_query_limits, RULE_TIMEOUT_SECONDS
 from .reference_data import TEMP_TABLES, install_reference
 from .current_references import read_catalog, needed_references, prepare_current_references
 from .review_imports import ReviewImports
@@ -192,6 +195,10 @@ class SqlVersionDialog(QDialog):
         self.accept()
 
 
+class ValidationInterrupted(Exception):
+    pass
+
+
 class RuleWorker(QObject):
     result = pyqtSignal(object)
     general_report = pyqtSignal(object, str)
@@ -200,6 +207,7 @@ class RuleWorker(QObject):
     fatal_error = pyqtSignal(str)
     finished = pyqtSignal()
     message = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(self, params, schema, prefix, r1_table, rules, general_report_path=None, references=None, cica_references=None, cica_gdb=None, current_reference=None, repository_params=None, territorial_scope="all", territorial_prefixes=(), model="CICA", cica_selection=None):
         super().__init__()
@@ -219,6 +227,43 @@ class RuleWorker(QObject):
         self.cica_selection = cica_selection or {}
         self.rules = rules
         self.general_report_path = general_report_path
+        self.cancel_requested = threading.Event()
+        self.run_done = threading.Event()
+        self.active_connection = None
+        self.cancel_lock = threading.Lock()
+
+    def request_cancel(self):
+        # Direct call: a queued Qt slot cannot run while the SQL worker is busy.
+        with self.cancel_lock:
+            if self.cancel_requested.is_set() or self.run_done.is_set():
+                return
+            self.cancel_requested.set()
+            self.cancel_thread = threading.Thread(target=self._cancel_active_query, daemon=True)
+            self.cancel_thread.start()
+
+    def _cancel_active_query(self):
+        # Retry to cover a request arriving between SET LOCAL and the query.
+        # This connection belongs only to this worker and is never pooled/reused.
+        while not self.run_done.is_set():
+            connection = self.active_connection
+            if connection is not None:
+                try:
+                    connection.cancel()
+                except Exception:
+                    pass
+            self.run_done.wait(0.2)
+
+    def set_active_connection(self, connection):
+        self.active_connection = connection
+        if connection is not None: self.check_cancelled()
+
+    def check_cancelled(self):
+        if self.cancel_requested.is_set():
+            raise ValidationInterrupted()
+
+    def preparation_message(self, message):
+        self.check_cancelled()
+        self.message.emit(message)
 
     def resolve_sql(self, sql):
         for kind in ('R1', 'R2'):
@@ -245,22 +290,33 @@ class RuleWorker(QObject):
     def run(self):
         owned_references = {}
         try:
+            self.check_cancelled()
             if self.current_reference:
                 kinds = needed_references(self.rules, self.general_report_path)
                 self.message.emit('Leyendo R1 y R2 Vigente del municipio seleccionado…')
-                owned_references = prepare_current_references(self.repository_params, self.current_reference, kinds)
+                owned_references = prepare_current_references(self.repository_params, self.current_reference, kinds, cancel_check=self.check_cancelled, on_connection=self.set_active_connection)
                 self.references.update(owned_references)
                 self.reference_context.emit({'reference_' + kind.lower(): ref.fingerprint for kind, ref in owned_references.items()})
-            with closing(psycopg2.connect(**self.params)) as raw_connection, raw_connection as connection:
+            self.check_cancelled()
+            connection_params = dict(self.params)
+            connection_params.setdefault('connect_timeout', 8)
+            with closing(psycopg2.connect(**connection_params)) as raw_connection, raw_connection as connection:
+                self.set_active_connection(connection)
+                self.check_cancelled()
                 for kind, reference in sorted(self.references.items()):
-                    self.message.emit(f'Cargando {kind} en tabla temporal de la sesión…')
+                    self.preparation_message(f'Cargando {kind} en tabla temporal de la sesión…')
                     install_reference(connection, reference)
                 if self.cica_gdb:
-                    self.message.emit('Preparando geodatabase temporal para validar…')
+                    self.preparation_message('Preparando geodatabase temporal para validar…')
                     install_gdb(connection, self.cica_gdb, exclude=self.cica_references)
                 for table, reference in sorted(self.cica_references.items()):
-                    self.message.emit(f'Cargando {table} en tabla temporal de la sesión…')
+                    self.preparation_message(f'Cargando {table} en tabla temporal de la sesión…')
                     install_csv(connection, reference, 'snc_cica_copy' if self.schema == 'pg_temp' and self.validation_model == 'CICA' else self.schema, self.cica_gdb.layers.get(table) if self.cica_gdb else None)
+                temporary_tables = set(self.cica_references) | (set(self.cica_gdb.layers) if self.cica_gdb else set())
+                owned_tables = temporary_tables | {TEMP_TABLES[kind] for kind in self.references}
+                spatial_columns = {name: layer.geometry_column for name, layer in self.cica_gdb.layers.items() if layer.geometry_column and name not in self.cica_references} if self.cica_gdb else {}
+                optimize_temporary_tables(connection, owned_tables, spatial_columns, self.preparation_message, use_limits=self.validation_model == 'CICA')
+                self.check_cancelled()
                 if self.territorial_scope != 'all' or self.territorial_prefixes or self.cica_selection:
                     temporary_tables = set(self.cica_references) | (set(self.cica_gdb.layers) if self.cica_gdb else set())
                     self.scope_views = install_scope(connection, self.schema, temporary_tables,
@@ -269,11 +325,17 @@ class RuleWorker(QObject):
                     # Commit setup once so a failing rule cannot roll back the tables.
                     connection.commit()
                 for index, (category, rule_name, raw_sql, description) in enumerate(self.rules, 1):
+                    self.check_cancelled()
+                    self.message.emit(f'Ejecutando {category} · {rule_name} ({index} de {len(self.rules)})…')
                     try:
                         sql = self.resolve_sql(raw_sql)
                         with connection.cursor() as cursor:
+                            if self.validation_model == 'CICA':
+                                set_query_limits(cursor)
+                            self.check_cancelled()
                             cursor.execute(sql)
                             rows = cursor.fetchall() if cursor.description else []
+                            self.check_cancelled()
                             fields = [column.name for column in cursor.description] if cursor.description else []
                         unique_fields = []
                         occurrences = {}
@@ -284,6 +346,7 @@ class RuleWorker(QObject):
                                 unique_name += '_'
                             unique_fields.append(unique_name)
                         detail_rows = [dict(zip(unique_fields, row)) for row in rows]
+                        self.check_cancelled()
                         self.result.emit(RuleResult(rule_name, category, "Correcta", len(rows), rows=detail_rows, description=description,
                                                     criterion_hash=digest(sql), identity_safe=(
                                                         len(fields) == len(set(fields))
@@ -291,27 +354,50 @@ class RuleWorker(QObject):
                                                     )))
                     except Exception as error:
                         connection.rollback()
-                        detail = re.sub(r"\s+", " ", str(error)).strip()[:240]
+                        self.check_cancelled()
+                        if self.validation_model == 'CICA' and getattr(error, 'pgcode', None) == '57014' and 'timeout' in str(error).lower():
+                            detail = f'Tiempo máximo de {RULE_TIMEOUT_SECONDS} s excedido en {category} / {rule_name}. La consulta se canceló y se continúa con las demás reglas.'
+                        elif getattr(error, 'pgcode', None) == '55P03':
+                            detail = f'{category} / {rule_name}: se agotó la espera por un bloqueo de PostgreSQL.'
+                        else:
+                            detail = re.sub(r"\s+", " ", str(error)).strip()[:240]
                         self.result.emit(RuleResult(rule_name, category, "Error", "—", detail, description=description))
                     self.progress.emit(index, len(self.rules) + bool(self.general_report_path))
+                self.check_cancelled()
                 if self.general_report_path:
+                    self.message.emit('Ejecutando reporte general…')
                     try:
                         sql = self.resolve_sql(self.general_report_path)
                         with connection.cursor() as cursor:
+                            if self.validation_model == 'CICA':
+                                set_query_limits(cursor)
+                            self.check_cancelled()
                             cursor.execute(sql)
                             rows = cursor.fetchall() if cursor.description else []
+                            self.check_cancelled()
                             fields = [column.name for column in cursor.description] if cursor.description else []
                         self.general_report.emit([dict(zip(fields, row)) for row in rows], "")
                     except Exception as error:
                         connection.rollback()
+                        self.check_cancelled()
                         self.general_report.emit([], re.sub(r"\s+", " ", str(error)).strip()[:240])
                     self.progress.emit(len(self.rules) + 1, len(self.rules) + 1)
+                self.check_cancelled()
+        except ValidationInterrupted:
+            self.cancelled.emit()
         except Exception as error:
-            self.fatal_error.emit(str(error))
+            if self.cancel_requested.is_set():
+                self.cancelled.emit()
+            else:
+                self.fatal_error.emit(str(error))
         finally:
-            for reference in owned_references.values():
-                reference.close()
-            self.finished.emit()
+            self.active_connection = None
+            try:
+                for reference in owned_references.values():
+                    reference.close()
+            finally:
+                self.run_done.set()
+                self.finished.emit()
 
 
 class ControlCalidadDialog(QDialog):
@@ -342,6 +428,8 @@ class ControlCalidadDialog(QDialog):
         self.worker = None
         self.category_checks = {}
         self.controls_running = False
+        self.validation_interrupted = False
+        self.interruption_requested = False
         self.exporting = False
         self.export_created_paths = []
         self._repository_password = None
@@ -349,6 +437,11 @@ class ControlCalidadDialog(QDialog):
         self.reference_lookup_running = False
         self.filter_reading = False
         self.temporary_references = {}
+        self.execution_status_timer = QTimer(self)
+        self.execution_status_timer.setInterval(1000)
+        self.execution_status_timer.timeout.connect(self.refresh_validation_elapsed)
+        self.execution_status_text = ''
+        self.execution_status_started = None
         self.cica_references = {}
         self.cica_selection = {}
         self.cica_gdb = None
@@ -656,7 +749,14 @@ class ControlCalidadDialog(QDialog):
         self.run_button.setStyleSheet("background: #0468A3; color: white; font-weight: 700; padding: 8px 14px;")
         self.run_button.clicked.connect(self.run_rules)
         controls.addWidget(self.export_button)
-        left_panel_layout.addWidget(self.run_button)
+        execute_row = QHBoxLayout(); execute_row.setSpacing(6)
+        execute_row.addWidget(self.run_button, 1)
+        self.interrupt_button = QPushButton('Interrumpir')
+        self.interrupt_button.setEnabled(False)
+        self.interrupt_button.setStyleSheet('QPushButton { background: #BE594D; color: white; border: none; border-radius: 5px; padding: 8px 10px; font-weight: bold; } QPushButton:disabled { background: #E9DDDA; color: #8A7772; }')
+        self.interrupt_button.clicked.connect(self.interrupt_validation)
+        execute_row.addWidget(self.interrupt_button)
+        left_panel_layout.addLayout(execute_row)
         layout.addLayout(controls)
         references = QGroupBox("Referencias R1 y R2")
         references.setStyleSheet('QWidget { font-size: 12px; }')
@@ -832,6 +932,13 @@ class ControlCalidadDialog(QDialog):
             required = max(page.sizeHint().height(), page.layout().minimumSize().height(),
                            page.layout().totalHeightForWidth(max(1, page.width())))
             self.connection_stack.setFixedHeight(required + 4)
+
+    def active_cica_gdb(self):
+        return self.cica_gdb if self.model.currentText() == 'CICA' and self.environment.currentText() != SNC_ENVIRONMENT else None
+
+    def cica_predio_snapshot(self):
+        gdb = self.active_cica_gdb()
+        return self.cica_references.get('cica_predio') or (gdb.layers.get('cica_predio') if gdb else None)
 
     def update_ingestion_button(self, *_):
         supports_snc = self.model.currentText() in SNC_REPOSITORY_TABLES
@@ -1029,14 +1136,14 @@ class ControlCalidadDialog(QDialog):
             return
         has_cica = self.model.currentText() == "CICA" and (
             "cica_predio" in self.cica_references or
-            bool(self.cica_gdb and "cica_predio" in self.cica_gdb.layers))
+            bool(self.active_cica_gdb() and "cica_predio" in self.active_cica_gdb().layers))
         self.cica_progress_button.setEnabled(bool(has_cica) and not self.controls_running and not self.exporting and not self.filter_reading)
         data_ready = bool(has_cica) if self.model.currentText() == "CICA" else bool(self.schema.currentText().strip())
         current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
         r1_ready = bool(self.temporary_references.get('R1')) if self.reference_mode.currentIndex() == 0 else bool(current and current.get('tables', {}).get('R1'))
         signature = (self.model.currentText(), self.schema.currentText(), self.connection_mode.currentIndex(),
                      self.qgis_connection.currentText(), self.database.text(), self.user.text(),
-                     id(self.cica_references.get('cica_predio')), id(self.cica_gdb), self.reference_mode.currentIndex(),
+                     id(self.cica_references.get('cica_predio')), id(self.active_cica_gdb()), self.reference_mode.currentIndex(),
                      id(self.temporary_references.get('R1')), current.get('tables', {}).get('R1') if current else None)
         if signature != self.filter_source_signature:
             if self.filter_source_signature is not None:
@@ -1095,8 +1202,8 @@ class ControlCalidadDialog(QDialog):
         snapshot = None
         if self.model.currentText() == 'CICA':
             snapshot = self.cica_references.get('cica_predio')
-            if snapshot is None and self.cica_gdb:
-                snapshot = self.cica_gdb.layers.get('cica_predio')
+            if snapshot is None and self.active_cica_gdb():
+                snapshot = self.active_cica_gdb().layers.get('cica_predio')
         params = {} if snapshot else self.connection_params()
         current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
         repository_params = self.repository_connection_params() if current or self.model.currentText() == 'CICA' else None
@@ -1126,7 +1233,7 @@ class ControlCalidadDialog(QDialog):
         from .territorial_statistics import read_cica_stages, cica_stages_from_snapshot
         from .cica_data import read_repository_cica_date
         from .current_references import municipal_names
-        snapshot = self.cica_references.get('cica_predio') or (self.cica_gdb.layers.get('cica_predio') if self.cica_gdb else None)
+        snapshot = self.cica_predio_snapshot()
         if snapshot is None:
             raise ValueError('Seleccione primero la base CICA a validar.')
         self.filter_reading = True
@@ -1151,8 +1258,28 @@ class ControlCalidadDialog(QDialog):
                 codes = [selected]
             catalog = municipal_names(DIVIPOLA_FILE)
             labels = [f"{catalog[code][1]}, {catalog[code][0]} ({code})" if code in catalog else code for code in codes]
+            data['detail_loader'] = self.read_cica_progress_details
             data['municipality_label'] = '; '.join(labels[:3]) + (f' · y {len(labels) - 3} más' if len(labels) > 3 else '') if labels else 'Sin predios en la selección'
             return data
+        finally:
+            self.filter_reading = False
+            self.main_tabs.setEnabled(True)
+            self.update_run_availability()
+
+    def read_cica_progress_details(self, zone='', cp='', offset=0):
+        from .territorial_statistics import read_cica_predio_details, cica_predio_details_from_snapshot
+        snapshot = self.cica_predio_snapshot()
+        if snapshot is None:
+            raise ValueError('Seleccione primero la base CICA a validar.')
+        self.filter_reading = True
+        self.main_tabs.setEnabled(False)
+        self.update_run_availability()
+        try:
+            if self.cica_selection:
+                params = self.repository_connection_params()
+                if not params: raise ValueError('Falta acceso a la copia base CICA.')
+                return self.report_task(read_cica_predio_details, params, self.cica_selection.get('municipality', ''), zone, cp, offset)
+            return self.report_task(cica_predio_details_from_snapshot, snapshot, zone, cp, offset)
         finally:
             self.filter_reading = False
             self.main_tabs.setEnabled(True)
@@ -1161,7 +1288,7 @@ class ControlCalidadDialog(QDialog):
     def open_ingestion(self):
         if self.controls_running or self.exporting:
             return
-        dialog = CicaIngestionDialog(self, self.cica_references, self.cica_gdb)
+        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT)
         try:
             if dialog.exec() == QDialog.Accepted:
                 self.clear_territorial_prefixes()
@@ -1181,7 +1308,7 @@ class ControlCalidadDialog(QDialog):
                         self.cica_gdb.close()
                     self.cica_gdb = prepared_gdb
                 self.ingestion_button.setText('Seleccionar fuente de datos…')
-                self.ingestion_button.setToolTip(f'{len(self.cica_references)} CSV · ' + (f'{len(self.cica_gdb.layers)} capas/tablas temporales' if self.cica_gdb else 'Sin geodatabase temporal'))
+                self.ingestion_button.setToolTip(f'{len(self.cica_references)} CSV · ' + (f'{len(self.active_cica_gdb().layers)} capas/tablas temporales' if self.active_cica_gdb() else ('Sin geodatabase temporal' if self.environment.currentText() != SNC_ENVIRONMENT else 'Cargue SNC')))
         finally:
             dialog.clear_prepared()
             self.update_advanced_filter_availability()
@@ -1430,7 +1557,7 @@ class ControlCalidadDialog(QDialog):
             from .cica_data import snapshot_municipalities
             from .current_references import municipal_names
             try:
-                snapshot = self.cica_references.get('cica_predio') or (self.cica_gdb.layers.get('cica_predio') if self.cica_gdb else None)
+                snapshot = self.cica_predio_snapshot()
                 if snapshot is None:
                     return 'Ubicación territorial no disponible: seleccione la base CICA a validar.'
                 codes = self.report_task(snapshot_municipalities, snapshot)
@@ -1518,8 +1645,8 @@ class ControlCalidadDialog(QDialog):
             if self.cica_selection:
                 rows.append(('Municipio CICA (DIVIPOLA)', self.cica_selection.get('municipality') or 'Todos'))
                 rows.append(('Etapas CICA', ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ())) or 'Todas'))
-            if self.cica_gdb:
-                rows.append(('Geodatabase CICA', self.cica_gdb.filename))
+            if self.active_cica_gdb():
+                rows.append(('Geodatabase CICA', self.active_cica_gdb().filename))
             if self.cica_references:
                 rows.append(('Archivos CICA', '\n'.join(table + ': ' + reference.filename for table, reference in sorted(self.cica_references.items()))))
         counts = defaultdict(int)
@@ -1582,7 +1709,7 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.critical(self, "Reglas no encontradas", "No hay reglas SQL en la selección actual.")
             return
         schema = self.validation_schema()
-        if self.model.currentText() == 'CICA' and not ('cica_predio' in self.cica_references or (self.cica_gdb and 'cica_predio' in self.cica_gdb.layers)):
+        if self.model.currentText() == 'CICA' and not ('cica_predio' in self.cica_references or (self.active_cica_gdb() and 'cica_predio' in self.active_cica_gdb().layers)):
             QMessageBox.warning(self, 'Seleccione la fuente CICA', 'Pulse «Seleccionar fuente de datos» y cargue o lea la base CICA antes de ejecutar.')
             return
         if not schema:
@@ -1654,7 +1781,7 @@ class ControlCalidadDialog(QDialog):
         if self.reference_mode.currentIndex() == 0 and 'R2' in self.temporary_references:
             self.review_context['reference_r2'] = self.temporary_references['R2'].fingerprint
         cica = dict(self.cica_references) if self.model.currentText() == 'CICA' else {}
-        cica_gdb = self.cica_gdb if self.model.currentText() == 'CICA' else None
+        cica_gdb = self.active_cica_gdb()
         if cica_gdb:
             self.review_context['cica_gdb'] = cica_gdb.fingerprint
         if self.model.currentText() == 'CICA' and self.cica_selection:
@@ -1670,7 +1797,13 @@ class ControlCalidadDialog(QDialog):
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.status.setText(f"Ejecutando {len(rules)} reglas y reporte general…")
+        self.validation_interrupted = False
+        self.interruption_requested = False
+        self.interrupt_button.setText('Interrumpir')
+        self.interrupt_button.setEnabled(True)
         self.controls_running = True
+        self.update_worker_message('Preparando las tablas temporales de validación…')
+        self.execution_status_timer.start()
         self.ingestion_button.setEnabled(False)
         self.export_button.setEnabled(False)
         self.run_button.setEnabled(False)
@@ -1678,7 +1811,7 @@ class ControlCalidadDialog(QDialog):
         temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
         self.worker = RuleWorker(params, schema, "", "", rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb, current_reference=current_reference, repository_params=repository_params, territorial_scope=scope, territorial_prefixes=self.scope_prefixes, model=self.model.currentText(), cica_selection=self.cica_selection if self.model.currentText() == 'CICA' else None)
         self.worker.reference_context.connect(self.review_context.update)
-        self.worker.message.connect(self.status.setText)
+        self.worker.message.connect(self.update_worker_message)
         self.reference_mode.setEnabled(False)
         self.load_reference_button.setEnabled(False)
         self.refresh_references.setEnabled(False)
@@ -1689,6 +1822,7 @@ class ControlCalidadDialog(QDialog):
         self.worker.general_report.connect(self.add_general_report)
         self.worker.progress.connect(self.set_progress)
         self.worker.fatal_error.connect(lambda text: QMessageBox.critical(self, "No fue posible ejecutar", text))
+        self.worker.cancelled.connect(self.mark_validation_interrupted)
         self.worker.finished.connect(self.finished)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
@@ -1706,21 +1840,49 @@ class ControlCalidadDialog(QDialog):
     def set_progress(self, current, total):
         self.progress.setRange(0, total)
         self.progress.setValue(current)
-        self.status.setText(f"Ejecutando regla {current} de {total}…")
+
+    def interrupt_validation(self):
+        if not self.controls_running or self.interruption_requested:
+            return
+        self.interruption_requested = True
+        self.interrupt_button.setEnabled(False)
+        self.interrupt_button.setText('Interrumpiendo…')
+        self.update_worker_message('Interrumpiendo validación…')
+        self.worker.request_cancel()
+
+    def mark_validation_interrupted(self):
+        self.validation_interrupted = True
+        self.execution_info['Estado de ejecución'] = 'Interrumpida por el usuario'
+
+    def update_worker_message(self, message):
+        if self.interruption_requested and not message.startswith('Interrumpiendo'):
+            return
+        self.execution_status_text = message
+        self.execution_status_started = time.monotonic()
+        self.status.setText(message)
+
+    def refresh_validation_elapsed(self):
+        if self.controls_running and self.execution_status_started is not None:
+            elapsed = int(time.monotonic() - self.execution_status_started)
+            self.status.setText(self.execution_status_text + f' · {elapsed // 60:02d}:{elapsed % 60:02d} transcurridos')
 
     def finished(self):
+        self.execution_status_timer.stop()
         self.controls_running = False
+        self.interrupt_button.setEnabled(False)
+        self.interrupt_button.setText('Interrumpir')
         self.ingestion_button.setEnabled(True)
-        self.completed_format = self.pending_format if any(result.status != 'Error' for result in self.results) else None
+        self.completed_format = self.pending_format if not self.validation_interrupted and any(result.status != 'Error' for result in self.results) else None
         self.format_download.setEnabled(bool(self.completed_format))
         if self.completed_format:
             self.format_download.setText('Descargar · ' + self.completed_format[0])
         for control in (self.reference_mode, self.load_reference_button, self.refresh_references, self.municipality):
             control.setEnabled(True)
         self.update_run_availability()
-        self.progress.setValue(self.progress.maximum())
-        self.status.setText("Ejecución terminada.")
-        self.last_execution_label.setText('Última ejecución: ' + self.execution_info.get('Fecha de ejecución', 'sesión actual'))
+        if not self.validation_interrupted:
+            self.progress.setValue(self.progress.maximum())
+        self.status.setText('Validación interrumpida por el usuario. Resultados parciales.' if self.validation_interrupted else 'Ejecución terminada.')
+        self.last_execution_label.setText(('Ejecución interrumpida: ' if self.validation_interrupted else 'Última ejecución: ') + self.execution_info.get('Fecha de ejecución', 'sesión actual'))
         self.review_imports = ReviewImports(self.review_cases)
         self.detail_import_errors = {}
         self.review_import_snapshot = self.review_imports.snapshot()
@@ -1759,6 +1921,7 @@ class ControlCalidadDialog(QDialog):
         for field, widget in self.kpi_values.items():
             widget.setText(f"{totals[field]:,}".replace(',', '.'))
         self.summary.setText(
+            ("VALIDACIÓN INTERRUMPIDA · Resultados parciales. " if self.validation_interrupted else "") +
             f"{totals['rules']} reglas · {totals['operator']} excepciones operador · "
             f"{totals['pending']} errores · {totals['errors']} errores técnicos. "
             "Errores = Hallazgos − Excepciones DT."
@@ -1766,8 +1929,8 @@ class ControlCalidadDialog(QDialog):
 
     def refresh_detail_review_controls(self):
         self.refresh_review_statistics()
-        components = sorted({case.component for case in self.review_cases})
-        if set(components) != set(self.detail_review_rows):
+        components = [component for component, _ in self.ordered_result_groups(dict.fromkeys(case.component for case in self.review_cases))]
+        if components != list(self.detail_review_rows):
             self.detail_review_table.setRowCount(0)
             self.detail_review_rows = {}
             self.detail_filename_labels = {}
@@ -1845,7 +2008,7 @@ class ControlCalidadDialog(QDialog):
                 load.setText('Recargar')
         self.review_file_alert.setVisible(bool(self.review_file_issues))
         self.review_file_alert.setText('⚠ Recargue los detalles modificados o no disponibles antes de generar el reporte: ' + ', '.join(self.review_file_issues) if self.review_file_issues else '')
-        self.export_button.setEnabled(bool(self.results) and not self.controls_running and not self.exporting and not self.review_file_issues)
+        self.export_button.setEnabled(bool(self.results) and not self.validation_interrupted and not self.controls_running and not self.exporting and not self.review_file_issues)
         return self.review_file_issues
 
     def missing_references(self, rules):
@@ -1933,6 +2096,7 @@ class ControlCalidadDialog(QDialog):
             QMessageBox.information(self, "Proceso en curso", "Espere a que termine el proceso actual antes de cerrar.")
             event.ignore()
         elif self.commit_review_editor() and self.confirm_review_changes():
+            self.execution_status_timer.stop()
             self.release_references()
             for reference in self.cica_references.values():
                 reference.close()
@@ -2011,6 +2175,8 @@ class ControlCalidadDialog(QDialog):
         self.report_task(workbook.save, path)
 
     def build_detail_reports(self):
+        if self.validation_interrupted:
+            raise ValueError('La validación fue interrumpida. Ejecute una validación completa antes de generar reportes.')
         if self.controls_running:
             return
         if self.check_review_files(force=True):

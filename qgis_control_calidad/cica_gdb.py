@@ -77,18 +77,46 @@ def extract_gdb(source, directory):
     return destination.joinpath(*next(iter(roots)))
 
 
+class UnidentifiedGdbCrs(ValueError):
+    def __init__(self, layer_name, reference=None):
+        self.layer_name = layer_name
+        self.wkt = reference.ExportToWkt() if reference is not None else ''
+        self.reference_name = reference.GetName() if reference is not None else 'Sin sistema de referencia definido'
+        super().__init__(f'{layer_name}: no se identificó un EPSG para {self.reference_name}. Seleccione el sistema de referencia real de la capa.')
+
+
 def spatial_srid(layer):
     reference = layer.GetSpatialRef()
     if reference is None:
         return 0
     reference = reference.Clone()
-    reference.AutoIdentifyEPSG()
+    try:
+        reference.AutoIdentifyEPSG()
+    except RuntimeError:
+        pass
     code = reference.GetAuthorityCode(None)
     if reference.GetAuthorityName(None) == 'EPSG' and code:
         return int(code)
-    for candidate, confidence in reference.FindMatches():
-        if confidence == 100 and candidate.GetAuthorityName(None) == 'EPSG':
+    try:
+        matches = reference.FindMatches()
+    except RuntimeError:
+        matches = []
+    for candidate, confidence in matches:
+        if candidate.GetAuthorityName(None) == 'EPSG' and (confidence == 100 or reference.IsSame(candidate)):
             return int(candidate.GetAuthorityCode(None))
+    # QGIS can resolve ESRI WKT dialects not recognised by GDAL. Verify the
+    # complete CRS equivalence rather than accepting a name-only match.
+    try:
+        from qgis.core import QgsCoordinateReferenceSystem
+        from osgeo import osr
+        crs = QgsCoordinateReferenceSystem.fromWkt(reference.ExportToWkt())
+        if crs.authid().startswith('EPSG:'):
+            code = int(crs.authid().split(':')[1])
+            candidate = osr.SpatialReference()
+            if candidate.ImportFromEPSG(code) == 0 and reference.IsSame(candidate):
+                return code
+    except (ImportError, RuntimeError, ValueError):
+        pass
     return 0
 
 
@@ -131,7 +159,7 @@ def write_values(stream, values):
     stream.write(','.join('' if value is None else '"' + str(value).replace('"', '""') + '"' for value in values) + '\n')
 
 
-def prepare_gdb(filename):
+def prepare_gdb(filename, crs_overrides=None):
     from osgeo import gdal, ogr
     directory = tempfile.TemporaryDirectory(prefix='qgis_cica_gdb_')
     dataset = None
@@ -165,7 +193,16 @@ def prepare_gdb(filename):
                 columns.append(geometry_column); types.append('geometry')
                 srid = spatial_srid(layer)
                 if not srid:
-                    raise ValueError(f'{source_name}: no se identificó un código EPSG para el sistema de referencia. Defínalo en el archivo antes de cargarlo.')
+                    reference = layer.GetSpatialRef()
+                    unresolved = UnidentifiedGdbCrs(source_name, reference)
+                    overrides = crs_overrides or {}
+                    srid = overrides.get(source_name) or (overrides.get(('wkt', unresolved.wkt)) if unresolved.wkt else None)
+                    if not srid:
+                        raise unresolved
+                    from osgeo import osr
+                    selected_crs = osr.SpatialReference()
+                    if not isinstance(srid, int) or isinstance(srid, bool) or srid <= 0 or selected_crs.ImportFromEPSG(srid) != 0 or not (selected_crs.IsProjected() or selected_crs.IsGeographic()):
+                        raise ValueError(f'{source_name}: seleccione un EPSG horizontal válido.')
             if len(columns) != len(set(columns)):
                 raise ValueError(f'{source_name}: hay campos duplicados después de normalizar los nombres.')
             path = Path(directory.name) / f'layer_{layer_index}.csv'

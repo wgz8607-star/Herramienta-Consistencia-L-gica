@@ -130,3 +130,39 @@ class CicaProgressTests(unittest.TestCase):
                 widget.read_cica_progress_data()
         self.assertFalse(widget.filter_reading)
         self.assertTrue(widget.main_tabs.isEnabled())
+
+    def test_dashboard_uses_only_configured_indicators_and_keeps_snc_at_bottom(self):
+        dialog = self.make_dialog()
+        rows = [('08421', 'Centro poblado', '02', 'CONTROL_CALIDAD_GENERAL', 3, 2, 1, 0),
+                ('08421', 'Centro poblado', '02', 'TRAMITADO', 2, 1, 1, 0),
+                ('08421', 'Centro poblado', '02', 'ASIGNADO', 1, 1, 0, 0)]
+        dialog.set_data({'rows': rows})
+        self.assertEqual(set(dialog.values), {'total', 'active', 'cancelled'})
+        self.assertEqual(dialog.metric_widgets['recognition'][0][1].text(), '—')
+        self.assertEqual(dialog.no_areas.text(), '—')
+        self.assertEqual(dialog.snc.text(), '—')
+        dialog.set_data({'rows': rows, 'recognition_stages': ('CONTROL_CALIDAD_GENERAL', 'TRAMITADO'),
+                         'snc_stages': ('TRAMITADO',), 'with_areas_rows': [('08421', 'Centro poblado', '02', 3)]})
+        dialog.set_zone('Centro poblado')
+        self.assertIn('3 | 75.0 %', dialog.metric_widgets['recognition'][0][1].text())
+        self.assertIn('2 | 50.0 %', dialog.metric_widgets['quality'][0][1].text())
+        self.assertEqual(dialog.no_areas.text(), '1')
+        self.assertEqual(dialog.snc.text(), '2')
+        dialog.select_cp('02');dialog.select_cp('02')
+        self.assertTrue(dialog.cp_buttons['02'].isChecked())
+
+    def test_npn_detail_from_file_preserves_zeroes_and_selected_cp(self):
+        import tempfile
+        from pathlib import Path
+        from qgis_control_calidad.cica_data import prepare_csv
+        from qgis_control_calidad.territorial_statistics import cica_predio_details_from_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'predio.csv'
+            source.write_text('numero_predial;estado;etapa\n0842102000001;ACTIVO;ASIGNADO\n0842102000001;ACTIVO;ASIGNADO\n0842103000001;CANCELADO;TRAMITADO\n')
+            ref = prepare_csv('cica_predio', source)
+            try:
+                detail = cica_predio_details_from_snapshot(ref, 'Centro poblado', '02')
+                self.assertEqual(detail['rows'], [('0842102000001', 'ASIGNADO', 'ACTIVO', 2)])
+                self.assertFalse(detail['has_more'])
+            finally:
+                ref.close()

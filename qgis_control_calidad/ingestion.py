@@ -5,7 +5,7 @@ from qgis.PyQt.QtWidgets import (
     QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date, read_repository_cica_options, cica_selection
-from .cica_gdb import prepare_gdb
+from .cica_gdb import prepare_gdb, UnidentifiedGdbCrs
 from .current_references import municipal_names
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from pathlib import Path
 class CicaIngestionDialog(QDialog):
     copyReadProgress = pyqtSignal(str)
 
-    def __init__(self, parent=None, references=None, geodatabase=None):
+    def __init__(self, parent=None, references=None, geodatabase=None, allow_gdb=True):
         super().__init__(parent)
         self.setWindowTitle('Seleccionar fuente de datos CICA')
         self.replace_references = False
@@ -44,7 +44,8 @@ class CicaIngestionDialog(QDialog):
         """)
         self.prepared = {}
         self.prepared_gdb = None
-        self.existing_gdb = geodatabase
+        self.allow_gdb = allow_gdb
+        self.existing_gdb = geodatabase if allow_gdb else None
         self.existing = dict(references or {})
         self.files = {}
         self.summary_cache = {}
@@ -131,7 +132,8 @@ class CicaIngestionDialog(QDialog):
             row_label = QLabel(label); form.addRow(row_label, row_widget)
             self.csv_rows.append((row_label, row_widget)); self.files[label] = field
 
-        _, gdb_layout = card('3. Geodatabase CICA')
+        self.gdb_card, gdb_layout = card('3. Geodatabase CICA')
+        self.gdb_card.setVisible(allow_gdb)
         gdb_note = QLabel('Seleccione una carpeta .gdb o un ZIP que contenga una geodatabase.')
         gdb_note.setWordWrap(True); gdb_note.setProperty('muted', True); gdb_layout.addWidget(gdb_note)
         self.gdb = QLineEdit(); self.gdb.setReadOnly(True); self.gdb.setPlaceholderText('Sin geodatabase seleccionada')
@@ -155,6 +157,8 @@ class CicaIngestionDialog(QDialog):
         apply = QPushButton('Usar fuente de datos'); apply.setProperty('primary', True); apply.clicked.connect(self.validate_inputs)
         buttons.addWidget(cancel); buttons.addWidget(apply); outer.addLayout(buttons)
         self.source_mode.currentIndexChanged.connect(self.change_source_mode)
+        if not allow_gdb:
+            self.source_note.setText('Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.')
         self.update_predio_summary()
 
     def update_predio_summary(self):
@@ -201,7 +205,7 @@ class CicaIngestionDialog(QDialog):
         self.read_repository.setVisible(index == 1)
         self.copy_filters.setVisible(index == 1)
         self.csv_card.setVisible(index == 0)
-        self.source_note.setText('Lea la copia del municipio y las etapas que seleccione. Puede agregar una GDB para validar.' if index == 1 else 'Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.')
+        self.source_note.setText(('Lea la copia del municipio y las etapas que seleccione.' + (' Puede agregar una GDB para validar.' if self.allow_gdb else '')) if index == 1 else ('Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.' if self.allow_gdb else 'Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.'))
         self.repository_date.setVisible(index == 1)
         for label, row in self.csv_rows:
             label.setVisible(index == 0)
@@ -373,6 +377,8 @@ class CicaIngestionDialog(QDialog):
         self.status.setText(f'{key}: preparado temporalmente. Use «Usar fuente de datos» para aplicarlo.')
 
     def choose_gdb(self):
+        if not self.allow_gdb:
+            return
         path, _ = QFileDialog.getOpenFileName(self, 'Seleccione una geodatabase comprimida', '', 'Geodatabase comprimida (*.zip)')
         if not path:
             path = QFileDialog.getExistingDirectory(self, 'Seleccione la carpeta .gdb')
@@ -382,7 +388,31 @@ class CicaIngestionDialog(QDialog):
         self.status.setText('Preparando geodatabase temporal…')
         try:
             owner = self.parent()
-            prepared = owner.report_task(prepare_gdb, path) if owner is not None and hasattr(owner, 'report_task') else prepare_gdb(path)
+            overrides = {}
+            while True:
+                try:
+                    prepared = owner.report_task(prepare_gdb, path, crs_overrides=overrides) if owner is not None and hasattr(owner, 'report_task') else prepare_gdb(path, crs_overrides=overrides)
+                    break
+                except UnidentifiedGdbCrs as unresolved:
+                    from qgis.core import QgsCoordinateReferenceSystem
+                    from qgis.gui import QgsProjectionSelectionDialog
+                    self.setEnabled(True)
+                    picker = QgsProjectionSelectionDialog(self)
+                    picker.setWindowTitle('Sistema de referencia · ' + unresolved.layer_name)
+                    picker.setMessage('Capa: ' + unresolved.layer_name + '\nReferencia del archivo: ' + str(unresolved.reference_name) + '\nSeleccione el sistema de referencia real de esta capa. Se asignará a la copia temporal sin reproyectar las coordenadas. El archivo original no se modifica.')
+                    picker.setCrs(QgsCoordinateReferenceSystem())
+                    if picker.exec_() != QDialog.Accepted:
+                        self.status.setText('Cargue de GDB cancelado: falta definir el sistema de referencia de ' + unresolved.layer_name)
+                        return
+                    crs = picker.crs()
+                    if not crs.isValid() or not crs.authid().startswith('EPSG:'):
+                        QMessageBox.warning(self, 'Sistema de referencia pendiente', 'Seleccione un sistema con código EPSG para la capa.')
+                        continue
+                    code = int(crs.authid().split(':')[1])
+                    overrides[unresolved.layer_name] = code
+                    if unresolved.wkt:
+                        overrides[('wkt', unresolved.wkt)] = code
+                    self.setEnabled(False)
         except Exception as error:
             QMessageBox.warning(self, 'No se cargó la geodatabase', str(error))
             return
@@ -392,7 +422,7 @@ class CicaIngestionDialog(QDialog):
             self.prepared_gdb.close()
         self.prepared_gdb = prepared
         self.gdb.setText(f'{prepared.filename} · {len(prepared.layers)} capas/tablas')
-        self.gdb.setToolTip('\n'.join(f'{layer.source_name} → {name}: {layer.row_count} registros' for name, layer in prepared.layers.items()))
+        self.gdb.setToolTip('\n'.join(f'{layer.source_name} → {name}: {layer.row_count} registros' + (f' · EPSG:{layer.srid}' if layer.srid else '') for name, layer in prepared.layers.items()))
         self.update_predio_summary()
         self.status.setText('Geodatabase preparada. Pulse «Usar fuente de datos» para aplicarla. Si una tabla también tiene CSV seleccionado, se utiliza el CSV.')
 
@@ -401,7 +431,7 @@ class CicaIngestionDialog(QDialog):
             QMessageBox.warning(self, 'Fuente pendiente', 'Pulse «Leer tablas» antes de usar esta fuente.')
             return
         if not (self.prepared or self.existing or self.prepared_gdb or self.existing_gdb):
-            QMessageBox.warning(self, 'Sin insumos', 'Seleccione al menos un CSV o una geodatabase.')
+            QMessageBox.warning(self, 'Sin insumos', 'Seleccione al menos un CSV o una geodatabase.' if self.allow_gdb else 'Seleccione al menos un CSV o lea la Copia base CICA.')
             return
         self.accept()
 

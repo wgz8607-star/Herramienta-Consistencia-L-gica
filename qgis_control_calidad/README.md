@@ -514,3 +514,11 @@ Ventana de fuente CICA reorganizada en bloques, con selección Departamento → 
 Informe de avance CICA en ventana independiente, con lectura directa de `sentencias.snc_cica_copy.cica_predio`, municipio de la fuente, totales por estado, barras de las etapas registradas, selección de zona y códigos CP (NPN 6–7), modo Cantidad/Porcentaje y detalle tabular. Los archivos CSV/GDB usan sus propios datos de predios para el informe. No se requiere la vista del ejemplo. Consultar el avance no cambia los filtros de validación ni añade consultas de seguimiento a la lectura del filtro avanzado.
 
 El panel Alcance a validar actualiza tarjetas y distribución con los predios incluidos al aplicar el filtro y conserva los totales originales para comparar. CICA oculta las opciones manuales de conexión/esquema y valida con la conexión interna sobre tablas temporales, sin depender de una selección anterior de QGIS ni usar tablas persistentes como sustituto de insumos faltantes. El Modelo Interno conserva sus opciones de conexión.
+
+### Versión 2.14.0
+
+Botón Interrumpir junto a Ejecutar validación: cancela únicamente la consulta de esta ejecución, detiene el resto de reglas y cierra sus conexiones y temporales. Los resultados se conservan en pantalla como parciales y no se exportan como validación completa. Las consultas CICA tienen límite de cinco minutos y muestran regla y tiempo transcurrido. Se preparan índices y estadísticas en las tablas temporales, sin alterar las fuentes persistentes.
+
+El informe CICA usa el diseño aprobado y los criterios suministrados para reconocimiento, control de calidad, áreas positivas excluyendo cancelados y VALIDADO con estado_control DESCARGADO_AL_SNC para cargados al SNC. Incluye selección por zona/CP y consulta paginada de NPN. La GDB se oculta y excluye en CICA Cargue SNC; para validaciones del modelo, un EPSG no identificable puede seleccionarse explícitamente sin reproyectar ni modificar el original. Gestión de Excepciones sigue el orden de Resultados.
+
+Verificación automatizada y apertura del ZIP extraído completadas. El caso real de SITIONUEVO y el rendimiento del servidor siguen pendientes de comprobar en el entorno del usuario.

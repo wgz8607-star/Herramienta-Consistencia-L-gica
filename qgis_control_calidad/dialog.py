@@ -479,7 +479,7 @@ class ControlCalidadDialog(QDialog):
         version_row.addWidget(choose_sql_version)
         form.addRow("Versión de SQL", version_row)
         self.ingestion_label = QLabel("Archivos CICA")
-        self.ingestion_button = QPushButton("Cargue archivos CICA…")
+        self.ingestion_button = QPushButton("Seleccionar fuente de datos…")
         self.ingestion_button.clicked.connect(self.open_ingestion)
         form.addRow(self.ingestion_label, self.ingestion_button)
         form.addRow("Forma de conexión", self.connection_mode)
@@ -1079,7 +1079,7 @@ class ControlCalidadDialog(QDialog):
                 snapshot = self.cica_gdb.layers.get('cica_predio')
         params = {} if snapshot else self.connection_params()
         current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
-        repository_params = self.repository_connection_params() if current else None
+        repository_params = self.repository_connection_params() if current or self.model.currentText() == 'CICA' else None
         self.filter_reading = True
         self.main_tabs.setEnabled(False)
         self.update_run_availability()
@@ -1087,6 +1087,15 @@ class ControlCalidadDialog(QDialog):
             data = self.report_task(read_filter_statistics, params, self.schema.currentText().strip(), self.model.currentText(), snapshot,
                                     self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
                                     'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
+            if self.model.currentText() == 'CICA':
+                from .territorial_statistics import read_cica_stages
+                data['cica_stages'] = []
+                try:
+                    if not repository_params:
+                        raise ValueError('Falta acceso a la base sentencias.')
+                    data['cica_stages'] = self.report_task(read_cica_stages, repository_params)
+                except Exception as error:
+                    data['cica_stages_error'] = str(error)
             self.filter_statistics = data
             self.filter_overview.set_statistics(data)
             return data
@@ -1102,6 +1111,10 @@ class ControlCalidadDialog(QDialog):
         try:
             if dialog.exec() == QDialog.Accepted:
                 self.clear_territorial_prefixes()
+                if dialog.replace_references:
+                    for reference in self.cica_references.values():
+                        reference.close()
+                    self.cica_references = {}
                 for table, reference in dialog.take_prepared().items():
                     old = self.cica_references.get(table)
                     self.cica_references[table] = reference
@@ -1112,7 +1125,7 @@ class ControlCalidadDialog(QDialog):
                     if self.cica_gdb:
                         self.cica_gdb.close()
                     self.cica_gdb = prepared_gdb
-                self.ingestion_button.setText('Cargue archivos CICA…')
+                self.ingestion_button.setText('Seleccionar fuente de datos…')
                 self.ingestion_button.setToolTip(f'{len(self.cica_references)} CSV · ' + (f'{len(self.cica_gdb.layers)} capas/tablas temporales' if self.cica_gdb else 'Sin geodatabase temporal'))
         finally:
             dialog.clear_prepared()

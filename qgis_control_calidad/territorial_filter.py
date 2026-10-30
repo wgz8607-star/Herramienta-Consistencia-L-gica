@@ -216,6 +216,18 @@ class TerritorialFilterDialog(QDialog):
         scroll.setWidget(content); outer.addWidget(scroll)
         self.overview = TerritorialOverview()
         layout.addWidget(self.overview)
+        self.cica_stage_note = QLabel()
+        self.cica_stage_note.setWordWrap(True)
+        self.cica_stage_note.hide()
+        layout.addWidget(self.cica_stage_note)
+        self.cica_stages = QTreeWidget()
+        self.cica_stages.setHeaderLabels(['DIVIPOLA', 'Zona', 'Total predios', 'Reconocidos', 'Control de calidad', 'Con áreas geográficas', 'Cargados SNC', 'Cancelados', 'Fecha de actualización', 'Códigos NPN existentes'])
+        self.cica_stages.setAlternatingRowColors(True)
+        self.cica_stages.setRootIsDecorated(False)
+        self.cica_stages.setMinimumHeight(200)
+        self.cica_stages.setStyleSheet('QHeaderView::section { background: #217346; color: white; padding: 6px; }')
+        self.cica_stages.hide()
+        layout.addWidget(self.cica_stages)
         form = QFormLayout(); self.scope = ScopeSelector(scope)
         form.addRow('Alcance', self.scope); layout.addLayout(form)
         explanation = QLabel('Combine alcances. Todos incluye registros sin alcance identificable. El mismo filtro se aplica a la base catastral a validar y a R1/R2. Los conteos de la base catastral a validar y de R1 se muestran separados.')
@@ -291,6 +303,30 @@ class TerritorialFilterDialog(QDialog):
         self.populate(prefixes, prefixes)
 
     def set_statistics(self, loaded):
+        self.cica_stages.clear()
+        has_stages = isinstance(loaded, dict) and 'cica_stages' in loaded
+        self.cica_stage_note.setVisible(has_stages)
+        self.cica_stages.setVisible(has_stages)
+        if has_stages:
+            error = loaded.get('cica_stages_error')
+            self.cica_stage_note.setText('Seguimiento CICA por etapas · sentencias.snc_cica_copy.vw_seguimiento_predios_2026\n' +
+                ('No disponible: ' + error if error else 'Resumen general publicado por municipio y zona. Estos totales no se recalculan con los filtros de validación ni representan necesariamente los CSV/GDB seleccionados.'))
+            for row in loaded.get('cica_stages', []):
+                values = []
+                for index, value in enumerate(row):
+                    if value is None:
+                        text = '—'
+                    elif 2 <= index <= 7:
+                        text = f'{value:,}'.replace(',', '.') if isinstance(value, (int, float)) else str(value)
+                    else:
+                        text = ', '.join(map(str, value)) if isinstance(value, (list, tuple)) else str(value)
+                    values.append(text)
+                item = QTreeWidgetItem(values)
+                for index, text in enumerate(values):
+                    item.setToolTip(index, text)
+                self.cica_stages.addTopLevelItem(item)
+            for index in range(9):
+                self.cica_stages.resizeColumnToContents(index)
         selected = self.selected_prefixes()
         if isinstance(loaded, dict) and 'source_statistics' in loaded:
             self.statistics = loaded.get('source_statistics')

@@ -496,3 +496,7 @@ El cuadro previo a la ejecución indica «Revise los parámetros antes de ejecut
 ## Reportes sin estadística duplicada (2.10.2)
 
 Se elimina la hoja Estadística de revisión de los archivos de detalle. Las estadísticas se mantienen en los resultados del plugin y en el resumen ejecutivo. La hoja Revisión permanece oculta para recuperar excepciones.
+
+### Versión 2.11.0
+
+Selección de fuente CICA desde CSV/GDB o copia temporal de las siete tablas de `sentencias.snc_cica_copy`. Resumen de activos y cancelados. Fecha de marca desde `snc_cica_crudo.control`. Seguimiento CICA publicado en tabla; las gráficas de los bocetos siguen como propuesta visual.

@@ -57,13 +57,13 @@ Si la conexión falla, revise los datos de acceso y su conexión de red antes de
 
 Use esta función únicamente si validará archivos CICA. Si consultará las tablas de una base CICA existente, continúe con R1/R2.
 
-1. Seleccione **CICA** y pulse **Cargue archivos CICA…**.
-2. Para CSV, pulse **Cargar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
+1. Seleccione **CICA** y pulse **Seleccionar fuente de datos…**.
+2. Elija **Archivos CSV del usuario** o **sentencias.snc_cica_copy**. Para la segunda opción, pulse **Leer tablas**: se consultan las siete tablas y se muestran sus cantidades. Al seleccionar esta fuente se muestra la última fecha de marca registrada en `snc_cica_crudo.control` (campo `fecha_marca`). Si no se puede consultar, se indica como no disponible. La lectura no modifica el esquema. Para CSV, pulse **Cargar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
 3. Si utilizará una geodatabase, pulse **Seleccionar geodatabase…** y elija una carpeta `.gdb` o un ZIP que contenga una sola geodatabase.
-4. Revise los nombres y cantidades informados.
-5. Pulse **Usar archivos temporales** para aplicar la selección.
+4. Revise los nombres y cantidades informados. El resumen general muestra los predios activos y cancelados de la fuente seleccionada, sin aplicar filtros. Los otros estados se indican aparte. Para la distribución territorial y los filtros detallados, utilice la pestaña de estadística y filtro avanzado.
+5. Pulse **Usar fuente de datos** para aplicar la selección.
 
-Puede reemplazar un archivo sin volver a seleccionar los demás. Si hay un CSV y una geodatabase para la misma tabla, se utiliza el CSV. Los archivos no seleccionados se consultan en el esquema elegido.
+Puede reemplazar un archivo sin volver a seleccionar los demás. Si una tabla está tanto en los CSV o en la copia de snc_cica_copy como en la geodatabase, se utilizan los datos tabulares seleccionados. Los archivos no seleccionados se consultan en el esquema elegido.
 
 Los originales no se modifican. Los archivos preparados están disponibles durante la sesión; al cerrar el plugin deberá cargarlos nuevamente. **Cancelar** conserva la selección anterior.
 
@@ -205,3 +205,5 @@ El formato se entrega para diligenciarlo; no se completa automáticamente. El en
 | Un Excel editado no cambia las cifras | Guárdelo y pulse Recargar en el componente correspondiente. |
 | No se puede generar el reporte | Revise los avisos, cierre archivos de salida abiertos en Excel y recargue los detalles modificados o no disponibles. |
 | La generación termina con error | Consulte Incidencias y entregue el mensaje completo al responsable de soporte. |
+
+En CICA, la ventana de estadística y filtro avanzado también muestra el **Seguimiento CICA por etapas**, consultado en `sentencias.snc_cica_copy.vw_seguimiento_predios_2026`. Incluye los totales por municipio y zona, reconocidos, control de calidad, áreas geográficas, cargados SNC, cancelados, fecha de actualización y códigos NPN existentes. Es el resumen general publicado en la vista; no se recalcula al seleccionar filtros ni equivale necesariamente a los CSV/GDB cargados. Si no hay acceso a la vista, se informa sin impedir el uso de las demás estadísticas y filtros.

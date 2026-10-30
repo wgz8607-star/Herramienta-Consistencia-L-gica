@@ -130,3 +130,87 @@ def resolve_csv_tables(query, schema, references, spatial_tables=()):
         offset = match.end()
     pieces.append(rewrite(query[offset:]))
     return ''.join(pieces)
+
+
+def prepare_repository_cica(params):
+    """Read all seven CICA tables in one consistent, read-only snapshot."""
+    from contextlib import closing
+    import psycopg2
+    prepared = {}
+    try:
+        with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+            connection.set_session(readonly=True, isolation_level='REPEATABLE READ')
+            with connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET LOCAL statement_timeout = '120s'")
+                    cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = %s", ('snc_cica_copy',))
+                    available = {row[0] for row in cursor.fetchall()}
+                missing = set(TABLES.values()) - available
+                if missing:
+                    raise ValueError('Faltan tablas o permisos de lectura en sentencias.snc_cica_copy: ' + ', '.join(sorted(missing)))
+                for table in TABLES.values():
+                    directory = tempfile.TemporaryDirectory(prefix='qgis_cica_repository_')
+                    try:
+                        path = Path(directory.name) / 'data.csv'
+                        digest = hashlib.sha256()
+                        count = 0
+                        with connection.cursor(name='snapshot_' + table) as cursor:
+                            cursor.execute(sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier('snc_cica_copy'), sql.Identifier(table)))
+                            rows = cursor.fetchmany(1000)
+                            columns = tuple(column_name(item.name, index) for index, item in enumerate(cursor.description, 1))
+                            if len(set(columns)) != len(columns):
+                                raise ValueError(table + ': columnas duplicadas después de normalizarlas.')
+                            digest.update(json.dumps(columns).encode())
+                            with path.open('w', encoding='utf-8', newline='') as stream:
+                                writer = csv.writer(stream, quoting=csv.QUOTE_ALL)
+                                while rows:
+                                    for row in rows:
+                                        values = ['' if value is None else str(value) for value in row]
+                                        writer.writerow(values)
+                                        digest.update(json.dumps(values, ensure_ascii=False).encode())
+                                        digest.update(b'\n')
+                                        count += 1
+                                    rows = cursor.fetchmany(1000)
+                        prepared[table] = PreparedReference(table, 'sentencias.snc_cica_copy.' + table, columns, count, digest.hexdigest(), path, directory)
+                    except Exception:
+                        directory.cleanup()
+                        raise
+        return prepared
+    except Exception:
+        for reference in prepared.values():
+            reference.close()
+        raise
+
+
+def predio_status_summary(snapshot):
+    """General counts for the selected CICA predio table, before filters."""
+    from collections import Counter
+    from .territorial_statistics import classify_status
+    if 'estado' not in snapshot.columns:
+        return None
+    index = snapshot.columns.index('estado')
+    counts = Counter()
+    with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
+        for row in csv.reader(stream):
+            counts[classify_status(row[index] if len(row) > index else None)] += 1
+    return {key: counts[key] for key in ('active', 'cancelled', 'other')}
+
+
+def read_repository_cica_date(params):
+    """Read the latest mirror timestamp; never infer it from the local clock."""
+    from contextlib import closing
+    import psycopg2
+    with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '15s'")
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position", ('snc_cica_crudo', 'control'))
+            columns = [row[0] for row in cursor.fetchall()]
+            candidates = [name for name in columns if re.sub(r'[^a-z0-9]', '', name.lower()) == 'fechamarca']
+            if len(candidates) != 1:
+                raise ValueError('No se encontró un campo único fecha_marca en snc_cica_crudo.control, o no tiene permisos de lectura.')
+            cursor.execute(sql.SQL('SELECT {} FROM {}.{} WHERE {} IS NOT NULL ORDER BY {} DESC LIMIT 1').format(
+                sql.Identifier(candidates[0]), sql.Identifier('snc_cica_crudo'), sql.Identifier('control'),
+                sql.Identifier(candidates[0]), sql.Identifier(candidates[0])))
+            row = cursor.fetchone()
+            return row[0] if row else None

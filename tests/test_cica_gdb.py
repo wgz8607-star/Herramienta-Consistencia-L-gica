@@ -103,7 +103,7 @@ class CicaGdbTests(unittest.TestCase):
     def test_dialog_uses_current_label_and_no_destination_schema(self):
         prepared = self.prepared()
         dialog = CicaIngestionDialog(geodatabase=prepared)
-        self.assertEqual(dialog.windowTitle(), 'Cargue archivos CICA')
+        self.assertEqual(dialog.windowTitle(), 'Seleccionar fuente de datos CICA')
         self.assertFalse(hasattr(dialog, 'schema'))
         dialog.validate_inputs()
         self.assertEqual(dialog.result(), dialog.Accepted)

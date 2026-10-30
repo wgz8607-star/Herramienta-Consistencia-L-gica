@@ -187,3 +187,23 @@ def read_filter_statistics(params, schema, model, snapshot=None, r1_snapshot=Non
     except Exception as error:
         result['r1_status'] = 'No fue posible consultar R1: ' + str(error)
     return result
+
+
+CICA_STAGE_FIELDS = ('divipola', 'zona', 'total_predios', 'total_reconocido',
+                     'total_control_calidad', 'con_areas_geo', 'cargados_snc',
+                     'cancelados', 'fecha_actualizacion', 'codigos_npn_existentes')
+
+
+def read_cica_stages(params):
+    """Read the published monitoring view without altering its aggregates."""
+    with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '60s'")
+            cursor.execute("""SELECT divipola, zona, total_predios, total_reconocido,
+                total_control_calidad, con_areas_geo, cargados_snc, cancelados,
+                fecha_actualizacion, codigos_npn_existentes
+                FROM snc_cica_copy.vw_seguimiento_predios_2026
+                ORDER BY divipola, CASE zona WHEN 'Urbano' THEN 1
+                WHEN 'Centro poblado' THEN 2 WHEN 'Rural' THEN 3 ELSE 4 END""")
+            return cursor.fetchall()

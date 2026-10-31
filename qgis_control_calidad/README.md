@@ -526,3 +526,7 @@ Verificación automatizada y apertura del ZIP extraído completadas. El caso rea
 ### Versión 2.14.1
 
 Cuando una capa GDB no tiene EPSG identificable, se asigna automáticamente EPSG:9377 a la copia temporal, sin alerta ni selector. No se reproyectan coordenadas ni se modifica el archivo original.
+
+### Versión 2.14.2
+
+La carga CSV conserva columnas adicionales, como observaciones, que no estén en la plantilla PostgreSQL o GDB. Se agregan como TEXT solo en la tabla temporal, manteniendo los tipos de las columnas existentes y los valores del CSV.

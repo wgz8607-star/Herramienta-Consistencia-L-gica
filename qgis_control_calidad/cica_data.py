@@ -89,9 +89,6 @@ def install_csv(connection, reference, schema, template=None):
         existing = cursor.fetchone()[0]
         if template:
             from .cica_gdb import layer_definitions
-            missing = set(reference.columns) - set(template.columns)
-            if missing:
-                raise ValueError('CSV y geodatabase tienen columnas incompatibles: ' + ', '.join(sorted(missing)))
             cursor.execute(sql.SQL('CREATE TEMP TABLE {} ({}) ON COMMIT PRESERVE ROWS').format(sql.Identifier(reference.kind), layer_definitions(template)))
         elif existing:
             # LIKE without INCLUDING DEFAULTS cannot invoke persistent sequences.
@@ -101,6 +98,11 @@ def install_csv(connection, reference, schema, template=None):
             definitions = sql.SQL(', ').join(sql.SQL('{} TEXT').format(sql.Identifier(c)) for c in reference.columns)
             cursor.execute(sql.SQL('CREATE TEMP TABLE {} ({}) ON COMMIT PRESERVE ROWS').format(
                 sql.Identifier(reference.kind), definitions))
+        if existing or template:
+            # Extend only the session table; existing column types remain intact.
+            for column in reference.columns:
+                cursor.execute(sql.SQL('ALTER TABLE pg_temp.{} ADD COLUMN IF NOT EXISTS {} TEXT').format(
+                    sql.Identifier(reference.kind), sql.Identifier(column)))
         # Text COPY preserves empty strings. For typed existing schemas, empty values
         # become NULL so optional dates/numbers can be imported correctly.
         query = sql.SQL('COPY pg_temp.{} ({}) FROM STDIN WITH (FORMAT CSV, ENCODING \'UTF8\'{})').format(

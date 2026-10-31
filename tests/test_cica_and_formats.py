@@ -81,6 +81,20 @@ class CicaAndFormatsTests(unittest.TestCase):
             self.assertIn('COPY pg_temp.', copy[1])
             self.assertEqual(copy[2][0][0], '00001')
 
+    def test_additional_csv_columns_are_preserved_with_database_or_gdb_template(self):
+        from types import SimpleNamespace
+        reference, _ = self.reference('numero_predial;observaciones\n00001;Texto adicional\n')
+        for template in (None, SimpleNamespace(columns=('numero_predial',), types=('BIGINT',))):
+            connection = CicaConnection(existing=template is None)
+            with patch('psycopg2.sql.Composed.as_string', lambda self, context: render(self)):
+                install_csv(connection, reference, 'snc_cica_copy', template)
+            statements = [event[1] for event in connection.events if event[0] == 'sql']
+            self.assertIn('ALTER TABLE pg_temp."cica_predio" ADD COLUMN IF NOT EXISTS "observaciones" TEXT', statements)
+            self.assertFalse(any(query.startswith('ALTER TABLE "snc_cica_copy"') for query in statements))
+            copy = next(event for event in connection.events if event[0] == 'copy')
+            self.assertEqual(copy[2][0], ['00001', 'Texto adicional'])
+            self.assertIn('"observaciones"', copy[1])
+
     def test_worker_uses_csv_in_same_connection_after_rule_failure_and_closes(self):
         reference, _ = self.reference()
         connection = CicaConnection()

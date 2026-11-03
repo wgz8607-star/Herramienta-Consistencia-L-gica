@@ -112,6 +112,31 @@ def published_versions(params, source):
     return rows
 
 
+class PersistentSelectionMenu(QMenu):
+    def mouseReleaseEvent(self, event):
+        action = self.actionAt(event.pos())
+        if action and action.isEnabled() and not action.isSeparator():
+            action.trigger()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        action = self.activeAction()
+        if event.key() in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter) and action and action.isEnabled():
+            action.trigger()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+def general_report_sql(items):
+    """Accept both report type names published in the SQL repositories."""
+    return next((item['sql'] for item in items
+                 if str(item.get('type', '')).strip().upper() in ('REPORTE', 'REPORTE_GENERAL')
+                 and item.get('sql') and item['sql'].strip()), None)
+
+
 @dataclass
 class RuleResult:
     rule: str
@@ -589,6 +614,12 @@ class ControlCalidadDialog(QDialog):
         schema_form.setSpacing(5)
         schema_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         schema_form.addRow(test)
+        self.schema_search = QLineEdit()
+        self.schema_search.setPlaceholderText('Buscar esquema o base catastral…')
+        self.schema_search.setEnabled(False)
+        self.schema_search.textChanged.connect(self.filter_schemas)
+        self.listed_schemas = []
+        schema_form.addRow('Buscar en esquemas listados', self.schema_search)
         schema_form.addRow("Esquema a validar", self.schema)
         qgis_layout.addRow(self.schema_controls)
         left_layout.addWidget(connection)
@@ -627,7 +658,7 @@ class ControlCalidadDialog(QDialog):
         control_title = QLabel("Controles a ejecutar")
         control_title.setStyleSheet('color: #0468A3; font-weight: 700; font-size: 12px;')
         group_layout.addWidget(control_title)
-        self.category_menu = QMenu(self)
+        self.category_menu = PersistentSelectionMenu(self)
         self.category_menu.setToolTipsVisible(True)
         self.category_button = QToolButton()
         self.category_button.setText("Seleccionar grupos")
@@ -756,6 +787,9 @@ class ControlCalidadDialog(QDialog):
         self.interrupt_button.setStyleSheet('QPushButton { background: #BE594D; color: white; border: none; border-radius: 5px; padding: 8px 10px; font-weight: bold; } QPushButton:disabled { background: #E9DDDA; color: #8A7772; }')
         self.interrupt_button.clicked.connect(self.interrupt_validation)
         execute_row.addWidget(self.interrupt_button)
+        self.clear_parameters_button = QPushButton('Limpiar parámetros')
+        self.clear_parameters_button.clicked.connect(self.clear_parameters)
+        execute_row.addWidget(self.clear_parameters_button)
         left_panel_layout.addLayout(execute_row)
         layout.addLayout(controls)
         references = QGroupBox("Referencias R1 y R2")
@@ -1609,6 +1643,81 @@ class ControlCalidadDialog(QDialog):
         except Exception as error:
             return "Ubicación territorial no disponible: " + re.sub(r"\s+", " ", str(error)).strip()[:160]
 
+    def filter_schemas(self, *_):
+        selected = self.schema.currentText()
+        text = self.schema_search.text().strip().casefold()
+        names = [name for name in self.listed_schemas if text in name.casefold()]
+        self.schema.clear()
+        self.schema.addItems(names)
+        self.schema.setCurrentIndex(self.schema.findText(selected))
+
+    def clear_parameters(self):
+        if self.controls_running or self.exporting or self.reference_lookup_running or self.filter_reading:
+            self.status.setText('Espere a que termine el proceso actual antes de limpiar parámetros.')
+            return
+        if not self.commit_review_editor() or not self.confirm_review_changes():
+            return
+        self.release_references()
+        for reference in self.cica_references.values():
+            reference.close()
+        self.cica_references = {}
+        if self.cica_gdb:
+            self.cica_gdb.close()
+        self.cica_gdb = None
+        self.cica_selection = {}
+        self.results = []
+        self.review_cases = []
+        self.review_imports = ReviewImports(self.review_cases)
+        self.review_import_snapshot = {}
+        self.detail_review_rows = {}
+        self.detail_import_errors = {}
+        self.review_file_issues = {}
+        self.review_snapshot = []
+        self.review_context = {}
+        self.review_dirty = False
+        self.execution_info = {}
+        self.general_report_rows = []
+        self.general_report_error = ''
+        self.pending_format = self.completed_format = None
+        self.format_download.setEnabled(False)
+        self.references_ready = False
+        for combo in (self.model, self.environment, self.reference_mode, self.connection_mode):
+            combo.blockSignals(True)
+            combo.setCurrentIndex(0)
+            combo.blockSignals(False)
+        self.reference_pages.setCurrentIndex(0)
+        self.connection_stack.setCurrentIndex(0)
+        self.municipality.clear()
+        self.show_current_reference()
+        for field in (self.database, self.user, self.password):
+            field.clear()
+        self.port.setText('5432')
+        self.qgis_connection.setCurrentIndex(-1)
+        self.validation_interrupted = False
+        self.interruption_requested = False
+        self.incidents_browser.clear()
+        self._repository_password = None
+        self.listed_schemas = []
+        self.schema_search.clear()
+        self.schema_search.setEnabled(False)
+        self.schema.clear()
+        self.scope_selection = 'all'
+        self.scope_prefixes = ()
+        self.filter_statistics = None
+        self.filter_overview.set_statistics(None)
+        self.clear_repository_rules()
+        self.choose_sql_version.setEnabled(False)
+        self.update_ingestion_button()
+        self.update_advanced_filter_summary()
+        self.update_advanced_filter_availability()
+        self.refresh_review_statistics()
+        self.refresh_detail_review_controls()
+        self.validation_context = 'Ubicación territorial pendiente de identificar.'
+        self.location_summary.setText(self.validation_context)
+        self.last_execution_label.setText('Sin ejecución')
+        self.progress.hide()
+        self.status.setText('Parámetros y selecciones limpiados.')
+
     def test_connection(self):
         if psycopg2 is None:
             QMessageBox.critical(self, "Dependencia faltante", "El QGIS instalado no incluye psycopg2. Instale psycopg2-binary en el Python de QGIS.")
@@ -1620,8 +1729,10 @@ class ControlCalidadDialog(QDialog):
                     version = cursor.fetchone()[0]
                     cursor.execute("SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema' ORDER BY nspname")
                     schemas = [row[0] for row in cursor.fetchall()]
-            self.schema.clear()
-            self.schema.addItems(schemas)
+            self.listed_schemas = schemas
+            self.schema_search.setEnabled(True)
+            self.schema_search.clear()
+            self.filter_schemas()
             if "public" in schemas:
                 self.schema.setCurrentText("public")
             self.status.setText("Conexión exitosa: " + version.split(",")[0])
@@ -1702,9 +1813,7 @@ class ControlCalidadDialog(QDialog):
             if item["type"] == "CONTROL" and item["component"] in selected
             and item["sql"] and item["sql"].strip()
         ]
-        general_report_path = next(
-            (item["sql"] for item in self.repository_rules if item["type"] == "REPORTE_GENERAL"), None
-        )
+        general_report_path = general_report_sql(self.repository_rules)
         if not rules:
             QMessageBox.critical(self, "Reglas no encontradas", "No hay reglas SQL en la selección actual.")
             return

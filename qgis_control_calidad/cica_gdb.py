@@ -159,11 +159,13 @@ def write_values(stream, values):
     stream.write(','.join('' if value is None else '"' + str(value).replace('"', '""') + '"' for value in values) + '\n')
 
 
-def prepare_gdb(filename, crs_overrides=None):
+def prepare_gdb(filename, crs_overrides=None, progress=None):
     from osgeo import gdal, ogr
     directory = tempfile.TemporaryDirectory(prefix='qgis_cica_gdb_')
     dataset = None
     try:
+        if progress:
+            progress(0, 0, 'Abriendo o extrayendo geodatabase…')
         gdb = extract_gdb(filename, Path(directory.name) / 'extracted')
         dataset = gdal.OpenEx(str(gdb), gdal.OF_VECTOR | gdal.OF_READONLY, allowed_drivers=['OpenFileGDB', 'FileGDB'])
         if dataset is None:
@@ -173,6 +175,8 @@ def prepare_gdb(filename, crs_overrides=None):
         for layer_index in range(dataset.GetLayerCount()):
             layer = dataset.GetLayerByIndex(layer_index)
             source_name = layer.GetName()
+            if progress:
+                progress(layer_index, dataset.GetLayerCount(), 'Leyendo capa: ' + source_name)
             table = column_name(source_name, layer_index + 1)
             if table[0].isdigit():
                 table = 'capa_' + table[:55]
@@ -227,7 +231,11 @@ def prepare_gdb(filename, crs_overrides=None):
                     write_values(output, values)
                     digest.update(json.dumps(values, ensure_ascii=False).encode()); digest.update(b'\n')
                     count += 1
+                    if progress and count % 1000 == 0:
+                        progress(layer_index, dataset.GetLayerCount(), f'{source_name}: {count:,} registros leídos')
                     feature = None
+            if progress:
+                progress(layer_index + 1, dataset.GetLayerCount(), f'{source_name}: {count:,} registros preparados')
             layers[table] = SpatialLayer(table, source_name, tuple(columns), tuple(types), count, path, geometry_column, srid)
         if not layers:
             raise ValueError('La geodatabase no contiene capas o tablas legibles.')

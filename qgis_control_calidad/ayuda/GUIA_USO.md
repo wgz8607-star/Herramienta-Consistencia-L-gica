@@ -216,3 +216,10 @@ El formato se entrega para diligenciarlo; no se completa automáticamente. El en
 
 
 En Copia base CICA, el municipio se identifica con los primeros cinco dígitos del NPN. La selección de etapas se aplica al campo `etapa` de `cica_predio` y a los datos asociados a esos predios. Las condiciones de las sentencias SQL se mantienen: se valida la intersección con los filtros seleccionados. La confirmación previa a ejecutar muestra municipio y etapas. R1/R2 se restringen al municipio seleccionado; el filtro de etapa corresponde a la base CICA.
+
+## Selección, búsqueda y limpieza de la sesión
+
+- En **Seleccionar grupos**, marque o desmarque los controles necesarios. El menú permanece abierto; haga clic fuera o pulse Escape para cerrarlo.
+- Después de **Listar Esquemas**, use **Buscar en esquemas listados** para filtrar por nombre. Borrar la búsqueda recupera la lista completa.
+- **Limpiar parámetros** retira las fuentes temporales, referencias R1/R2, filtros, versión de sentencias, selecciones y resultados de la sesión. No modifica los archivos originales ni las conexiones guardadas en QGIS. No se permite limpiar mientras hay un proceso en curso.
+- Al cargar una GDB, una ventana indica que el proceso está en curso y muestra el avance por capas y los registros leídos. La apertura o extracción inicial muestra una barra de actividad; espere a que termine antes de continuar.

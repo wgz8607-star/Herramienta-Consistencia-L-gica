@@ -1,8 +1,8 @@
 """Prepare independent CICA CSV snapshots for temporary validation tables."""
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView, QHeaderView, QComboBox, QDialog, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QMessageBox, QProgressDialog, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date, read_repository_cica_options, cica_selection
 from .cica_gdb import prepare_gdb, UnidentifiedGdbCrs
@@ -386,12 +386,49 @@ class CicaIngestionDialog(QDialog):
             return
         self.setEnabled(False)
         self.status.setText('Preparando geodatabase temporal…')
+        from queue import SimpleQueue
+        from concurrent.futures import ThreadPoolExecutor
+        from qgis.PyQt.QtCore import QEventLoop
+        messages = SimpleQueue()
+        progress = QProgressDialog('La carga de la GDB se encuentra en proceso…', '', 0, 0, self)
+        progress.setWindowTitle('Cargando geodatabase')
+        progress.setCancelButton(None)
+        progress.setWindowModality(Qt.ApplicationModal)
+        progress.setWindowFlags(progress.windowFlags() & ~Qt.WindowCloseButtonHint)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.show()
+        def refresh_progress():
+            while not messages.empty():
+                value, total, label = messages.get()
+                progress.setRange(0, total)
+                progress.setValue(value)
+                progress.setLabelText('Carga de GDB en proceso\n' + label)
+        timer = QTimer(progress)
+        timer.timeout.connect(refresh_progress)
+        timer.start(100)
+        def prepare():
+            return prepare_gdb(path, crs_overrides=overrides, progress=lambda *message: messages.put(message))
+        def run_prepare():
+            if owner is not None and hasattr(owner, 'report_task'):
+                return owner.report_task(prepare)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(prepare)
+                loop = QEventLoop()
+                poll = QTimer()
+                poll.timeout.connect(lambda: loop.quit() if future.done() else None)
+                poll.start(50)
+                if not future.done():
+                    loop.exec_()
+                poll.stop()
+                return future.result()
+
         try:
             owner = self.parent()
             overrides = {}
             while True:
                 try:
-                    prepared = owner.report_task(prepare_gdb, path, crs_overrides=overrides) if owner is not None and hasattr(owner, 'report_task') else prepare_gdb(path, crs_overrides=overrides)
+                    prepared = run_prepare()
                     break
                 except UnidentifiedGdbCrs as unresolved:
                     overrides[unresolved.layer_name] = 9377
@@ -401,6 +438,8 @@ class CicaIngestionDialog(QDialog):
             QMessageBox.warning(self, 'No se cargó la geodatabase', str(error))
             return
         finally:
+            timer.stop()
+            progress.close()
             self.setEnabled(True)
         if self.prepared_gdb:
             self.prepared_gdb.close()

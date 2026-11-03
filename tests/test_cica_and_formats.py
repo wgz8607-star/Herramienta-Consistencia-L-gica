@@ -95,6 +95,26 @@ class CicaAndFormatsTests(unittest.TestCase):
             self.assertEqual(copy[2][0], ['00001', 'Texto adicional'])
             self.assertIn('"observaciones"', copy[1])
 
+    def test_both_repository_report_types_are_selected_and_executed(self):
+        for kind in ('REPORTE', 'REPORTE_GENERAL'):
+            report = module.general_report_sql([
+                {'type': 'CONTROL', 'sql': 'SELECT control'},
+                {'type': kind, 'sql': '   '},
+                {'type': kind, 'sql': 'SELECT reporte'},
+            ])
+            self.assertEqual(report, 'SELECT reporte')
+            worker = module.RuleWorker({}, 'test', '', '', [], general_report_path=report, model='Modelo Interno')
+            connection = CicaConnection()
+            results = []; errors = []
+            worker.general_report.connect(lambda rows, error: results.append((rows, error)))
+            worker.fatal_error.connect(errors.append)
+            with patch.object(module.psycopg2, 'connect', return_value=connection):
+                worker.run()
+            self.assertEqual(errors, [])
+            self.assertEqual(results, [([{'numero_predial': '00001'}], '')])
+            self.assertIn(('sql', 'SELECT reporte'), connection.events)
+        self.assertIsNone(module.general_report_sql([{'type': 'CONTROL', 'sql': 'SELECT control'}]))
+
     def test_worker_uses_csv_in_same_connection_after_rule_failure_and_closes(self):
         reference, _ = self.reference()
         connection = CicaConnection()

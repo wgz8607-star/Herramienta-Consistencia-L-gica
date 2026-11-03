@@ -534,3 +534,7 @@ La carga CSV conserva columnas adicionales, como observaciones, que no estén en
 ### Versión 2.14.3
 
 Todas las capas espaciales GDB se preparan con una columna temporal geom de tipo PostGIS, independientemente del nombre geométrico original (por ejemplo Shape). Se preservan geometrías, coordenadas y EPSG, sin modificar la GDB. Si existe un atributo ordinario geom, se conserva con un nombre geom_atributo disponible. Verificación con polígonos, multipolígonos, puntos, líneas y tablas no espaciales.
+
+### Versión 2.14.4
+
+Reconoce REPORTE y REPORTE_GENERAL para ejecutar el reporte general publicado. El menú de controles permanece abierto al marcar o desmarcar; incorpora búsqueda de esquemas listados y limpieza de parámetros, fuentes temporales y resultados de sesión. La carga GDB muestra una ventana de progreso por capas y registros, con barra de actividad durante la apertura/extracción inicial. No se modifican archivos originales ni conexiones guardadas. Verificación: 260 pruebas ejecutadas, 4 omitidas.

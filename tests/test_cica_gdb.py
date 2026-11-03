@@ -95,6 +95,14 @@ class CicaGdbTests(unittest.TestCase):
                 self.assertAlmostEqual(geometry.GetArea(), 2)
         self.assertEqual(prepared.layers['tabla_sin_geometria'].geometry_column, '')
 
+    def test_gdb_reports_layer_progress(self):
+        events = []
+        prepared = prepare_gdb(self.source, progress=lambda *args: events.append(args))
+        self.addCleanup(prepared.close)
+        self.assertEqual(events[0][:2], (0, 0))
+        self.assertEqual(events[-1][:2], (1, 1))
+        self.assertIn('cica_terreno', events[-1][2])
+
     def test_zipped_geodatabase_is_read_then_extracted_files_are_cleaned(self):
         path = Path(self.temp.name) / 'entrada.zip'
         with zipfile.ZipFile(path, 'w') as archive:

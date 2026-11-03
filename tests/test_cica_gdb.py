@@ -45,6 +45,8 @@ class CicaGdbTests(unittest.TestCase):
         before = {str(p.relative_to(self.source)): p.read_bytes() for p in self.source.rglob('*') if p.is_file()}
         prepared = self.prepared()
         layer = prepared.layers['cica_terreno']
+        self.assertEqual(layer.geometry_column, 'geom')
+        self.assertEqual(layer.types[layer.columns.index('geom')], 'geometry')
         self.assertEqual(layer.srid, 4326)
         self.assertEqual(layer.row_count, 1)
         with layer.csv_path.open(encoding='utf-8', newline='') as stream:
@@ -58,6 +60,40 @@ class CicaGdbTests(unittest.TestCase):
         self.assertEqual(before, {str(p.relative_to(self.source)): p.read_bytes() for p in self.source.rglob('*') if p.is_file()})
         prepared.close(); self.assertFalse(layer.csv_path.exists())
         self.assertTrue(self.source.exists())
+
+    def test_all_spatial_layers_use_geom_and_keep_nonspatial_tables_without_geometry(self):
+        dataset = ogr.Open(str(self.source), 1)
+        srs = osr.SpatialReference(); srs.ImportFromEPSG(9377)
+        for name, kind, wkt in (
+            ('u_construccion', ogr.wkbMultiPolygon, 'MULTIPOLYGON (((0 0,2 0,2 2,0 0)))'),
+            ('puntos', ogr.wkbPoint, 'POINT (4 5)'),
+            ('lineas', ogr.wkbLineString, 'LINESTRING (0 0,1 1)'),
+        ):
+            layer = dataset.CreateLayer(name, srs, kind, options=['GEOMETRY_NAME=Shape'])
+            layer.CreateField(ogr.FieldDefn('geom', ogr.OFTString))
+            layer.CreateField(ogr.FieldDefn('geom_atributo', ogr.OFTString))
+            feature = ogr.Feature(layer.GetLayerDefn())
+            feature.SetField('geom', 'atributo original')
+            feature.SetGeometry(ogr.CreateGeometryFromWkt(wkt))
+            self.assertEqual(layer.CreateFeature(feature), ogr.OGRERR_NONE)
+            feature = None; layer = None
+        layer = dataset.CreateLayer('tabla_sin_geometria', geom_type=ogr.wkbNone)
+        layer.CreateField(ogr.FieldDefn('codigo', ogr.OFTString))
+        layer = None; dataset = None
+        prepared = self.prepared()
+        for name in ('u_construccion', 'puntos', 'lineas'):
+            layer = prepared.layers[name]
+            self.assertEqual(layer.geometry_column, 'geom')
+            self.assertEqual(layer.srid, 9377)
+            with layer.csv_path.open(encoding='utf-8', newline='') as stream:
+                row = next(csv.reader(stream))
+            self.assertEqual(row[layer.columns.index('geom_atributo_2')], 'atributo original')
+            geometry = ogr.CreateGeometryFromWkt(row[layer.columns.index('geom')].split(';', 1)[1])
+            self.assertIsNotNone(geometry)
+            if name == 'u_construccion':
+                self.assertEqual(geometry.GetGeometryName(), 'MULTIPOLYGON')
+                self.assertAlmostEqual(geometry.GetArea(), 2)
+        self.assertEqual(prepared.layers['tabla_sin_geometria'].geometry_column, '')
 
     def test_zipped_geodatabase_is_read_then_extracted_files_are_cleaned(self):
         path = Path(self.temp.name) / 'entrada.zip'
@@ -87,7 +123,7 @@ class CicaGdbTests(unittest.TestCase):
         statements = [event[1] for event in connection.events if event[0] == 'sql']
         self.assertEqual(len(statements), 1)
         self.assertIn('CREATE TEMP TABLE "cica_terreno"', statements[0])
-        self.assertIn(' geometry', statements[0])
+        self.assertIn('"geom" geometry', statements[0])
         self.assertIn('ON COMMIT PRESERVE ROWS', statements[0])
         worker = module.RuleWorker({}, 'test', '', '', [('Fisicas', 'r1', 'SELECT * FROM {esquema}.cica_terreno', '')], cica_gdb=prepared)
         worker_connection = CicaConnection()

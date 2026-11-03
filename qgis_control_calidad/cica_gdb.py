@@ -189,7 +189,15 @@ def prepare_gdb(filename, crs_overrides=None):
             geometry_column = ''
             srid = 0
             if definition.GetGeomFieldCount():
-                geometry_column = column_name(definition.GetGeomFieldDefn(0).GetName() or 'geom', len(columns) + 1)
+                # Rules use geom regardless of the FileGDB geometry field name.
+                geometry_column = 'geom'
+                if geometry_column in columns:
+                    attribute_name = 'geom_atributo'
+                    suffix = 2
+                    while attribute_name in columns:
+                        attribute_name = f'geom_atributo_{suffix}'
+                        suffix += 1
+                    columns[columns.index(geometry_column)] = attribute_name
                 columns.append(geometry_column); types.append('geometry')
                 srid = spatial_srid(layer)
                 if not srid:

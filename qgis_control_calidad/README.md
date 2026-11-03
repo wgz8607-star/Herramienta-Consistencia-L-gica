@@ -530,3 +530,7 @@ Cuando una capa GDB no tiene EPSG identificable, se asigna automáticamente EPSG
 ### Versión 2.14.2
 
 La carga CSV conserva columnas adicionales, como observaciones, que no estén en la plantilla PostgreSQL o GDB. Se agregan como TEXT solo en la tabla temporal, manteniendo los tipos de las columnas existentes y los valores del CSV.
+
+### Versión 2.14.3
+
+Todas las capas espaciales GDB se preparan con una columna temporal geom de tipo PostGIS, independientemente del nombre geométrico original (por ejemplo Shape). Se preservan geometrías, coordenadas y EPSG, sin modificar la GDB. Si existe un atributo ordinario geom, se conserva con un nombre geom_atributo disponible. Verificación con polígonos, multipolígonos, puntos, líneas y tablas no espaciales.

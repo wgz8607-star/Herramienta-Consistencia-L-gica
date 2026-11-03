@@ -182,11 +182,11 @@ class TerritorialStatisticsTests(unittest.TestCase):
 
     def test_current_r1_uses_selected_table_and_date_and_preserves_source_on_error(self):
         from qgis_control_calidad.territorial_statistics import read_filter_statistics
-        selected = {'divipola': '08421', 'stamp': '20260930', 'date': '2026-09-30', 'tables': {'R1': '08421_20260930_r1'}}
+        selected = {'divipola': '08421', 'stamp': '20260930', 'date': '2026-09-30', 'tables': {'R1': 'r1_08421_20260930'}}
         with patch('qgis_control_calidad.territorial_statistics.read_source_statistics', side_effect=[self.data(), self.data()]) as read:
             data = read_filter_statistics({}, 'city', 'CICA', reference_mode='current', current_reference=selected, repository_params={'dbname': 'repositorio'})
         self.assertEqual(read.call_args.args[:3], ({'dbname': 'repositorio'}, 'r1_r2', 'R1'))
-        self.assertEqual(read.call_args.kwargs['table_name'], '08421_20260930_r1')
+        self.assertEqual(read.call_args.kwargs['table_name'], 'r1_08421_20260930')
         self.assertIn('2026-09-30', data['r1_statistics']['source'])
         with patch('qgis_control_calidad.territorial_statistics.read_source_statistics', side_effect=[self.data(), RuntimeError('Sin permiso')]):
             data = read_filter_statistics({}, 'city', 'CICA', reference_mode='current', current_reference=selected, repository_params={})
@@ -218,7 +218,7 @@ class TerritorialStatisticsTests(unittest.TestCase):
             def close(self): self.closed = True
         db = Database()
         with patch('qgis_control_calidad.territorial_statistics.psycopg2.connect', return_value=db):
-            data = read_source_statistics({}, 'r1_r2', 'R1', table_name='08421_20260930_r1')
+            data = read_source_statistics({}, 'r1_r2', 'R1', table_name='r1_08421_20260930')
         self.assertIn('COUNT(DISTINCT NULLIF(btrim("numero_predial"::text)', db.queries[-1])
         self.assertEqual(data['total'], 2)
         self.assertEqual(data['duplicates'], 3)
@@ -272,10 +272,10 @@ class TerritorialStatisticsTests(unittest.TestCase):
         widget.schema.addItem('city')
         with patch.object(widget, 'load_current_references'):
             widget.reference_mode.setCurrentIndex(1)
-        selection = {'divipola': '08421', 'date': '2026-09-30', 'tables': {'R2': '08421_20260930_r2'}}
+        selection = {'divipola': '08421', 'date': '2026-09-30', 'tables': {'R2': 'r2_08421_20260930'}}
         widget.municipality.addItem('08421', selection)
         self.assertFalse(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))
-        selection['tables']['R1'] = '08421_20260930_r1'
+        selection['tables']['R1'] = 'r1_08421_20260930'
         widget.municipality.setItemData(widget.municipality.currentIndex(), selection)
         widget.show_current_reference()
         self.assertTrue(widget.left_tabs.isTabEnabled(widget.advanced_filter_tab_index))

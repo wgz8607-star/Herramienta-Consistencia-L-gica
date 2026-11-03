@@ -7,6 +7,22 @@ from test_cica_and_formats import app
 
 
 class ParameterControlsTests(unittest.TestCase):
+    def test_disabled_styles_preserve_enabled_colors(self):
+        from qgis.PyQt.QtWidgets import QWidget, QPushButton
+        from qgis_control_calidad.button_styles import style_disabled_buttons, DISABLED_STYLE
+        parent = QWidget()
+        button = QPushButton('Ejecutar', parent)
+        button.setStyleSheet('background: #0468A3; color: white;')
+        style_disabled_buttons(parent)
+        self.assertIn('QPushButton, QToolButton {background: #0468A3;', button.styleSheet())
+        self.assertIn(DISABLED_STYLE, button.styleSheet())
+        button.setEnabled(False)
+        button.setEnabled(True)
+        self.assertIn('#0468A3', button.styleSheet())
+        style_disabled_buttons(parent)
+        self.assertEqual(button.styleSheet().count(DISABLED_STYLE), 1)
+        parent.close()
+
     def test_menu_stays_open_for_mouse_and_keyboard(self):
         menu = PersistentSelectionMenu()
         action = menu.addAction('Administrativas')

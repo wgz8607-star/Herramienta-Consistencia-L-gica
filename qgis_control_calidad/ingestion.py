@@ -76,12 +76,13 @@ class CicaIngestionDialog(QDialog):
         self.source_mode.addItems(['Archivos CSV del usuario', 'Copia base CICA'])
         source_layout.addWidget(self.source_mode)
         self.repository_date = QLabel(); self.repository_date.setWordWrap(True)
-        self.repository_date.setStyleSheet('QLabel { background: #EAF2FA; color: #0066B3; padding: 9px; border-radius: 5px; }')
-        self.repository_date.hide(); source_layout.addWidget(self.repository_date)
+        self.repository_date.setStyleSheet('QLabel { background: #EAF2FA; color: #0066B3; padding: 12px; border-radius: 5px; border-left: 4px solid #0066B3; font-size: 15px; font-weight: bold; }')
+        self.repository_date.hide()
         self.source_note = QLabel('Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.')
         self.source_note.setProperty('muted', True); self.source_note.setWordWrap(True); source_layout.addWidget(self.source_note)
 
         self.copy_filters, filter_layout = card('2. Municipio y etapas')
+        filter_layout.addWidget(self.repository_date)
         municipality_row = QHBoxLayout()
         municipality_row.addWidget(QLabel('Municipio · DIVIPOLA'))
         municipality_row.addStretch()
@@ -160,6 +161,8 @@ class CicaIngestionDialog(QDialog):
         if not allow_gdb:
             self.source_note.setText('Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.')
         self.update_predio_summary()
+        from .button_styles import style_disabled_buttons
+        style_disabled_buttons(self)
 
     def update_predio_summary(self):
         repository = self.source_mode.currentIndex() == 1
@@ -217,27 +220,27 @@ class CicaIngestionDialog(QDialog):
         self.update_predio_summary()
 
     def refresh_repository_date(self, params=None):
-        self.repository_date.setText('Consultando fecha de marca de la copia espejo…')
+        self.repository_date.setText('Consultando fecha y hora del corte CICA…')
         owner = self.parent()
         if owner is None or not hasattr(owner, 'repository_connection_params'):
-            self.repository_date.setText('Copia base CICA — Fecha y hora no disponibles. Requiere conexión a sentencias.')
+            self.repository_date.setText('Copia base CICA — Fecha y hora del corte no disponibles. Requiere conexión a sentencias.')
             return
         params = params or owner.repository_connection_params()
         if not params:
-            self.repository_date.setText('Copia base CICA — Fecha y hora no disponibles. Falta acceso a sentencias.')
+            self.repository_date.setText('Copia base CICA — Fecha y hora del corte no disponibles. Falta acceso a sentencias.')
             return
         self.setEnabled(False)
         try:
             value = owner.report_task(read_repository_cica_date, params)
             if value is None:
-                message = 'Copia base CICA — Fecha y hora sin registrar.'
+                message = 'Copia base CICA — Fecha y hora del corte sin registrar.'
             else:
                 date = value.strftime('%d/%m/%Y · %H:%M:%S %Z').strip() if hasattr(value, 'hour') else value.strftime('%d/%m/%Y') if hasattr(value, 'strftime') else str(value)
-                message = 'Copia base CICA — ' + date
+                message = 'Copia base CICA — Fecha y hora del corte: ' + date
             self.repository_date.setText(message)
-            self.repository_date.setToolTip('Origen: sentencias.snc_cica_crudo._control')
+            self.repository_date.setToolTip('Origen: sentencias.public.copia_cica_progreso · inicio del último registro creado (mayor id)')
         except Exception as error:
-            self.repository_date.setText('Copia base CICA — Fecha y hora no disponibles: ' + str(error))
+            self.repository_date.setText('Copia base CICA — Fecha y hora del corte no disponibles: ' + str(error))
         finally:
             self.setEnabled(True)
 

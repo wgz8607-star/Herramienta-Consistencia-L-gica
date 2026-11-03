@@ -99,7 +99,7 @@ class InterruptTests(unittest.TestCase):
             def cancel(self): released.set()
             def set_session(self, **kwargs): pass
         connection = Connection()
-        selection = {'divipola': '08421', 'stamp': '20260930', 'tables': {'R1': '08421_20260930_r1'}}
+        selection = {'divipola': '08421', 'stamp': '20260930', 'tables': {'R1': 'r1_08421_20260930'}}
         worker = RuleWorker({}, 'base', '', '', [('Administrativas', 'regla_1_1', 'SELECT * FROM {esquema_r1}.{tabla_r1}', '')], current_reference=selection, repository_params={'dbname': 'sentencias'})
         from qgis.PyQt.QtCore import Qt
         cancelled = []; worker.cancelled.connect(lambda: cancelled.append(True), Qt.DirectConnection)

@@ -237,21 +237,14 @@ def predio_status_summary(snapshot):
 
 
 def read_repository_cica_date(params):
-    """Read the latest mirror timestamp; never infer it from the local clock."""
+    """Read inicio from the last created copy-progress record, regardless of status."""
     from contextlib import closing
     import psycopg2
     with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
         connection.set_session(readonly=True)
         with connection, connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout = '15s'")
-            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position", ('snc_cica_crudo', '_control'))
-            columns = [row[0] for row in cursor.fetchall()]
-            candidates = [name for name in columns if re.sub(r'[^a-z0-9]', '', name.lower()) == 'fechamarca']
-            if len(candidates) != 1:
-                raise ValueError('No se encontró un campo único fecha_marca en snc_cica_crudo._control, o no tiene permisos de lectura.')
-            cursor.execute(sql.SQL('SELECT {} FROM {}.{} WHERE {} IS NOT NULL ORDER BY {} DESC LIMIT 1').format(
-                sql.Identifier(candidates[0]), sql.Identifier('snc_cica_crudo'), sql.Identifier('_control'),
-                sql.Identifier(candidates[0]), sql.Identifier(candidates[0])))
+            cursor.execute('SELECT inicio FROM public.copia_cica_progreso ORDER BY id DESC LIMIT 1')
             row = cursor.fetchone()
             return row[0] if row else None
 

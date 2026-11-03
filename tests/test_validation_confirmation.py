@@ -79,7 +79,7 @@ class ValidationConfirmationTests(unittest.TestCase):
         with patch.object(self.widget, 'load_current_references'):
             self.widget.reference_mode.setCurrentIndex(1)
         current = {'divipola': '08421', 'municipality': 'Luruaco', 'date': '2026-09-30',
-                   'tables': {'R1': '08421_20260930_r1', 'R2': '08421_20260930_r2'}}
+                   'tables': {'R1': 'r1_08421_20260930', 'R2': 'r2_08421_20260930'}}
         rows = dict(self.widget.validation_confirmation_metadata(self.params, 'municipio', [], current,
                     'SELECT * FROM {esquema_r2}.{tabla_r2}'))
         self.assertNotIn('Municipio de R1/R2', rows)

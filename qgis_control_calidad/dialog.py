@@ -615,11 +615,11 @@ class ControlCalidadDialog(QDialog):
         schema_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         schema_form.addRow(test)
         self.schema_search = QLineEdit()
-        self.schema_search.setPlaceholderText('Buscar esquema o base catastral…')
+        self.schema_search.setPlaceholderText('Filtrar por Divipola')
         self.schema_search.setEnabled(False)
         self.schema_search.textChanged.connect(self.filter_schemas)
         self.listed_schemas = []
-        schema_form.addRow('Buscar en esquemas listados', self.schema_search)
+        schema_form.addRow('Filtrar por Divipola', self.schema_search)
         schema_form.addRow("Esquema a validar", self.schema)
         qgis_layout.addRow(self.schema_controls)
         left_layout.addWidget(connection)
@@ -909,6 +909,8 @@ class ControlCalidadDialog(QDialog):
         self.file_watch_timer.setInterval(2000)
         self.file_watch_timer.timeout.connect(self.poll_review_files)
         self.file_watch_timer.start()
+        from .button_styles import style_disabled_buttons
+        style_disabled_buttons(self)
 
     def load_help_content(self):
         guide = PLUGIN_DIR / 'ayuda' / 'GUIA_USO.md'

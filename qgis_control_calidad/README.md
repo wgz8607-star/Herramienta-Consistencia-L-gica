@@ -538,3 +538,7 @@ Todas las capas espaciales GDB se preparan con una columna temporal geom de tipo
 ### Versión 2.14.4
 
 Reconoce REPORTE y REPORTE_GENERAL para ejecutar el reporte general publicado. El menú de controles permanece abierto al marcar o desmarcar; incorpora búsqueda de esquemas listados y limpieza de parámetros, fuentes temporales y resultados de sesión. La carga GDB muestra una ventana de progreso por capas y registros, con barra de actividad durante la apertura/extracción inicial. No se modifican archivos originales ni conexiones guardadas. Verificación: 260 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2.14.5
+
+Referencias vigentes bajo el estándar r1_DIVIPOLA_AAAAMMDD y r2_DIVIPOLA_AAAAMMDD, documentado en Ayuda. El buscador se denomina Filtrar por Divipola. La copia CICA muestra su fecha y hora de corte destacadas en Municipio y etapas, tomando inicio del último registro creado (mayor id) de public.copia_cica_progreso. No se filtra por estado ni se sustituye la fecha por el reloj local. Botones deshabilitados en gris claro conservando los colores habilitados. Verificación: 263 pruebas ejecutadas, 4 omitidas.

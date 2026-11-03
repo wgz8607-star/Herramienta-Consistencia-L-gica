@@ -190,7 +190,7 @@ def read_filter_statistics(params, schema, model, snapshot=None, r1_snapshot=Non
         else:
             from .current_references import NAME, SCHEMA
             table = current_reference.get('tables', {}).get('R1', '')
-            expected = f"{current_reference.get('divipola', '')}_{current_reference.get('stamp', '')}_r1"
+            expected = f"r1_{current_reference.get('divipola', '')}_{current_reference.get('stamp', '')}"
             if not NAME.fullmatch(table) or table != expected:
                 raise ValueError('R1 no está disponible para el municipio y fecha seleccionados.')
             data = read_source_statistics(repository_params, SCHEMA, 'R1', table_name=table)

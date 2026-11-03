@@ -134,20 +134,19 @@ class RepositoryCicaDateTests(unittest.TestCase):
         with patch('psycopg2.connect', return_value=connection):
             self.assertEqual(read_repository_cica_date({}), stamp)
         connection.set_session.assert_called_once_with(readonly=True)
-        self.assertEqual(cursor.execute.call_args_list[1].args[1], ('snc_cica_crudo', '_control'))
-        from test_temporary_references import render
-        query = render(cursor.execute.call_args[0][0])
-        self.assertIn('"snc_cica_crudo"."_control"', query)
-        self.assertIn('ORDER BY "fecha_marca" DESC LIMIT 1', query)
+        query = cursor.execute.call_args[0][0]
+        self.assertIn('SELECT inicio FROM public.copia_cica_progreso', query)
+        self.assertIn('ORDER BY id DESC LIMIT 1', query)
+        self.assertNotIn('WHERE', query)
         connection.close.assert_called_once()
 
-    def test_missing_date_field_is_explicit(self):
+    def test_query_failure_is_not_replaced_with_another_date(self):
         from qgis_control_calidad.cica_data import read_repository_cica_date
         connection = MagicMock()
         cursor = connection.cursor.return_value.__enter__.return_value
-        cursor.fetchall.return_value = [('id',)]
+        cursor.execute.side_effect = [None, RuntimeError('Sin acceso a copia_cica_progreso')]
         with patch('psycopg2.connect', return_value=connection):
-            with self.assertRaisesRegex(ValueError, 'fecha_marca'):
+            with self.assertRaisesRegex(RuntimeError, 'Sin acceso'):
                 read_repository_cica_date({})
         connection.close.assert_called_once()
 
@@ -193,7 +192,7 @@ class CopySourcePresentationTests(unittest.TestCase):
         owner = Owner()
         dialog = CicaIngestionDialog(owner)
         dialog.source_mode.setCurrentIndex(1)
-        self.assertEqual(dialog.repository_date.text(), 'Copia base CICA — 30/10/2026 · 08:15:02')
+        self.assertEqual(dialog.repository_date.text(), 'Copia base CICA — Fecha y hora del corte: 30/10/2026 · 08:15:02')
         dialog.close();owner.close()
 
 

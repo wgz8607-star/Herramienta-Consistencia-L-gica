@@ -17,7 +17,7 @@ except ImportError:
 from .reference_data import PreparedReference, REQUIRED, column_name, clean
 
 SCHEMA = 'r1_r2'
-NAME = re.compile(r'^(\d{5})_(\d{8})_(r[12])$')
+NAME = re.compile(r'^(r[12])_(\d{5})_(\d{8})$')
 
 
 def municipal_names(filename):
@@ -39,7 +39,7 @@ def catalog_from_names(table_names, municipalities=None):
         match = NAME.fullmatch(table)
         if not match:
             ignored.append(table); continue
-        code, stamp, kind = match.groups()
+        kind, code, stamp = match.groups()
         try:
             date = datetime.strptime(stamp, '%Y%m%d').date()
         except ValueError:
@@ -90,7 +90,7 @@ def prepare_current_references(params, selection, kinds, cancel_check=None, on_c
     try:
         for kind in kinds:
             table = selection.get('tables', {}).get(kind, '')
-            expected = f"{selection.get('divipola', '')}_{selection.get('stamp', '')}_{kind.lower()}"
+            expected = f"{kind.lower()}_{selection.get('divipola', '')}_{selection.get('stamp', '')}"
             if kind not in REQUIRED or not NAME.fullmatch(table) or table != expected:
                 raise ValueError(f'{kind} no está disponible para el municipio y fecha seleccionados.')
         if not kinds:

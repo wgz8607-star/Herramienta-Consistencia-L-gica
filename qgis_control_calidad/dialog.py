@@ -300,7 +300,7 @@ class RuleWorker(QObject):
                 if kind in self.references:
                     source = f'pg_temp.{TEMP_TABLES[kind]}'
                 else:
-                    raise ValueError(f'Esta regla requiere {kind}: cargue el archivo temporal o seleccione R1 y R2 Vigente.')
+                    raise ValueError(f'Esta regla requiere {kind}: cargue el archivo temporal, seleccione R1 y R2 Vigente o prepare las referencias de public.')
                 for marker in markers:
                     sql = sql.replace(marker, source)
                 sql = sql.replace(f'{{esquema_{suffix}}}', source.rsplit('.', 1)[0])
@@ -344,8 +344,17 @@ class RuleWorker(QObject):
                 self.check_cancelled()
                 if self.territorial_scope != 'all' or self.territorial_prefixes or self.cica_selection:
                     temporary_tables = set(self.cica_references) | (set(self.cica_gdb.layers) if self.cica_gdb else set())
+                    materialize = self.validation_model == 'CICA' and bool(self.cica_selection)
+                    if materialize:
+                        self.preparation_message('Preparando tablas temporales del alcance CICA seleccionado…')
                     self.scope_views = install_scope(connection, self.schema, temporary_tables,
-                                                     [TEMP_TABLES[kind] for kind in self.references], self.territorial_scope, self.territorial_prefixes, self.validation_model, self.cica_selection)
+                                                     [TEMP_TABLES[kind] for kind in self.references], self.territorial_scope, self.territorial_prefixes, self.validation_model, self.cica_selection,
+                                                     materialize=materialize)
+                    if materialize:
+                        filtered_spatial = {target: spatial_columns[table] for (_namespace, table), target in self.scope_views.items()
+                                            if table in spatial_columns}
+                        optimize_temporary_tables(connection, set(self.scope_views.values()), filtered_spatial,
+                                                  self.preparation_message, index_prefix='validation_scope')
                 if self.references or self.cica_references or self.cica_gdb or self.scope_views:
                     # Commit setup once so a failing rule cannot roll back the tables.
                     connection.commit()
@@ -462,6 +471,8 @@ class ControlCalidadDialog(QDialog):
         self.reference_lookup_running = False
         self.filter_reading = False
         self.temporary_references = {}
+        self.public_references = {}
+        self.public_reference_identity = None
         self.execution_status_timer = QTimer(self)
         self.execution_status_timer.setInterval(1000)
         self.execution_status_timer.timeout.connect(self.refresh_validation_elapsed)
@@ -797,7 +808,7 @@ class ControlCalidadDialog(QDialog):
         reference_layout = QVBoxLayout(references)
         reference_layout.setContentsMargins(8, 14, 8, 6)
         self.reference_mode = QComboBox()
-        self.reference_mode.addItems(["Archivos R1 y R2 cargados por usuario", "R1 y R2 Vigente"])
+        self.reference_mode.addItems(["Archivos R1 y R2 cargados por usuario", "R1 y R2 Vigente", "R1 y R2 en public de la base seleccionada"])
         self.reference_mode.currentIndexChanged.connect(self.reference_mode_changed)
         self.reference_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.reference_mode.setMinimumContentsLength(22)
@@ -838,6 +849,31 @@ class ControlCalidadDialog(QDialog):
         self.refresh_references.clicked.connect(self.load_current_references)
         current_layout.addWidget(self.refresh_references)
         self.reference_pages.addWidget(current_page)
+        public_page = QWidget()
+        self.public_reference_page = public_page
+        public_layout = QVBoxLayout(public_page)
+        self.public_reference_status = QLabel('Consulte las tablas R1/R2 de public en la base seleccionada.')
+        self.public_reference_status.setWordWrap(True)
+        public_layout.addWidget(self.public_reference_status)
+        self.public_reference_tables = {}
+        for kind in ('R1', 'R2'):
+            public_layout.addWidget(QLabel(kind + (' (opcional)' if kind == 'R2' else '')))
+            combo = QComboBox()
+            combo.currentIndexChanged.connect(self.invalidate_public_references)
+            self.public_reference_tables[kind] = combo
+            public_layout.addWidget(combo)
+        self.list_public_references_button = QPushButton('Consultar R1/R2 en public')
+        self.list_public_references_button.clicked.connect(self.list_public_references)
+        public_layout.addWidget(self.list_public_references_button)
+        self.use_public_references_button = QPushButton('Preparar referencias de public')
+        self.use_public_references_button.clicked.connect(self.load_public_references)
+        public_layout.addWidget(self.use_public_references_button)
+        self.reference_pages.addWidget(public_page)
+        for signal in (self.qgis_connection.currentTextChanged, self.database.textChanged,
+                       self.user.textChanged, self.port.textChanged, self.connection_mode.currentIndexChanged,
+                       self.model.currentIndexChanged):
+            signal.connect(self.public_connection_changed)
+
         self.schema.currentTextChanged.connect(self.select_reference_municipality)
         self.reference_pages.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         reference_layout.addWidget(self.reference_pages)
@@ -1176,11 +1212,11 @@ class ControlCalidadDialog(QDialog):
         self.cica_progress_button.setEnabled(bool(has_cica) and not self.controls_running and not self.exporting and not self.filter_reading)
         data_ready = bool(has_cica) if self.model.currentText() == "CICA" else bool(self.schema.currentText().strip())
         current = self.selected_current_reference() if self.reference_mode.currentIndex() == 1 else None
-        r1_ready = bool(self.temporary_references.get('R1')) if self.reference_mode.currentIndex() == 0 else bool(current and current.get('tables', {}).get('R1'))
+        r1_ready = bool(self.active_local_references().get('R1')) if self.reference_mode.currentIndex() != 1 else bool(current and current.get('tables', {}).get('R1'))
         signature = (self.model.currentText(), self.schema.currentText(), self.connection_mode.currentIndex(),
                      self.qgis_connection.currentText(), self.database.text(), self.user.text(),
                      id(self.cica_references.get('cica_predio')), id(self.active_cica_gdb()), self.reference_mode.currentIndex(),
-                     id(self.temporary_references.get('R1')), current.get('tables', {}).get('R1') if current else None)
+                     id(self.active_local_references().get('R1')), current.get('tables', {}).get('R1') if current else None)
         if signature != self.filter_source_signature:
             if self.filter_source_signature is not None:
                 self.scope_prefixes = ()
@@ -1248,8 +1284,8 @@ class ControlCalidadDialog(QDialog):
         self.update_run_availability()
         try:
             data = self.report_task(read_filter_statistics, params, self.validation_schema(), self.model.currentText(), snapshot,
-                                    self.temporary_references.get('R1') if self.reference_mode.currentIndex() == 0 else None,
-                                    'temporary' if self.reference_mode.currentIndex() == 0 else 'current', current, repository_params)
+                                    self.active_local_references().get('R1') if self.reference_mode.currentIndex() != 1 else None,
+                                    'temporary' if self.reference_mode.currentIndex() != 1 else 'current', current, repository_params)
             self.filter_statistics = data
             self.filter_overview.set_statistics(data)
             return data
@@ -1366,6 +1402,88 @@ class ControlCalidadDialog(QDialog):
         except Exception as error:
             QMessageBox.warning(self, 'No se pudo descargar el formato', str(error))
 
+    def active_local_references(self):
+        if self.reference_mode.currentIndex() != 2:
+            return self.temporary_references
+        if self.public_reference_identity:
+            from .public_references import connection_identity
+            try:
+                if connection_identity(self.connection_params()) != self.public_reference_identity:
+                    return {}
+            except Exception:
+                return {}
+        return self.public_references
+
+    def invalidate_public_references(self, *_):
+        if self.controls_running:
+            return
+        for reference in self.public_references.values():
+            reference.close()
+        self.public_references = {}
+        self.public_reference_identity = None
+        if hasattr(self, 'public_reference_status'):
+            self.public_reference_status.setText('Referencias de public pendientes de preparar.')
+        if hasattr(self, 'advanced_filter_tab_index'):
+            self.update_advanced_filter_availability()
+
+    def public_connection_changed(self, *_):
+        self.invalidate_public_references()
+        for combo in self.public_reference_tables.values():
+            combo.clear()
+        self.public_reference_status.setText('Conexión cambiada. Consulte nuevamente R1/R2 en public.')
+
+    def list_public_references(self):
+        if self.controls_running or self.exporting or self.reference_lookup_running or self.filter_reading:
+            return
+        from .public_references import read_public_catalog
+        self.reference_lookup_running = True
+        self.left_tabs.setEnabled(False)
+        self.update_run_availability()
+        try:
+            params = self.connection_params()
+            catalog = self.report_task(read_public_catalog, params)
+            self.invalidate_public_references()
+            for kind, combo in self.public_reference_tables.items():
+                combo.clear()
+                combo.addItem('Seleccione tabla ' + kind, '')
+                for table in catalog[kind]:
+                    combo.addItem(table, table)
+            self.public_reference_status.setText(f"Base: {params.get('dbname', params.get('service', ''))} · public · {len(catalog['R1'])} tablas R1 y {len(catalog['R2'])} tablas R2 compatibles.")
+        except Exception as error:
+            self.public_connection_changed()
+            QMessageBox.warning(self, 'No se pudieron consultar referencias de public', str(error))
+        finally:
+            self.reference_lookup_running = False
+            self.left_tabs.setEnabled(True)
+            self.update_run_availability()
+
+    def load_public_references(self):
+        if self.controls_running or self.exporting or self.reference_lookup_running or self.filter_reading:
+            return
+        from .public_references import prepare_public_references, connection_identity
+        selection = {kind: combo.currentData() for kind, combo in self.public_reference_tables.items() if combo.currentData()}
+        if 'R1' not in selection:
+            QMessageBox.warning(self, 'Falta R1', 'Seleccione una tabla R1 de public.')
+            return
+        self.reference_lookup_running = True
+        self.left_tabs.setEnabled(False)
+        self.update_run_availability()
+        try:
+            params = self.connection_params()
+            prepared = self.report_task(prepare_public_references, params, selection)
+            self.invalidate_public_references()
+            self.public_references = prepared
+            self.public_reference_identity = connection_identity(params)
+            self.public_reference_status.setText(f"Base: {params.get('dbname', params.get('service', ''))} · " + ' · '.join(f'{kind}: {ref.filename} ({ref.row_count} registros)' for kind, ref in prepared.items()))
+        except Exception as error:
+            self.invalidate_public_references()
+            QMessageBox.warning(self, 'No se prepararon las referencias de public', str(error))
+        finally:
+            self.reference_lookup_running = False
+            self.left_tabs.setEnabled(True)
+            self.update_advanced_filter_availability()
+            self.update_run_availability()
+
     def reference_mode_changed(self, index):
         self.reference_pages.setCurrentIndex(index)
         self.update_advanced_filter_availability()
@@ -1391,6 +1509,7 @@ class ControlCalidadDialog(QDialog):
         for reference in self.temporary_references.values():
             reference.close()
         self.temporary_references = {}
+        self.invalidate_public_references()
         self.reference_status.setText('Sin referencias temporales')
         self.update_advanced_filter_availability()
 
@@ -1660,6 +1779,7 @@ class ControlCalidadDialog(QDialog):
         if not self.commit_review_editor() or not self.confirm_review_changes():
             return
         self.release_references()
+        self.public_connection_changed()
         for reference in self.cica_references.values():
             reference.close()
         self.cica_references = {}
@@ -1878,7 +1998,7 @@ class ControlCalidadDialog(QDialog):
             "model": self.model.currentText(), "environment": self.environment.currentText(),
             "host": params.get("host", ""), "port": str(params.get("port", "5432")),
             "database": params.get("dbname", ""), "schema": schema,
-            "reference_r1": (self.temporary_references['R1'].fingerprint if 'R1' in self.temporary_references else '') if self.reference_mode.currentIndex() == 0 else (current_reference['divipola'] + '/' + current_reference['stamp'] if current_reference else ''),
+            "reference_r1": (self.active_local_references()['R1'].fingerprint if 'R1' in self.active_local_references() else '') if self.reference_mode.currentIndex() != 1 else (current_reference['divipola'] + '/' + current_reference['stamp'] if current_reference else ''),
 
             "repository": self.selected_sql_version.get("source", {}).get("label", ""),
         }
@@ -1889,8 +2009,11 @@ class ControlCalidadDialog(QDialog):
             self.review_context['reference_municipality'] = current_reference['divipola']
             self.review_context['reference_date'] = current_reference['date']
             self.execution_info['R1 y R2 Vigente'] = current_reference['divipola'] + ' · ' + current_reference['date']
-        if self.reference_mode.currentIndex() == 0 and 'R2' in self.temporary_references:
-            self.review_context['reference_r2'] = self.temporary_references['R2'].fingerprint
+        if self.reference_mode.currentIndex() == 2:
+            self.review_context['reference_source'] = 'public'
+            self.review_context['reference_tables'] = {kind: ref.filename for kind, ref in self.active_local_references().items()}
+        if self.reference_mode.currentIndex() != 1 and 'R2' in self.active_local_references():
+            self.review_context['reference_r2'] = self.active_local_references()['R2'].fingerprint
         cica = dict(self.cica_references) if self.model.currentText() == 'CICA' else {}
         cica_gdb = self.active_cica_gdb()
         if cica_gdb:
@@ -1919,11 +2042,12 @@ class ControlCalidadDialog(QDialog):
         self.export_button.setEnabled(False)
         self.run_button.setEnabled(False)
         self.thread = QThread(self)
-        temporary = dict(self.temporary_references) if self.reference_mode.currentIndex() == 0 else {}
+        temporary = dict(self.active_local_references()) if self.reference_mode.currentIndex() != 1 else {}
         self.worker = RuleWorker(params, schema, "", "", rules, general_report_path, references=temporary, cica_references=cica, cica_gdb=cica_gdb, current_reference=current_reference, repository_params=repository_params, territorial_scope=scope, territorial_prefixes=self.scope_prefixes, model=self.model.currentText(), cica_selection=self.cica_selection if self.model.currentText() == 'CICA' else None)
         self.worker.reference_context.connect(self.review_context.update)
         self.worker.message.connect(self.update_worker_message)
         self.reference_mode.setEnabled(False)
+        self.public_reference_page.setEnabled(False)
         self.load_reference_button.setEnabled(False)
         self.refresh_references.setEnabled(False)
         self.municipality.setEnabled(False)
@@ -1983,6 +2107,7 @@ class ControlCalidadDialog(QDialog):
         self.interrupt_button.setEnabled(False)
         self.interrupt_button.setText('Interrumpir')
         self.ingestion_button.setEnabled(True)
+        self.public_reference_page.setEnabled(True)
         self.completed_format = self.pending_format if not self.validation_interrupted and any(result.status != 'Error' for result in self.results) else None
         self.format_download.setEnabled(bool(self.completed_format))
         if self.completed_format:
@@ -2129,10 +2254,10 @@ class ControlCalidadDialog(QDialog):
             needed = any('{tabla_' + marker + '}' in rule[2] or '{esquema_' + marker + '}' in rule[2] for rule in rules)
             if not needed:
                 continue
-            if self.reference_mode.currentIndex() == 0:
-                ref = self.temporary_references.get(kind)
+            if self.reference_mode.currentIndex() != 1:
+                ref = self.active_local_references().get(kind)
                 if ref is None or not ref.csv_path.is_file():
-                    missing.append(kind + ' temporal')
+                    missing.append(kind + (' de public pendiente de preparar' if self.reference_mode.currentIndex() == 2 else ' temporal'))
             else:
                 selection = self.selected_current_reference()
                 if selection is None or kind not in selection['tables']:

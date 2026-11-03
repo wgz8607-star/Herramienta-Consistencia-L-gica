@@ -542,3 +542,7 @@ Reconoce REPORTE y REPORTE_GENERAL para ejecutar el reporte general publicado. E
 ### Versión 2.14.5
 
 Referencias vigentes bajo el estándar r1_DIVIPOLA_AAAAMMDD y r2_DIVIPOLA_AAAAMMDD, documentado en Ayuda. El buscador se denomina Filtrar por Divipola. La copia CICA muestra su fecha y hora de corte destacadas en Municipio y etapas, tomando inicio del último registro creado (mayor id) de public.copia_cica_progreso. No se filtra por estado ni se sustituye la fecha por el reloj local. Botones deshabilitados en gris claro conservando los colores habilitados. Verificación: 263 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2.14.6
+
+Carga R1/R2 en TXT de ancho fijo (312/330 caracteres), validada con los ejemplos de Puerto Wilches, manteniendo ceros iniciales, duplicados y valores decimales. Tercera opción para preparar referencias de public de la conexión seleccionada mediante copias de solo lectura, con selección de tablas compatibles e invalidación al cambiar de conexión. La GDB ofrece selección directa de ZIP o carpeta .gdb. Copia base CICA materializa el alcance en tablas temporales indexadas y con estadísticas para evitar repetir los filtros dentro de cada regla. Las sentencias publicadas no se modifican. Verificación: 273 pruebas ejecutadas, 4 omitidas; rendimiento real pendiente de comprobar en el servidor.

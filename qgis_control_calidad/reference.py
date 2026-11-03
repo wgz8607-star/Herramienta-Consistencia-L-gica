@@ -20,7 +20,7 @@ class ReferenceDialog(QDialog):
         self.r1 = self.file_row(form, 'Archivo R1')
         self.r2 = self.file_row(form, 'Archivo R2 (opcional)')
         layout.addLayout(form)
-        self.status = QLabel('Seleccione un Excel R1 (.xlsx).')
+        self.status = QLabel('Seleccione R1 en Excel (.xlsx) o TXT estándar de ancho fijo.')
         layout.addWidget(self.status)
         self.progress = QProgressBar()
         self.progress.setVisible(False)
@@ -47,7 +47,7 @@ class ReferenceDialog(QDialog):
         return field
 
     def choose(self, field):
-        filename, _ = QFileDialog.getOpenFileName(self, 'Seleccionar referencia Excel', '', 'Excel (*.xlsx)')
+        filename, _ = QFileDialog.getOpenFileName(self, 'Seleccionar referencia R1/R2', '', 'Referencias (*.xlsx *.txt *.TXT);;Excel (*.xlsx);;TXT (*.txt *.TXT)')
         if filename:
             field.setText(filename)
             self.clear_prepared()

@@ -2,7 +2,7 @@
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView, QHeaderView, QComboBox, QDialog, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QProgressDialog, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QMessageBox, QMenu, QProgressDialog, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date, read_repository_cica_options, cica_selection
 from .cica_gdb import prepare_gdb, UnidentifiedGdbCrs
@@ -140,7 +140,11 @@ class CicaIngestionDialog(QDialog):
         self.gdb = QLineEdit(); self.gdb.setReadOnly(True); self.gdb.setPlaceholderText('Sin geodatabase seleccionada')
         if self.existing_gdb:
             self.gdb.setText(f'{self.existing_gdb.filename} · {len(self.existing_gdb.layers)} capas/tablas')
-        choose_gdb = QPushButton('Seleccionar GDB…'); choose_gdb.clicked.connect(self.choose_gdb)
+        choose_gdb = QPushButton('Seleccionar GDB (.zip / .gdb)…')
+        self.gdb_source_menu = QMenu(choose_gdb)
+        self.gdb_source_menu.addAction('Archivo ZIP (.zip)', lambda: self.choose_gdb())
+        self.gdb_source_menu.addAction('Carpeta geodatabase (.gdb)', lambda: self.choose_gdb(directory=True))
+        choose_gdb.setMenu(self.gdb_source_menu)
         gdb_row = QHBoxLayout(); gdb_row.addWidget(self.gdb, 1); gdb_row.addWidget(choose_gdb); gdb_layout.addLayout(gdb_row)
 
         _, summary_layout = card('Resumen de la base seleccionada')
@@ -379,12 +383,13 @@ class CicaIngestionDialog(QDialog):
         self.update_predio_summary()
         self.status.setText(f'{key}: preparado temporalmente. Use «Usar fuente de datos» para aplicarlo.')
 
-    def choose_gdb(self):
+    def choose_gdb(self, directory=False):
         if not self.allow_gdb:
             return
-        path, _ = QFileDialog.getOpenFileName(self, 'Seleccione una geodatabase comprimida', '', 'Geodatabase comprimida (*.zip)')
-        if not path:
+        if directory:
             path = QFileDialog.getExistingDirectory(self, 'Seleccione la carpeta .gdb')
+        else:
+            path, _ = QFileDialog.getOpenFileName(self, 'Seleccione una geodatabase comprimida', '', 'Geodatabase comprimida (*.zip)')
         if not path:
             return
         self.setEnabled(False)

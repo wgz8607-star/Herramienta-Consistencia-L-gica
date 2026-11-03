@@ -13,7 +13,7 @@ def set_query_limits(cursor):
     cursor.execute(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT_SECONDS}s'")
 
 
-def optimize_temporary_tables(connection, tables, spatial_columns=None, progress=None, use_limits=True):
+def optimize_temporary_tables(connection, tables, spatial_columns=None, progress=None, use_limits=True, index_prefix="validation"):
     spatial_columns = spatial_columns or {}
     for table_index, table in enumerate(sorted(set(tables))):
         if progress: progress(f'Optimizando tabla temporal {table}…')
@@ -25,16 +25,16 @@ def optimize_temporary_tables(connection, tables, spatial_columns=None, progress
             columns = {field.name for field in cursor.description or []}
             join_columns = sorted(columns & JOIN_COLUMNS)
             for index, column in enumerate(join_columns):
-                name = sql.Identifier(f'validation_join_{table_index}_{index}')
+                name = sql.Identifier(f'{index_prefix}_join_{table_index}_{index}')
                 cursor.execute(sql.SQL('CREATE INDEX {} ON {} ({})').format(name, target, sql.Identifier(column)))
                 if column in NPN_COLUMNS:
-                    name = sql.Identifier(f'validation_npn_{table_index}_{index}')
+                    name = sql.Identifier(f'{index_prefix}_npn_{table_index}_{index}')
                     cursor.execute(sql.SQL('CREATE INDEX {} ON {} ((btrim({}::text)))').format(name, target, sql.Identifier(column)))
             geometry = spatial_columns.get(table)
             if geometry and geometry in columns:
                 cursor.execute(sql.SQL('CREATE INDEX {} ON {} USING GIST ({})').format(
-                    sql.Identifier(f'validation_geom_{table_index}'), target, sql.Identifier(geometry)))
-            statistics_columns = set(join_columns) | (columns & {'estado', 'etapa', 'estado_control'})
+                    sql.Identifier(f'{index_prefix}_geom_{table_index}'), target, sql.Identifier(geometry)))
+            statistics_columns = set(join_columns) | (columns & {'estado', 'etapa', 'estado_control', 'resultado_visita', 'primer_nombre', 'primer_apellido', 'direccion', 'correo_electronico'})
             if geometry and geometry in columns: statistics_columns.add(geometry)
             if statistics_columns:
                 cursor.execute(sql.SQL('ANALYZE {} ({})').format(target, sql.SQL(', ').join(sql.Identifier(column) for column in sorted(statistics_columns))))

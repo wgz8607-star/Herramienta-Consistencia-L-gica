@@ -95,6 +95,19 @@ class CicaGdbTests(unittest.TestCase):
                 self.assertAlmostEqual(geometry.GetArea(), 2)
         self.assertEqual(prepared.layers['tabla_sin_geometria'].geometry_column, '')
 
+    def test_gdb_menu_opens_zip_or_folder_picker_directly(self):
+        dialog = CicaIngestionDialog()
+        try:
+            self.assertEqual(len(dialog.gdb_source_menu.actions()), 2)
+            with patch('qgis_control_calidad.ingestion.QFileDialog.getOpenFileName', return_value=('', '')) as zip_picker, patch('qgis_control_calidad.ingestion.QFileDialog.getExistingDirectory', return_value='') as folder_picker:
+                dialog.gdb_source_menu.actions()[0].trigger()
+                zip_picker.assert_called_once()
+                folder_picker.assert_not_called()
+                dialog.gdb_source_menu.actions()[1].trigger()
+                folder_picker.assert_called_once()
+        finally:
+            dialog.close()
+
     def test_gdb_reports_layer_progress(self):
         events = []
         prepared = prepare_gdb(self.source, progress=lambda *args: events.append(args))

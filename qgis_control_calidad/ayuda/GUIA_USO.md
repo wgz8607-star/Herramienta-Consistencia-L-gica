@@ -61,7 +61,7 @@ Use esta función para elegir los CSV/GDB del usuario o la Copia base CICA. No e
 
 1. Seleccione **CICA** y pulse **Seleccionar fuente de datos…**.
 2. Elija **Archivos CSV del usuario** o **Copia base CICA**. Para la segunda opción, pulse **Leer copia base CICA**: primero pulse **Consultar municipios y etapas**, seleccione el **Departamento** y después el **Municipio** (nombre y DIVIPOLA), o mantenga Todos los departamentos y elija **Todos los municipios**, y marque una o varias etapas. Puede seleccionar o deseleccionar todas las etapas. Después lea la copia: se consultan las siete tablas con esa selección y se muestran sus cantidades. Durante la lectura se indica la tabla en proceso y el avance por registros; si el servidor interrumpe una tabla por tiempo, se identifica y no se aplica una copia incompleta. Si cambia el municipio o las etapas, vuelva a leer la copia antes de usarla. La GDB continúa disponible y se valida sobre los predios seleccionados. Al seleccionar esta fuente se muestra la fecha de corte de `public.copia_cica_progreso`: el valor `inicio` del último registro creado (mayor `id`), sin filtrar por estado. Si no se puede consultar, se indica como no disponible. La lectura no modifica el esquema. Para CSV, pulse **Seleccionar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
-3. En **Validaciones del modelo**, si utilizará una geodatabase, pulse **Seleccionar GDB…** y elija una carpeta `.gdb` o un ZIP que contenga una sola geodatabase. En **CICA → Validaciones para cargue a SNC**, esta opción se oculta y la GDB no participa en la ejecución. Si una capa no tiene un EPSG identificable, el plugin asigna automáticamente EPSG:9377 (MAGNA-SIRGAS 2018 / Origen-Nacional), sin mostrar un aviso. La asignación se aplica solo a la copia temporal, sin reproyectar coordenadas ni modificar la GDB original. Todas las capas espaciales se preparan con una columna PostGIS `geom`, obtenida de la geometría real de cada elemento, para ejecutar las consultas espaciales.
+3. En **Validaciones del modelo**, si utilizará una geodatabase, pulse **Seleccionar GDB (.zip / .gdb)…** y elija **Archivo ZIP (.zip)** o **Carpeta geodatabase (.gdb)**. El ZIP debe contener una sola geodatabase. En **CICA → Validaciones para cargue a SNC**, esta opción se oculta y la GDB no participa en la ejecución. Si una capa no tiene un EPSG identificable, el plugin asigna automáticamente EPSG:9377 (MAGNA-SIRGAS 2018 / Origen-Nacional), sin mostrar un aviso. La asignación se aplica solo a la copia temporal, sin reproyectar coordenadas ni modificar la GDB original. Todas las capas espaciales se preparan con una columna PostGIS `geom`, obtenida de la geometría real de cada elemento, para ejecutar las consultas espaciales.
 4. Revise los nombres y cantidades informados. El resumen muestra los predios activos y cancelados de la fuente leída; en Copia base CICA corresponde al municipio y etapas seleccionados. Los otros estados se indican aparte. Para la distribución territorial y los filtros detallados, utilice la pestaña de estadística y filtro avanzado.
 5. Pulse **Usar fuente de datos** para aplicar la selección.
 
@@ -86,6 +86,20 @@ El Excel debe tener los encabezados en la primera fila de la hoja activa. Conser
 |---|---|
 | R1 | `NUMERO_PREDIAL`, `DESTINO_ECONOMICO`, `AREA_TERRENO`, `AREA_CONSTRUIDA`, `AVALUO`, `VIGENCIA` |
 | R2 | `NUMERO_PREDIAL`, `MATRICULA_INMOBILIARIA`, `AREA_TERRENO_1`, `AREA_CONSTRUIDA_1`, `VIGENCIA` |
+
+### R1 y R2 en TXT estándar
+
+En **Archivos R1 y R2 cargados por usuario**, pulse **Cargar R1 / R2…** y elija Excel `.xlsx` o TXT `.txt`. Puede combinar formatos. R1 es obligatorio; R2 es opcional, salvo que las reglas seleccionadas lo requieran.
+
+El TXT usa ancho fijo, sin separadores ni encabezados: **R1: 312 caracteres** por línea y **R2: 330 caracteres**. El NPN ocupa las posiciones **1–30** y el tipo de registro la **31** (1 o 2). El plugin valida cada línea, conserva los ceros iniciales y registros repetidos, convierte las comas decimales de áreas/avalúos al formato numérico de las consultas y conserva el registro original en la copia temporal. Lee UTF-8 o Windows-1252. Una línea inválida informa su número y no aplica una carga parcial. Los originales no se modifican.
+
+### R1 y R2 en public de la base seleccionada
+
+1. Seleccione la conexión de la base catastral a validar.
+2. En **Referencias R1/R2**, elija **R1 y R2 en public de la base seleccionada**.
+3. Pulse **Consultar R1/R2 en public**. Se listan tablas y vistas compatibles según las columnas requeridas para cada referencia, sin exigir un nombre de tabla específico.
+4. Seleccione R1 y, si corresponde, R2; pulse **Preparar referencias de public** y compruebe la base, las tablas y el número de registros.
+5. Continúe con las estadísticas, filtros y validación. Se utilizan copias temporales; no se escribe en public. Si cambia la conexión o la selección de tablas, debe consultar/preparar nuevamente. La fuente vigente en `sentencias.r1_r2` sigue siendo una opción independiente.
 
 ### R1 y R2 Vigente
 
@@ -227,3 +241,5 @@ En Copia base CICA, el municipio se identifica con los primeros cinco dígitos d
 - Al cargar una GDB, una ventana indica que el proceso está en curso y muestra el avance por capas y los registros leídos. La apertura o extracción inicial muestra una barra de actividad; espere a que termine antes de continuar.
 
 Los botones deshabilitados se muestran en gris claro; al habilitarse recuperan el color de su acción.
+
+Al validar con Copia base CICA, el alcance se prepara una sola vez en tablas temporales con índices y estadísticas. Esto evita repetir los filtros de selección dentro de cada regla y conserva los registros, duplicados y valores nulos del alcance. Las sentencias publicadas no se modifican; la preparación puede tardar antes de empezar la primera regla.

@@ -58,6 +58,22 @@ class ValidationPerformanceTests(unittest.TestCase):
         self.assertTrue(any('regla_1_13 (2 de 2)' in message for message in messages))
         self.assertTrue(connection.closed)
 
+    def test_copy_cica_materializes_scope_and_indexes_filtered_tables_without_rule_edits(self):
+        query = 'SELECT 1'
+        connection = FakeConnection()
+        selection = {'municipality': '08421', 'stages': ('ASIGNADO',)}
+        worker = RuleWorker({}, 'pg_temp', '', '', [('Administrativas', 'regla_1_51', query, '')], cica_selection=selection)
+        errors = []; worker.fatal_error.connect(errors.append)
+        with patch('qgis_control_calidad.dialog.psycopg2.connect', return_value=connection), patch('qgis_control_calidad.dialog.install_scope', return_value={('pg_temp', 'cica_contacto'): 'validation_scope_0'}) as scope, patch('qgis_control_calidad.dialog.optimize_temporary_tables') as optimize:
+            worker.run()
+        self.assertEqual(errors, [])
+        self.assertTrue(scope.call_args.kwargs['materialize'])
+        self.assertEqual(optimize.call_args.args[1], {'validation_scope_0'})
+        self.assertEqual(optimize.call_args.kwargs['index_prefix'], 'validation_scope')
+        self.assertEqual(worker.rules[0][2], query)
+        self.assertIn(('sql', query), connection.events)
+        self.assertTrue(connection.closed)
+
     def test_progress_preserves_actual_rule_name_and_shows_elapsed_time(self):
         widget = ControlCalidadDialog()
         try:

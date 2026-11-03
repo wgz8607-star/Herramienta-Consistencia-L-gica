@@ -46,7 +46,7 @@ def normalize_prefixes(prefixes):
     return values
 
 
-def install_scope(connection, schema, temporary_tables, references, scope, prefixes=(), model="CICA", cica_filter=None):
+def install_scope(connection, schema, temporary_tables, references, scope, prefixes=(), model="CICA", cica_filter=None, materialize=False):
     if scope not in SCOPES:
         raise ValueError('Seleccione el alcance de validación de CICA.')
     prefixes = normalize_prefixes(prefixes)
@@ -82,7 +82,9 @@ def install_scope(connection, schema, temporary_tables, references, scope, prefi
                 else:
                     predio_namespace = 'pg_temp' if predio in temporary_tables else schema
                     condition = sql.SQL('({}) AND ({})').format(condition, cica_member_predicate(column, cica_filter, predio_namespace))
-            cursor.execute(sql.SQL('CREATE TEMP VIEW {} AS SELECT * FROM {} WHERE {}').format(
+            statement = ('CREATE TEMP TABLE {} ON COMMIT PRESERVE ROWS AS SELECT * FROM {} WHERE {}'
+                         if materialize else 'CREATE TEMP VIEW {} AS SELECT * FROM {} WHERE {}')
+            cursor.execute(sql.SQL(statement).format(
                 sql.Identifier(view), sql.Identifier(namespace, table), condition))
             mapping[(namespace, table)] = view
         if not predio_found:

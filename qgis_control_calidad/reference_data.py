@@ -48,6 +48,9 @@ class PreparedReference:
 def prepare_reference(kind, filename, progress=None):
     if kind not in REQUIRED:
         raise ValueError('Tipo de referencia no válido.')
+    if Path(filename).suffix.lower() == '.txt':
+        from .reference_txt import prepare_txt_reference
+        return prepare_txt_reference(kind, filename, progress)
     directory = tempfile.TemporaryDirectory(prefix='qgis_reference_')
     workbook = None
     try:

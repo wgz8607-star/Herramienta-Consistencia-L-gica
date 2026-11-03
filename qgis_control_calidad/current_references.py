@@ -82,16 +82,23 @@ def _reference_connection(params, on_connection=None):
             if on_connection: on_connection(None)
 
 
-def prepare_current_references(params, selection, kinds, cancel_check=None, on_connection=None):
+def prepare_current_references(params, selection, kinds, cancel_check=None, on_connection=None, source_schema=SCHEMA):
     """Snapshot required tables consistently, keeping leading zeroes as stored text."""
     if psycopg2 is None:
         raise RuntimeError('Se requiere psycopg2 para leer las referencias vigentes.')
     prepared = {}
     try:
+        if source_schema not in (SCHEMA, 'public'):
+            raise ValueError('Esquema de referencias no admitido.')
+        public_catalog = None
+        if source_schema == 'public':
+            from .public_references import read_public_catalog
+            public_catalog = read_public_catalog(params)
         for kind in kinds:
             table = selection.get('tables', {}).get(kind, '')
             expected = f"{kind.lower()}_{selection.get('divipola', '')}_{selection.get('stamp', '')}"
-            if kind not in REQUIRED or not NAME.fullmatch(table) or table != expected:
+            valid = (bool(NAME.fullmatch(table)) and table == expected) if public_catalog is None else table in public_catalog.get(kind, [])
+            if kind not in REQUIRED or not valid:
                 raise ValueError(f'{kind} no está disponible para el municipio y fecha seleccionados.')
         if not kinds:
             return prepared
@@ -105,7 +112,7 @@ def prepare_current_references(params, selection, kinds, cancel_check=None, on_c
                     try:
                         with connection.cursor() as cursor:
                             cursor.execute("SET LOCAL statement_timeout = '60s'")
-                            cursor.execute(sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier(SCHEMA), sql.Identifier(table)))
+                            cursor.execute(sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier(source_schema), sql.Identifier(table)))
                             fields = [item.name for item in cursor.description]
                             columns = tuple(column_name(field, index) for index, field in enumerate(fields, 1))
                             if len(columns) != len(set(columns)):
@@ -132,7 +139,7 @@ def prepare_current_references(params, selection, kinds, cancel_check=None, on_c
                                         count += 1
                         # A database may return unchanged rows in a different order.
                         fingerprint = hashlib.sha256(json.dumps((columns, count, total, squares)).encode()).hexdigest()
-                        prepared[kind] = PreparedReference(kind, SCHEMA + '.' + table, columns, count, fingerprint, path, directory)
+                        prepared[kind] = PreparedReference(kind, source_schema + '.' + table, columns, count, fingerprint, path, directory)
                     except Exception:
                         directory.cleanup()
                         raise

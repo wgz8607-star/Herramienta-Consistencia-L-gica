@@ -187,7 +187,7 @@ class TemporaryReferenceTests(unittest.TestCase):
         widget.left_tabs.setCurrentIndex(1)
         self.assertTrue(widget.left_tabs.currentWidget().isAncestorOf(widget.reference_mode))
         self.assertEqual(widget.reference_mode.count(), 3)
-        self.assertEqual(widget.reference_mode.itemText(1), 'R1 y R2 Vigente')
+        self.assertEqual(widget.reference_mode.itemText(1), 'Opción 2: Archivos r1 y r2 precargados - Sin fecha seleccionada')
         with patch.object(widget, 'load_current_references'):
             widget.reference_mode.setCurrentIndex(1)
         self.assertEqual(widget.reference_pages.currentIndex(), 1)

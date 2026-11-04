@@ -81,7 +81,8 @@ def prepare_txt_reference(kind, filename, progress=None):
                     progress(kind, count)
         if not count:
             raise ValueError(f'{kind}: el TXT no contiene registros.')
-        return PreparedReference(kind, source.name, columns, count, digest.hexdigest(), path, directory)
+        from .r1_unification import unify_r1
+        return unify_r1(PreparedReference(kind, source.name, columns, count, digest.hexdigest(), path, directory), progress)
     except Exception:
         directory.cleanup()
         raise

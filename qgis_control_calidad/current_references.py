@@ -115,9 +115,15 @@ def prepare_current_references(params, selection, kinds, cancel_check=None, on_c
                             cursor.execute(sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier(source_schema), sql.Identifier(table)))
                             fields = [item.name for item in cursor.description]
                             columns = tuple(column_name(field, index) for index, field in enumerate(fields, 1))
+                            required = REQUIRED[kind]
+                            if source_schema == 'public':
+                                from .public_references import PUBLIC_REQUIRED, normalize_public_columns
+                                required = PUBLIC_REQUIRED[kind]
+                                if kind == 'R1':
+                                    columns = normalize_public_columns(columns)
                             if len(columns) != len(set(columns)):
                                 raise ValueError(f'{table}: hay columnas duplicadas después de normalizarlas.')
-                            missing = REQUIRED[kind] - set(columns)
+                            missing = required - set(columns)
                             if missing:
                                 raise ValueError(f'{table}: faltan columnas requeridas: ' + ', '.join(sorted(missing)))
                             path = Path(directory.name) / 'reference.csv'
@@ -139,7 +145,8 @@ def prepare_current_references(params, selection, kinds, cancel_check=None, on_c
                                         count += 1
                         # A database may return unchanged rows in a different order.
                         fingerprint = hashlib.sha256(json.dumps((columns, count, total, squares)).encode()).hexdigest()
-                        prepared[kind] = PreparedReference(kind, source_schema + '.' + table, columns, count, fingerprint, path, directory)
+                        from .r1_unification import unify_r1
+                        prepared[kind] = unify_r1(PreparedReference(kind, source_schema + '.' + table, columns, count, fingerprint, path, directory), cancel_check=cancel_check)
                     except Exception:
                         directory.cleanup()
                         raise

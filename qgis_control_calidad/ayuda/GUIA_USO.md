@@ -91,7 +91,7 @@ El Excel debe tener los encabezados en la primera fila de la hoja activa. Conser
 
 En **Archivos R1 y R2 cargados por usuario**, pulse **Cargar R1 / R2…** y elija Excel `.xlsx` o TXT `.txt`. Puede combinar formatos. R1 es obligatorio; R2 es opcional, salvo que las reglas seleccionadas lo requieran.
 
-El TXT usa ancho fijo, sin separadores ni encabezados: **R1: 312 caracteres** por línea y **R2: 330 caracteres**. El NPN ocupa las posiciones **1–30** y el tipo de registro la **31** (1 o 2). El plugin valida cada línea, conserva los ceros iniciales y registros repetidos, convierte las comas decimales de áreas/avalúos al formato numérico de las consultas y conserva el registro original en la copia temporal. Lee UTF-8 o Windows-1252. Una línea inválida informa su número y no aplica una carga parcial. Los originales no se modifican.
+El TXT usa ancho fijo, sin separadores ni encabezados: **R1: 312 caracteres** por línea y **R2: 330 caracteres**. El NPN ocupa las posiciones **1–30** y el tipo de registro la **31** (1 o 2). El plugin valida cada línea, conserva los ceros iniciales, unifica R1 por NPN y mantiene los registros de R2, convierte las comas decimales de áreas/avalúos al formato numérico de las consultas y conserva el registro original en la copia temporal. Lee UTF-8 o Windows-1252. Una línea inválida informa su número y no aplica una carga parcial. Los originales no se modifican.
 
 ### R1 y R2 en public de la base seleccionada
 
@@ -249,3 +249,17 @@ Al validar con Copia base CICA, el alcance se prepara una sola vez en tablas tem
 En **Validaciones del modelo**, la GDB es opcional si la base alfanumérica CICA está cargada (CSV o Copia base CICA). Al ejecutar sin GDB, aparece un mensaje emergente **CICA: validación sin GDB** antes del resumen de parámetros, con el listado de controles seleccionados que requieren datos geográficos. La advertencia también queda visible dentro de la confirmación. Solo se ejecutan los restantes. Una regla que mezcla datos alfanuméricos y capas GDB se omite completa; las sentencias publicadas no se modifican.
 
 Las reglas omitidas no se cuentan como ejecutadas, correctas ni errores técnicos. La cobertura sin GDB y los controles no ejecutados quedan indicados en los metadatos de los reportes. Si el reporte general requiere capas GDB, se indica que no fue ejecutado; no se genera una versión parcial de su SQL. Si todas las reglas seleccionadas requieren GDB, cargue una geodatabase o seleccione otros controles antes de continuar. Con GDB se mantiene la ejecución normal de las reglas seleccionadas. En Cargue SNC, la GDB continúa oculta y excluida según ese ambiente.
+
+### Opciones de origen de R1/R2
+
+- **Opción 1: Archivos r1 y r2 cargados por usuario**: carga local Excel o TXT.
+- **Opción 2: Archivos r1 y r2 precargados - fecha de vigencia**: la fecha del nombre se actualiza al seleccionar el municipio en las referencias precargadas. Sin selección se indica **Sin fecha seleccionada**.
+- **Opción 3: Archivos r1 y r2 cargados en "Public" de la base seleccionada**: consulta las tablas/vistas de esa conexión. Para R1 también reconoce estructuras mínimas con `numero_predial` y `areaterreno` (o `area_terreno`). `areaterreno` se presenta como `area_terreno` únicamente en la copia temporal usada por las consultas; no se modifica la tabla original ni se crean valores para columnas faltantes. Las reglas que consulten otros campos necesitan que esos campos estén presentes en la tabla seleccionada. La estructura requerida para R2 no cambia.
+
+En **Reporte general**, el ítem **Todos los registros de R1** cuenta NPN completos únicos incluidos en el alcance y los filtros de la validación. No suma registros repetidos ni NPN vacíos. El ajuste del total se realiza al preparar el resultado del reporte; no modifica las sentencias publicadas. R1 se unifica también para la ejecución de las reglas.
+
+El **Resumen ejecutivo** del resumen de control de calidad CICA indica **Geodatabase CICA** con el nombre del archivo ZIP o carpeta GDB usado al ejecutar. Si no se utilizó, muestra **GDB no cargada**. Se conserva el dato de esa ejecución aunque luego se cambie la fuente.
+
+### Unificación de R1 para ejecución y reportes
+
+En las tres opciones de origen se prepara **un solo registro R1 por NPN completo**. Se conserva el **primero leído**, incluso si los siguientes tienen valores distintos; no se suman áreas ni avalúos. Se mantienen los ceros iniciales y se recortan espacios exteriores del NPN. Las filas sin NPN no se usan como predios. Las estadísticas indican cuántos duplicados y filas sin NPN se excluyeron. Las sentencias, cruces, filtros y reportes usan esta misma referencia R1 unificada. R2 no se unifica. Los archivos y tablas originales permanecen intactos. Para referencias de base de datos, primero significa el primer registro devuelto en la lectura de esa copia de la fuente.

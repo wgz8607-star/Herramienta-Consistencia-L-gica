@@ -4,6 +4,16 @@ import psycopg2
 from .reference_data import REQUIRED, column_name
 
 
+PUBLIC_REQUIRED = {'R1': {'numero_predial', 'area_terreno'}, 'R2': REQUIRED['R2']}
+
+
+def normalize_public_columns(columns):
+    result = list(columns)
+    if 'area_terreno' not in result and 'areaterreno' in result:
+        result[result.index('areaterreno')] = 'area_terreno'
+    return tuple(result)
+
+
 def read_public_catalog(params):
     with closing(psycopg2.connect(**params, connect_timeout=8)) as connection:
         connection.set_session(readonly=True)
@@ -14,8 +24,8 @@ def read_public_catalog(params):
             for table, column in cursor.fetchall():
                 tables.setdefault(table, []).append(column_name(column, 1))
     return {kind: [table for table, columns in tables.items()
-                   if len(columns) == len(set(columns)) and required <= set(columns)]
-            for kind, required in REQUIRED.items()}
+                   if len(columns) == len(set(columns)) and required <= set(normalize_public_columns(columns))]
+            for kind, required in PUBLIC_REQUIRED.items()}
 
 
 def prepare_public_references(params, selection):

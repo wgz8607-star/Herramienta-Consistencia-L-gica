@@ -1,4 +1,5 @@
 """Prepare local reference snapshots and install session-only PostgreSQL tables."""
+from __future__ import annotations
 import csv
 from dataclasses import dataclass
 import hashlib
@@ -40,6 +41,10 @@ class PreparedReference:
     fingerprint: str
     csv_path: Path
     directory: object
+    original_row_count: int | None = None
+    duplicate_count: int = 0
+    missing_npn_count: int = 0
+    unified: bool = False
 
     def close(self):
         self.directory.cleanup()
@@ -86,7 +91,8 @@ def prepare_reference(kind, filename, progress=None):
                 count += 1
                 if progress and count % 1000 == 0:
                     progress(kind, count)
-        return PreparedReference(kind, Path(filename).name, columns, count, digest.hexdigest(), path, directory)
+        from .r1_unification import unify_r1
+        return unify_r1(PreparedReference(kind, Path(filename).name, columns, count, digest.hexdigest(), path, directory), progress)
     except Exception:
         directory.cleanup()
         raise
@@ -99,6 +105,8 @@ def install_reference(connection, reference):
     """No DROP/CREATE in public. TEMP rows survive rule-level rollback after commit."""
     if sql is None:
         raise RuntimeError('Se requiere psycopg2 para cargar referencias temporales.')
+    from .r1_unification import unify_r1
+    reference = unify_r1(reference)
     table = TEMP_TABLES[reference.kind]
     definitions = sql.SQL(', ').join(sql.SQL('{} TEXT').format(sql.Identifier(c)) for c in reference.columns)
     with connection.cursor() as cursor:

@@ -130,6 +130,8 @@ def read_source_statistics(params, schema, model, snapshot=None, table_name=None
         with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
             data = statistics_from_values(values(csv.reader(stream)),
                                           'Base catastral a validar · Temporal · ' + ('cica_predio' if model == 'CICA' else 'ilc_predio'), unique=(model == 'R1'))
+        if model == 'R1' and getattr(snapshot, 'unified', False):
+            data.update(row_count=snapshot.original_row_count, duplicates=snapshot.duplicate_count, missing_npn=snapshot.missing_npn_count)
         if model != 'R1':
             data['status_counts'] = ({**{key: statuses[key] for key in ('active', 'cancelled', 'other')}, 'method': 'Campo estado'}
                                      if status_index is not None else unavailable_status('La base temporal no tiene campo estado.'))

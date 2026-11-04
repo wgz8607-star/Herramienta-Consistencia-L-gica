@@ -554,3 +554,7 @@ Selector de esquemas en árbol Departamento → Municipio → Esquema, búsqueda
 ### Versión 2.14.8
 
 Al ejecutar CICA sin GDB se presenta un mensaje emergente explícito antes de confirmar parámetros, con las reglas geográficas omitidas y la exclusión del reporte general cuando corresponde. Si ninguna regla seleccionada requiere GDB, el mensaje lo indica. Con GDB no aparece esta alerta. Se conserva la advertencia en el resumen y el registro de omisiones en los reportes. Verificación: 286 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2.14.9
+
+Unificación de R1 por NPN antes de ejecutar reglas y generar reportes, conservando el primer registro leído, sin sumar áreas y manteniendo R2 sin cambios. Opciones R1/R2 renombradas y fecha de vigencia visible; reconoce R1 mínimo de public con numero_predial y areaterreno. El reporte general cuenta los NPN R1 únicos del filtro. El aviso de fuente usa Leer copia base CICA. Resumen ejecutivo CICA con nombre de GDB o GDB no cargada. Ayuda actualizada. Verificación: 300 pruebas ejecutadas, 4 omitidas. No se modifican las sentencias publicadas ni los archivos/tablas originales.

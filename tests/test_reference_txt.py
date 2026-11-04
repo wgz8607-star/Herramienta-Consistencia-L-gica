@@ -40,11 +40,14 @@ class TxtReferencesTests(unittest.TestCase):
         for kind in ('R1','R2'):
             line = self.source(kind)
             prepared, source = self.prepare(kind,line+'\r\n'+line+'\r\n', 'cp1252' if kind=='R1' else 'utf-8-sig')
-            self.assertEqual(prepared.row_count,2)
+            self.assertEqual(prepared.row_count,1 if kind=='R1' else 2)
             self.assertTrue(REQUIRED[kind] <= set(prepared.columns))
             with prepared.csv_path.open(encoding='utf-8',newline='') as stream:
                 rows=list(csv.reader(stream))
-            self.assertEqual(rows[0], rows[1])
+            if kind=='R2':
+                self.assertEqual(rows[0], rows[1])
+            else:
+                self.assertEqual(prepared.duplicate_count,1)
             row=dict(zip(prepared.columns,rows[0]))
             self.assertEqual(row['numero_predial'],'000010200000000000000000000001')
             self.assertEqual(row['registro_original'],line)

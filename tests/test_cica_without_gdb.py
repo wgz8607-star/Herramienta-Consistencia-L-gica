@@ -92,6 +92,7 @@ class WithoutGdbUiTests(unittest.TestCase):
         self.assertEqual(worker.call_args.args[4],[self.alpha])
         self.assertIsNone(worker.call_args.args[5])
         self.assertEqual(self.widget.general_report_error,'No ejecutado: requiere GDB.')
+        self.assertEqual(self.widget.execution_info['Geodatabase CICA'], 'GDB no cargada')
         self.assertIn('regla_geo',self.widget.execution_info['Reglas no ejecutadas por falta de GDB'])
         sheet=Workbook().active
         prepare_validation_index(sheet,self.widget.execution_info,'Municipio de prueba')

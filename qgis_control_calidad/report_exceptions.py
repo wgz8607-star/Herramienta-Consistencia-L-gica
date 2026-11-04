@@ -202,6 +202,8 @@ def prepare_validation_index(sheet, metadata, location, component=None, title=No
     fields = [(key, metadata.get(key) or 'No disponible') for key in (
         'Fecha de ejecución', 'Modelo', 'Ambiente', 'Versión SQL', 'Alcance territorial',
         'Manzanas / veredas (NPN 1–17)', 'Base de datos', 'Esquema')]
+    if sheet.title == 'Resumen ejecutivo' and metadata.get('Geodatabase CICA'):
+        fields.append(('Geodatabase CICA', metadata['Geodatabase CICA']))
     fields.extend((key, metadata[key]) for key in ('Cobertura geográfica', 'Reglas no ejecutadas por falta de GDB', 'Reporte general omitido') if metadata.get(key))
     fields.append(('Ubicación territorial', location or 'No disponible'))
     for key in ('R1 y R2 Vigente',):

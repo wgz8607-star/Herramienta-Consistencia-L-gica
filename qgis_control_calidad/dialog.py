@@ -31,6 +31,7 @@ from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
 from .schema_selector import SchemaSelector, matching_schemas
+from .general_report_counts import apply_unique_filtered_r1_count
 from .gdb_dependencies import requires_gdb, partition_rules, omission_description
 from .cica_gdb import install_gdb
 from .territorial_scope import SCOPES, install_scope, resolve_scope
@@ -412,7 +413,9 @@ class RuleWorker(QObject):
                             rows = cursor.fetchall() if cursor.description else []
                             self.check_cancelled()
                             fields = [column.name for column in cursor.description] if cursor.description else []
-                        self.general_report.emit([dict(zip(fields, row)) for row in rows], "")
+                        report_rows = [dict(zip(fields, row)) for row in rows]
+                        apply_unique_filtered_r1_count(connection, report_rows, self.resolve_sql, self.check_cancelled)
+                        self.general_report.emit(report_rows, "")
                     except Exception as error:
                         connection.rollback()
                         self.check_cancelled()
@@ -812,7 +815,7 @@ class ControlCalidadDialog(QDialog):
         reference_layout = QVBoxLayout(references)
         reference_layout.setContentsMargins(8, 14, 8, 6)
         self.reference_mode = QComboBox()
-        self.reference_mode.addItems(["Archivos R1 y R2 cargados por usuario", "R1 y R2 Vigente", "R1 y R2 en public de la base seleccionada"])
+        self.reference_mode.addItems(['Opción 1: Archivos r1 y r2 cargados por usuario', 'Opción 2: Archivos r1 y r2 precargados - Sin fecha seleccionada', 'Opción 3: Archivos r1 y r2 cargados en "Public" de la base seleccionada'])
         self.reference_mode.currentIndexChanged.connect(self.reference_mode_changed)
         self.reference_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.reference_mode.setMinimumContentsLength(22)
@@ -1526,11 +1529,15 @@ class ControlCalidadDialog(QDialog):
     def show_current_reference(self, *_):
         selection = self.selected_current_reference()
         if selection is None:
+            self.reference_mode.setItemText(1, 'Opción 2: Archivos r1 y r2 precargados - Sin fecha seleccionada')
+            self.reference_mode.setItemData(1, self.reference_mode.itemText(1), Qt.ToolTipRole)
             self.reference_date.setText('Fecha vigente: sin selección')
             self.current_reference_status.setText('Seleccione un municipio del catálogo.')
             self.update_advanced_filter_availability()
             return
         date = datetime.strptime(selection['date'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        self.reference_mode.setItemText(1, 'Opción 2: Archivos r1 y r2 precargados - ' + date)
+        self.reference_mode.setItemData(1, self.reference_mode.itemText(1), Qt.ToolTipRole)
         self.reference_date.setText('Fecha vigente: ' + date)
         tables = selection['tables']
         self.current_reference_status.setText('\n'.join(kind + ': ' + tables.get(kind, 'No disponible para esta fecha') for kind in ('R1', 'R2')))
@@ -2027,6 +2034,7 @@ class ControlCalidadDialog(QDialog):
         }
         if self.model.currentText() == 'CICA':
             self.execution_info['Cobertura geográfica'] = 'Con GDB' if self.active_cica_gdb() else 'Sin GDB: solo reglas alfanuméricas'
+            self.execution_info['Geodatabase CICA'] = self.active_cica_gdb().filename if self.active_cica_gdb() else 'GDB no cargada'
             if omitted_gdb_rules:
                 self.execution_info['Reglas no ejecutadas por falta de GDB'] = omission_description(omitted_gdb_rules)
             if omitted_report:

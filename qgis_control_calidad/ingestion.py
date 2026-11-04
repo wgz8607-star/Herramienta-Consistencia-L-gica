@@ -459,7 +459,7 @@ class CicaIngestionDialog(QDialog):
 
     def validate_inputs(self):
         if self.source_mode.currentIndex() == 1 and (not self.replace_references or self.loaded_selection != self.selected_source_filter()):
-            QMessageBox.warning(self, 'Fuente pendiente', 'Pulse «Leer tablas» antes de usar esta fuente.')
+            QMessageBox.warning(self, 'Fuente pendiente', 'Pulse «Leer copia base CICA» antes de usar esta fuente.')
             return
         if not (self.prepared or self.existing or self.prepared_gdb or self.existing_gdb):
             QMessageBox.warning(self, 'Sin insumos', 'Seleccione al menos un CSV o una geodatabase.' if self.allow_gdb else 'Seleccione al menos un CSV o lea la Copia base CICA.')

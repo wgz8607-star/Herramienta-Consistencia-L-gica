@@ -30,6 +30,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
+from .schema_selector import SchemaSelector, matching_schemas
+from .gdb_dependencies import requires_gdb, partition_rules, omission_description
 from .cica_gdb import install_gdb
 from .territorial_scope import SCOPES, install_scope, resolve_scope
 from .territorial_filter import TerritorialFilterDialog, TerritorialOverview
@@ -586,7 +588,9 @@ class ControlCalidadDialog(QDialog):
         manual_form.addRow("Usuario", self.user)
         manual_form.addRow("Contraseña", self.password)
         self.connection_stack.addWidget(manual_page)
-        self.schema = QComboBox()
+        self.schema = SchemaSelector()
+        from .current_references import municipal_names
+        self.schema.catalog = municipal_names(DIVIPOLA_FILE)
         self.schema.setEditable(False)
         self.schema.currentTextChanged.connect(self.clear_territorial_prefixes)
         form.addRow("Modelo", self.model)
@@ -626,7 +630,7 @@ class ControlCalidadDialog(QDialog):
         schema_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
         schema_form.addRow(test)
         self.schema_search = QLineEdit()
-        self.schema_search.setPlaceholderText('Filtrar por Divipola')
+        self.schema_search.setPlaceholderText('DIVIPOLA, departamento, municipio o esquema…')
         self.schema_search.setEnabled(False)
         self.schema_search.textChanged.connect(self.filter_schemas)
         self.listed_schemas = []
@@ -1767,7 +1771,7 @@ class ControlCalidadDialog(QDialog):
     def filter_schemas(self, *_):
         selected = self.schema.currentText()
         text = self.schema_search.text().strip().casefold()
-        names = [name for name in self.listed_schemas if text in name.casefold()]
+        names = matching_schemas(self.listed_schemas, self.schema.catalog, text)
         self.schema.clear()
         self.schema.addItems(names)
         self.schema.setCurrentIndex(self.schema.findText(selected))
@@ -1882,6 +1886,15 @@ class ControlCalidadDialog(QDialog):
                 rows.append(('Geodatabase CICA', self.active_cica_gdb().filename))
             if self.cica_references:
                 rows.append(('Archivos CICA', '\n'.join(table + ': ' + reference.filename for table, reference in sorted(self.cica_references.items()))))
+        if self.model.currentText() == 'CICA' and not self.active_cica_gdb():
+            rules, omitted = partition_rules(rules, False)
+            if self.environment.currentText() != SNC_ENVIRONMENT or omitted or (general_report_path and requires_gdb(general_report_path)):
+                notice = 'No se cargó GDB. Se ejecutarán únicamente las reglas que no requieren datos geográficos.'
+                if omitted:
+                    notice += '\nNo se ejecutarán:\n' + omission_description(omitted)
+                if general_report_path and requires_gdb(general_report_path):
+                    notice += '\nEl reporte general tampoco se ejecutará porque requiere GDB.'
+                rows.append(('Advertencia: validación sin GDB', notice))
         counts = defaultdict(int)
         for component, _name, _sql, _description in rules:
             counts[component] += 1
@@ -1901,6 +1914,12 @@ class ControlCalidadDialog(QDialog):
         browser = QTextBrowser()
         browser.setOpenExternalLinks(False); browser.setOpenLinks(False)
         rows = self.validation_confirmation_metadata(params, schema, rules, current_reference, general_report_path)
+        warning = next((value for name, value in rows if name == 'Advertencia: validación sin GDB'), None)
+        if warning:
+            alert = QLabel('Validación sin GDB: las reglas que requieren datos geográficos no se ejecutarán. Consulte el detalle de exclusiones abajo.')
+            alert.setWordWrap(True)
+            alert.setStyleSheet('QLabel { background: #FFF3CD; color: #785600; border-left: 4px solid #D8931A; padding: 10px; font-weight: bold; }')
+            layout.insertWidget(1, alert)
         html = '<table width="100%" cellspacing="0" cellpadding="8">' + ''.join(
             '<tr><td width="32%" bgcolor="#EAF3F8"><b>' + escape(str(name)) + '</b></td><td>' +
             escape(str(value)).replace('\n', '<br>') + '</td></tr>' for name, value in rows) + '</table>'
@@ -1936,6 +1955,18 @@ class ControlCalidadDialog(QDialog):
             and item["sql"] and item["sql"].strip()
         ]
         general_report_path = general_report_sql(self.repository_rules)
+        selected_rules = list(rules)
+        selected_report = general_report_path
+        omitted_gdb_rules = []
+        omitted_report = False
+        if self.model.currentText() == 'CICA' and not self.active_cica_gdb():
+            rules, omitted_gdb_rules = partition_rules(rules, False)
+            omitted_report = bool(general_report_path and requires_gdb(general_report_path))
+            if omitted_report:
+                general_report_path = None
+            if selected_rules and not rules:
+                QMessageBox.warning(self, 'Sin reglas ejecutables sin GDB', 'Todas las reglas seleccionadas requieren GDB y no se ejecutarán. Cargue una GDB o seleccione controles alfanuméricos.\n\n' + omission_description(omitted_gdb_rules))
+                return
         if not rules:
             QMessageBox.critical(self, "Reglas no encontradas", "No hay reglas SQL en la selección actual.")
             return
@@ -1968,7 +1999,7 @@ class ControlCalidadDialog(QDialog):
             if len(schema_codes) == 1 and current_reference['divipola'] not in schema_codes:
                 QMessageBox.warning(self, 'Municipio diferente', 'El DIVIPOLA seleccionado para R1 y R2 Vigente no coincide con el código del esquema a validar.')
                 return
-        if not self.confirm_validation(params, schema, rules, current_reference, general_report_path):
+        if not self.confirm_validation(params, schema, selected_rules, current_reference, selected_report):
             return
         if not self.commit_review_editor() or not self.confirm_review_changes():
             return
@@ -1984,6 +2015,12 @@ class ControlCalidadDialog(QDialog):
             'Versión SQL': self.selected_sql_version.get('codigo', ''),
             'Base de datos': params.get('dbname', ''), 'Esquema': schema,
         }
+        if self.model.currentText() == 'CICA':
+            self.execution_info['Cobertura geográfica'] = 'Con GDB' if self.active_cica_gdb() else 'Sin GDB: solo reglas alfanuméricas'
+            if omitted_gdb_rules:
+                self.execution_info['Reglas no ejecutadas por falta de GDB'] = omission_description(omitted_gdb_rules)
+            if omitted_report:
+                self.execution_info['Reporte general omitido'] = 'Requiere GDB; no se ejecutó.'
         self.execution_info["Alcance territorial"] = SCOPES[scope]
         self.execution_info["Manzanas / veredas (NPN 1–17)"] = ", ".join(self.scope_prefixes) or "Todas"
         self.results.clear()
@@ -2002,6 +2039,8 @@ class ControlCalidadDialog(QDialog):
 
             "repository": self.selected_sql_version.get("source", {}).get("label", ""),
         }
+        if omitted_gdb_rules:
+            self.review_context['omitted_gdb_rules'] = [(rule[0], rule[1]) for rule in omitted_gdb_rules]
         self.review_context["territorial_scope"] = scope
         self.review_context["territorial_prefixes"] = list(self.scope_prefixes)
         if current_reference:
@@ -2024,13 +2063,13 @@ class ControlCalidadDialog(QDialog):
             self.review_context['cica_csv'] = {table: reference.fingerprint for table, reference in sorted(cica.items())}
         self.table.setRowCount(0)
         self.general_report_rows = []
-        self.general_report_error = ""
+        self.general_report_error = "No ejecutado: requiere GDB." if omitted_report else ""
         self.validation_context = self.resolve_validation_context(params, schema)
         self.location_summary.setText(self.validation_context)
         self.progress.setRange(0, len(rules) + bool(general_report_path))
         self.progress.setValue(0)
         self.progress.setVisible(True)
-        self.status.setText(f"Ejecutando {len(rules)} reglas y reporte general…")
+        self.status.setText(f"Ejecutando {len(rules)} reglas" + (" y reporte general…" if general_report_path else "…"))
         self.validation_interrupted = False
         self.interruption_requested = False
         self.interrupt_button.setText('Interrumpir')
@@ -2118,6 +2157,8 @@ class ControlCalidadDialog(QDialog):
         if not self.validation_interrupted:
             self.progress.setValue(self.progress.maximum())
         self.status.setText('Validación interrumpida por el usuario. Resultados parciales.' if self.validation_interrupted else 'Ejecución terminada.')
+        if not self.validation_interrupted and self.execution_info.get('Reglas no ejecutadas por falta de GDB'):
+            self.status.setText('Ejecución terminada sin GDB. Las reglas geográficas indicadas no se ejecutaron.')
         self.last_execution_label.setText(('Ejecución interrumpida: ' if self.validation_interrupted else 'Última ejecución: ') + self.execution_info.get('Fecha de ejecución', 'sesión actual'))
         self.review_imports = ReviewImports(self.review_cases)
         self.detail_import_errors = {}
@@ -2477,7 +2518,8 @@ class ControlCalidadDialog(QDialog):
                     values.get("reglas_validacion_afectadas", values.get("reglas_validacion_afectadas", "")),
                 ])
         else:
-            general.append(["", "No fue posible generar el reporte general", "", self.general_report_error or "No se recibieron resultados."])
+            message = 'Reporte general no ejecutado: requiere GDB' if self.general_report_error == 'No ejecutado: requiere GDB.' else 'No fue posible generar el reporte general'
+            general.append(["", message, "", self.general_report_error or "No se recibieron resultados."])
         detail = book.create_sheet("Detalle Validación")
         detail.append(["Componente", "Regla incumplida", "Hallazgos", "Hoja de detalle"])
         error_rows = []

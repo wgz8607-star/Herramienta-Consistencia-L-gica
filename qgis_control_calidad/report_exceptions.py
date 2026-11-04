@@ -202,6 +202,7 @@ def prepare_validation_index(sheet, metadata, location, component=None, title=No
     fields = [(key, metadata.get(key) or 'No disponible') for key in (
         'Fecha de ejecución', 'Modelo', 'Ambiente', 'Versión SQL', 'Alcance territorial',
         'Manzanas / veredas (NPN 1–17)', 'Base de datos', 'Esquema')]
+    fields.extend((key, metadata[key]) for key in ('Cobertura geográfica', 'Reglas no ejecutadas por falta de GDB', 'Reporte general omitido') if metadata.get(key))
     fields.append(('Ubicación territorial', location or 'No disponible'))
     for key in ('R1 y R2 Vigente',):
         if metadata.get(key):
@@ -214,7 +215,10 @@ def prepare_validation_index(sheet, metadata, location, component=None, title=No
         name.fill = PatternFill('solid', fgColor='EAF3F8')
         cell.font = Font(name='Calibri', size=11, color='344054')
         name.alignment = cell.alignment = Alignment(wrap_text=True, vertical='center')
-        sheet.row_dimensions[row].height = min(105, max(28, math.ceil(len(str(value)) / 75) * 15 + 8))
+        if label == 'Reglas no ejecutadas por falta de GDB':
+            sheet.row_dimensions[row].height = min(409, max(28, sum(max(1, math.ceil(len(line) / 75)) for line in str(value).splitlines()) * 15 + 8))
+        else:
+            sheet.row_dimensions[row].height = min(105, max(28, math.ceil(len(str(value)) / 75) * 15 + 8))
     header_row = len(fields) + 3
     for column, label in enumerate(headers, 1):
         cell = sheet.cell(header_row, column, label)

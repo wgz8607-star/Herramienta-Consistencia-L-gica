@@ -546,3 +546,7 @@ Referencias vigentes bajo el estándar r1_DIVIPOLA_AAAAMMDD y r2_DIVIPOLA_AAAAMM
 ### Versión 2.14.6
 
 Carga R1/R2 en TXT de ancho fijo (312/330 caracteres), validada con los ejemplos de Puerto Wilches, manteniendo ceros iniciales, duplicados y valores decimales. Tercera opción para preparar referencias de public de la conexión seleccionada mediante copias de solo lectura, con selección de tablas compatibles e invalidación al cambiar de conexión. La GDB ofrece selección directa de ZIP o carpeta .gdb. Copia base CICA materializa el alcance en tablas temporales indexadas y con estadísticas para evitar repetir los filtros dentro de cada regla. Las sentencias publicadas no se modifican. Verificación: 273 pruebas ejecutadas, 4 omitidas; rendimiento real pendiente de comprobar en el servidor.
+
+### Versión 2.14.7
+
+Selector de esquemas en árbol Departamento → Municipio → Esquema, búsqueda por esquema/DIVIPOLA/departamento/municipio, conteo visible por municipio y grupo Sin ubicación identificada. Solo se seleccionan esquemas. CICA permite ejecutar sin GDB: advierte antes de validar y omite controles y reporte general que requieren capas geográficas, dejando la cobertura y las exclusiones en los reportes sin contarlas como errores técnicos o controles aprobados. Las sentencias permanecen intactas. Ayuda actualizada. Verificación: 284 pruebas ejecutadas, 4 omitidas.

@@ -236,10 +236,16 @@ En Copia base CICA, el municipio se identifica con los primeros cinco dígitos d
 ## Selección, búsqueda y limpieza de la sesión
 
 - En **Seleccionar grupos**, marque o desmarque los controles necesarios. El menú permanece abierto; haga clic fuera o pulse Escape para cerrarlo.
-- Después de **Listar Esquemas**, use **Filtrar por Divipola** para filtrar por nombre. Borrar la búsqueda recupera la lista completa.
+- Después de **Listar Esquemas**, use **Filtrar por Divipola** para buscar por nombre del esquema, DIVIPOLA, departamento o municipio. El desplegable agrupa **Departamento → Municipio → Esquema**, con el número de esquemas visibles por municipio. Solo puede seleccionar un esquema; los encabezados permiten expandir o contraer grupos. Los esquemas sin un código DIVIPOLA reconocido, o con varios códigos reconocidos distintos, aparecen en **Sin ubicación identificada**. Borrar la búsqueda recupera la lista completa.
 - **Limpiar parámetros** retira las fuentes temporales, referencias R1/R2, filtros, versión de sentencias, selecciones y resultados de la sesión. No modifica los archivos originales ni las conexiones guardadas en QGIS. No se permite limpiar mientras hay un proceso en curso.
 - Al cargar una GDB, una ventana indica que el proceso está en curso y muestra el avance por capas y los registros leídos. La apertura o extracción inicial muestra una barra de actividad; espere a que termine antes de continuar.
 
 Los botones deshabilitados se muestran en gris claro; al habilitarse recuperan el color de su acción.
 
 Al validar con Copia base CICA, el alcance se prepara una sola vez en tablas temporales con índices y estadísticas. Esto evita repetir los filtros de selección dentro de cada regla y conserva los registros, duplicados y valores nulos del alcance. Las sentencias publicadas no se modifican; la preparación puede tardar antes de empezar la primera regla.
+
+### Validar CICA con o sin GDB
+
+En **Validaciones del modelo**, la GDB es opcional si la base alfanumérica CICA está cargada (CSV o Copia base CICA). Al ejecutar sin GDB, la confirmación muestra una alerta y el listado de controles seleccionados que requieren datos geográficos. Solo se ejecutan los restantes. Una regla que mezcla datos alfanuméricos y capas GDB se omite completa; las sentencias publicadas no se modifican.
+
+Las reglas omitidas no se cuentan como ejecutadas, correctas ni errores técnicos. La cobertura sin GDB y los controles no ejecutados quedan indicados en los metadatos de los reportes. Si el reporte general requiere capas GDB, se indica que no fue ejecutado; no se genera una versión parcial de su SQL. Si todas las reglas seleccionadas requieren GDB, cargue una geodatabase o seleccione otros controles antes de continuar. Con GDB se mantiene la ejecución normal de las reglas seleccionadas. En Cargue SNC, la GDB continúa oculta y excluida según ese ambiente.

@@ -550,3 +550,7 @@ Carga R1/R2 en TXT de ancho fijo (312/330 caracteres), validada con los ejemplos
 ### Versión 2.14.7
 
 Selector de esquemas en árbol Departamento → Municipio → Esquema, búsqueda por esquema/DIVIPOLA/departamento/municipio, conteo visible por municipio y grupo Sin ubicación identificada. Solo se seleccionan esquemas. CICA permite ejecutar sin GDB: advierte antes de validar y omite controles y reporte general que requieren capas geográficas, dejando la cobertura y las exclusiones en los reportes sin contarlas como errores técnicos o controles aprobados. Las sentencias permanecen intactas. Ayuda actualizada. Verificación: 284 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2.14.8
+
+Al ejecutar CICA sin GDB se presenta un mensaje emergente explícito antes de confirmar parámetros, con las reglas geográficas omitidas y la exclusión del reporte general cuando corresponde. Si ninguna regla seleccionada requiere GDB, el mensaje lo indica. Con GDB no aparece esta alerta. Se conserva la advertencia en el resumen y el registro de omisiones en los reportes. Verificación: 286 pruebas ejecutadas, 4 omitidas.

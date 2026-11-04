@@ -67,6 +67,24 @@ class WithoutGdbUiTests(unittest.TestCase):
         self.assertIn('reporte general',notice)
         self.assertNotIn('regla_alpha',notice)
 
+    def test_explicit_popup_appears_before_parameter_confirmation(self):
+        events = []
+        with patch.object(module.QMessageBox, 'warning', side_effect=lambda *args: events.append(('alerta', args[1], args[2]))), patch.object(module.QDialog, 'exec_', side_effect=lambda: events.append(('confirmacion',)) or module.QDialog.Rejected):
+            accepted = self.widget.confirm_validation(self.params, 'pg_temp', [self.alpha, self.geo], None, self.report)
+        self.assertFalse(accepted)
+        self.assertEqual([event[0] for event in events], ['alerta', 'confirmacion'])
+        self.assertIn('regla_geo', events[0][2])
+        self.assertIn('reporte general', events[0][2])
+
+    def test_no_popup_with_gdb_and_popup_without_spatial_rules(self):
+        with patch.object(module.QMessageBox, 'warning') as warning, patch.object(module.QDialog, 'exec_', return_value=module.QDialog.Rejected):
+            self.widget.confirm_validation(self.params, 'pg_temp', [self.alpha], None)
+        warning.assert_called_once()
+        self.assertIn('Ninguna de las reglas seleccionadas requiere GDB', warning.call_args.args[2])
+        with patch.object(self.widget, 'active_cica_gdb', return_value=SimpleNamespace(filename='prueba.gdb')), patch.object(module.QMessageBox, 'warning') as warning, patch.object(module.QDialog, 'exec_', return_value=module.QDialog.Rejected):
+            self.widget.confirm_validation(self.params, 'pg_temp', [self.alpha, self.geo], None, self.report)
+        warning.assert_not_called()
+
     def test_worker_receives_only_alpha_rules_and_reports_record_omissions(self):
         with patch.object(self.widget,'connection_params',return_value=self.params),patch.object(self.widget,'confirm_validation',return_value=True),patch.object(self.widget,'confirm_review_changes',return_value=True),patch.object(self.widget,'resolve_validation_context',return_value='Municipio de prueba'),patch.object(module,'QThread'),patch.object(module,'RuleWorker') as worker:
             self.widget.run_rules()

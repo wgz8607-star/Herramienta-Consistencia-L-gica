@@ -1903,6 +1903,16 @@ class ControlCalidadDialog(QDialog):
         return rows
 
     def confirm_validation(self, params, schema, rules, current_reference, general_report_path=None):
+        if self.model.currentText() == 'CICA' and not self.active_cica_gdb():
+            _executable, omitted = partition_rules(rules, False)
+            message = 'No se cargó una GDB. Las reglas que requieren datos geográficos no se ejecutarán.'
+            if omitted:
+                message += '\n\nReglas que no se ejecutarán:\n' + omission_description(omitted)
+            else:
+                message += '\n\nNinguna de las reglas seleccionadas requiere GDB.'
+            if general_report_path and requires_gdb(general_report_path):
+                message += '\n\nEl reporte general tampoco se ejecutará porque requiere GDB.'
+            QMessageBox.warning(self, 'CICA: validación sin GDB', message)
         dialog = QDialog(self)
         dialog.setWindowTitle('Confirmar validación')
         dialog.resize(760, 650)

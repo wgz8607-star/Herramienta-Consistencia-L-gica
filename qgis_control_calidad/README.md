@@ -562,3 +562,7 @@ Unificación de R1 por NPN antes de ejecutar reglas y generar reportes, conserva
 ### Versión 2.14.10
 
 Metadatos compactos en todos los reportes: etiquetas y valores en Calibri 8, título con menor altura, filas ajustadas al contenido y reglas omitidas agrupadas por componente en un listado continuo. Se conserva la información, los resultados y la inmovilización de encabezados. Verificación de reportes: 12 pruebas correctas.
+
+### Versión 2.14.11
+
+Sin GDB, CICA genera el reporte general con sus indicadores alfanuméricos y marca los geográficos como No evaluado: GDB no cargada, conservando las descripciones y sin asignarles cero. La separación se realiza en tiempo de ejecución para el formato reconocido; no se modifica la sentencia publicada. Si el formato no puede separarse de forma segura, se informa sin inventar resultados. Verificado con la exportación del servidor y CSV APEX en PostgreSQL local: 52 indicadores calculados y 4 no evaluados. Suite: 304 pruebas ejecutadas, 4 omitidas.

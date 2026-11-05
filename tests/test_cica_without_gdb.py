@@ -98,7 +98,7 @@ class WithoutGdbUiTests(unittest.TestCase):
         prepare_validation_index(sheet,self.widget.execution_info,'Municipio de prueba')
         values=[cell.value for row in sheet for cell in row]
         self.assertIn('Reglas no ejecutadas por falta de GDB',values)
-        self.assertIn('Fisicas · regla_geo',values)
+        self.assertIn('Fisicas: regla_geo',values)
         self.assertEqual(self.widget.progress.maximum(),1)
 
     def test_all_geographic_selection_does_not_start_or_destroy_previous_results(self):

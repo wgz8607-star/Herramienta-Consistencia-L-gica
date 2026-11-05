@@ -31,6 +31,7 @@ from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
 from .schema_selector import SchemaSelector, matching_schemas
+from .partial_general_report import alphanumeric_report_sql, mark_unevaluated_items
 from .general_report_counts import apply_unique_filtered_r1_count
 from .gdb_dependencies import requires_gdb, partition_rules, omission_description
 from .cica_gdb import install_gdb
@@ -404,7 +405,11 @@ class RuleWorker(QObject):
                 if self.general_report_path:
                     self.message.emit('Ejecutando reporte general…')
                     try:
-                        sql = self.resolve_sql(self.general_report_path)
+                        report_statement = self.general_report_path
+                        omitted_items = ()
+                        if self.validation_model == 'CICA' and not self.cica_gdb and requires_gdb(report_statement):
+                            report_statement, omitted_items = alphanumeric_report_sql(report_statement)
+                        sql = self.resolve_sql(report_statement)
                         with connection.cursor() as cursor:
                             if self.validation_model == 'CICA':
                                 set_query_limits(cursor)
@@ -415,6 +420,7 @@ class RuleWorker(QObject):
                             fields = [column.name for column in cursor.description] if cursor.description else []
                         report_rows = [dict(zip(fields, row)) for row in rows]
                         apply_unique_filtered_r1_count(connection, report_rows, self.resolve_sql, self.check_cancelled)
+                        mark_unevaluated_items(report_rows, omitted_items)
                         self.general_report.emit(report_rows, "")
                     except Exception as error:
                         connection.rollback()
@@ -1900,7 +1906,11 @@ class ControlCalidadDialog(QDialog):
                 if omitted:
                     notice += '\nNo se ejecutarán:\n' + omission_description(omitted)
                 if general_report_path and requires_gdb(general_report_path):
-                    notice += '\nEl reporte general tampoco se ejecutará porque requiere GDB.'
+                    try:
+                        alphanumeric_report_sql(general_report_path)
+                        notice += '\nSe generará el reporte general alfanumérico; sus indicadores geográficos se marcarán como no evaluados.'
+                    except ValueError:
+                        notice += '\nEl reporte general no se ejecutará: no se pudieron separar sus indicadores de GDB.'
                 rows.append(('Advertencia: validación sin GDB', notice))
         counts = defaultdict(int)
         for component, _name, _sql, _description in rules:
@@ -1918,7 +1928,11 @@ class ControlCalidadDialog(QDialog):
             else:
                 message += '\n\nNinguna de las reglas seleccionadas requiere GDB.'
             if general_report_path and requires_gdb(general_report_path):
-                message += '\n\nEl reporte general tampoco se ejecutará porque requiere GDB.'
+                try:
+                    alphanumeric_report_sql(general_report_path)
+                    message += '\n\nEl reporte general se generará con los indicadores alfanuméricos. Los geográficos se marcarán como no evaluados.'
+                except ValueError:
+                    message += '\n\nEl reporte general no se ejecutará: no se pudieron separar sus indicadores de GDB.'
             QMessageBox.warning(self, 'CICA: validación sin GDB', message)
         dialog = QDialog(self)
         dialog.setWindowTitle('Confirmar validación')
@@ -1976,11 +1990,18 @@ class ControlCalidadDialog(QDialog):
         selected_report = general_report_path
         omitted_gdb_rules = []
         omitted_report = False
+        partial_report = False
         if self.model.currentText() == 'CICA' and not self.active_cica_gdb():
             rules, omitted_gdb_rules = partition_rules(rules, False)
             omitted_report = bool(general_report_path and requires_gdb(general_report_path))
             if omitted_report:
-                general_report_path = None
+                try:
+                    alphanumeric_report_sql(general_report_path)
+                except ValueError:
+                    general_report_path = None
+                else:
+                    omitted_report = False
+                    partial_report = True
             if selected_rules and not rules:
                 QMessageBox.warning(self, 'Sin reglas ejecutables sin GDB', 'Todas las reglas seleccionadas requieren GDB y no se ejecutarán. Cargue una GDB o seleccione controles alfanuméricos.\n\n' + omission_description(omitted_gdb_rules))
                 return
@@ -2037,6 +2058,8 @@ class ControlCalidadDialog(QDialog):
             self.execution_info['Geodatabase CICA'] = self.active_cica_gdb().filename if self.active_cica_gdb() else 'GDB no cargada'
             if omitted_gdb_rules:
                 self.execution_info['Reglas no ejecutadas por falta de GDB'] = omission_description(omitted_gdb_rules)
+            if partial_report:
+                self.execution_info['Cobertura del reporte general'] = 'Alfanumérico. Indicadores geográficos: No evaluado: GDB no cargada.'
             if omitted_report:
                 self.execution_info['Reporte general omitido'] = 'Requiere GDB; no se ejecutó.'
         self.execution_info["Alcance territorial"] = SCOPES[scope]

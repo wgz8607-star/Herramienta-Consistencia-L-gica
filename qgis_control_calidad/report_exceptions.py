@@ -196,9 +196,9 @@ def prepare_validation_index(sheet, metadata, location, component=None, title=No
     title = sheet.cell(1, 1, sheet.title + (' — ' + str(component) if component else ''))
     title.data_type = 's'
     title.fill = PatternFill('solid', fgColor='0468A3')
-    title.font = Font(name='Calibri', size=14, bold=True, color='FFFFFF')
+    title.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     title.alignment = Alignment(vertical='center', wrap_text=True)
-    sheet.row_dimensions[1].height = 36
+    sheet.row_dimensions[1].height = 23
     fields = [(key, metadata.get(key) or 'No disponible') for key in (
         'Fecha de ejecución', 'Modelo', 'Ambiente', 'Versión SQL', 'Alcance territorial',
         'Manzanas / veredas (NPN 1–17)', 'Base de datos', 'Esquema')]
@@ -210,17 +210,26 @@ def prepare_validation_index(sheet, metadata, location, component=None, title=No
         if metadata.get(key):
             fields.append((key, metadata[key]))
     for row, (label, value) in enumerate(fields, 2):
+        if label == 'Reglas no ejecutadas por falta de GDB':
+            lines = [line.strip() for line in str(value).splitlines() if line.strip()]
+            groups = {}
+            if all('·' in line for line in lines):
+                for line in lines:
+                    group, rule = line.split('·', 1)
+                    groups.setdefault(group.strip(), []).append(rule.strip())
+                value = '; '.join(group + ': ' + ', '.join(rules) for group, rules in groups.items())
+            else:
+                value = '; '.join(lines)
         sheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=last_column)
         name = sheet.cell(row, 1, label); name.data_type = 's'
         cell = sheet.cell(row, 2, str(value)); cell.data_type = 's'
-        name.font = Font(name='Calibri', size=11, bold=True, color='0468A3')
+        name.font = Font(name='Calibri', size=8, bold=True, color='0468A3')
         name.fill = PatternFill('solid', fgColor='EAF3F8')
-        cell.font = Font(name='Calibri', size=11, color='344054')
+        cell.font = Font(name='Calibri', size=8, color='344054')
         name.alignment = cell.alignment = Alignment(wrap_text=True, vertical='center')
-        if label == 'Reglas no ejecutadas por falta de GDB':
-            sheet.row_dimensions[row].height = min(409, max(28, sum(max(1, math.ceil(len(line) / 75)) for line in str(value).splitlines()) * 15 + 8))
-        else:
-            sheet.row_dimensions[row].height = min(105, max(28, math.ceil(len(str(value)) / 75) * 15 + 8))
+        label_lines = max(1, math.ceil(len(label) / 36))
+        value_lines = sum(max(1, math.ceil(len(line) / 105)) for line in str(value).splitlines())
+        sheet.row_dimensions[row].height = min(409, max(16, max(label_lines, value_lines) * 11 + 4))
     header_row = len(fields) + 3
     for column, label in enumerate(headers, 1):
         cell = sheet.cell(header_row, column, label)

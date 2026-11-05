@@ -558,3 +558,7 @@ Al ejecutar CICA sin GDB se presenta un mensaje emergente explícito antes de co
 ### Versión 2.14.9
 
 Unificación de R1 por NPN antes de ejecutar reglas y generar reportes, conservando el primer registro leído, sin sumar áreas y manteniendo R2 sin cambios. Opciones R1/R2 renombradas y fecha de vigencia visible; reconoce R1 mínimo de public con numero_predial y areaterreno. El reporte general cuenta los NPN R1 únicos del filtro. El aviso de fuente usa Leer copia base CICA. Resumen ejecutivo CICA con nombre de GDB o GDB no cargada. Ayuda actualizada. Verificación: 300 pruebas ejecutadas, 4 omitidas. No se modifican las sentencias publicadas ni los archivos/tablas originales.
+
+### Versión 2.14.10
+
+Metadatos compactos en todos los reportes: etiquetas y valores en Calibri 8, título con menor altura, filas ajustadas al contenido y reglas omitidas agrupadas por componente en un listado continuo. Se conserva la información, los resultados y la inmovilización de encabezados. Verificación de reportes: 12 pruebas correctas.

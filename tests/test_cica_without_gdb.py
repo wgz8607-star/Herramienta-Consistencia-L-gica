@@ -44,7 +44,7 @@ class WithoutGdbUiTests(unittest.TestCase):
     def setUp(self):
         self.widget=module.ControlCalidadDialog()
         self.widget.model.blockSignals(True);self.widget.model.setCurrentText('CICA');self.widget.model.blockSignals(False)
-        self.widget.environment.blockSignals(True);self.widget.environment.setCurrentText('Validaciones del modelo');self.widget.environment.blockSignals(False)
+        self.widget.environment.blockSignals(True);self.widget.environment.setCurrentText('Validaciones de consistencia lógica');self.widget.environment.blockSignals(False)
         self.widget.cica_references={'cica_predio':SimpleNamespace(filename='predio.csv',fingerprint='predio',close=lambda:None)}
         self.alpha=('Administrativas','regla_alpha','SELECT * FROM {esquema}.cica_predio','')
         self.geo=('Fisicas','regla_geo','SELECT ST_Area(t.geom) FROM {esquema}.u_terreno_ctm12 t JOIN {esquema_r2}.{tabla_r2} r ON true','')

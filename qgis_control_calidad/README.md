@@ -566,3 +566,7 @@ Metadatos compactos en todos los reportes: etiquetas y valores en Calibri 8, tí
 ### Versión 2.14.11
 
 Sin GDB, CICA genera el reporte general con sus indicadores alfanuméricos y marca los geográficos como No evaluado: GDB no cargada, conservando las descripciones y sin asignarles cero. La separación se realiza en tiempo de ejecución para el formato reconocido; no se modifica la sentencia publicada. Si el formato no puede separarse de forma segura, se informa sin inventar resultados. Verificado con la exportación del servidor y CSV APEX en PostgreSQL local: 52 indicadores calculados y 4 no evaluados. Suite: 304 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2.14.12
+
+Informe de avance CICA con selección combinada de zonas, cifras faltantes para el 100 % y secciones independientes de activos/cancelados. Ambientes renombrados y disponibilidad de consistencia consultada al abrir el selector. Estructura queda fuera de Gestión de Excepciones. Etapas CICA con modo estándar y modo personalizado en ventana independiente, seleccionando una, varias o todas las etapas reales; el ajuste del filtro de etapas se realiza solo durante la ejecución, sin modificar las sentencias publicadas. Alcance documentado en confirmación/reportes/revisión. Suite: 319 pruebas, 4 omitidas.

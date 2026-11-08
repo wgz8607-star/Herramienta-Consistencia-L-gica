@@ -327,7 +327,9 @@ def read_cica_predio_details(params, municipality='', zone='', cp='', offset=0):
     """Read a bounded page of actual NPNs on demand, without a summary view."""
     from .cica_data import cica_selection
     cica_selection(municipality)
-    if zone not in ('', 'Urbano', 'Rural', 'Centro poblado') or offset < 0:
+    from .cica_zones import selected_zones
+    zones = selected_zones(zone)
+    if offset < 0:
         raise ValueError('Selección del detalle CICA no válida.')
     if cp and (not re.fullmatch(r'[0-9]{2}', cp) or cp <= '01'):
         raise ValueError('Código de centro poblado no válido.')
@@ -335,11 +337,17 @@ def read_cica_predio_details(params, municipality='', zone='', cp='', offset=0):
     sector = 'substring(btrim(numero_predial::text), 6, 2)'
     if municipality:
         conditions.append('btrim(numero_predial::text) LIKE %s'); args.append(municipality + '%')
-    if zone == 'Urbano': conditions.append(sector + " = '01'")
-    if zone == 'Rural': conditions.append(sector + " = '00'")
-    if zone == 'Centro poblado':
-        conditions.append(sector + " ~ '^[0-9][0-9]$' AND " + sector + " > '01'")
-        if cp: conditions.append(sector + ' = %s'); args.append(cp)
+    if zones is not None:
+        choices=[]
+        for choice in zones:
+            if choice=='Urbano':choices.append(sector + " = '01'")
+            elif choice=='Rural':choices.append(sector + " = '00'")
+            else:
+                condition=sector + " ~ '^[0-9][0-9]$' AND " + sector + " > '01'"
+                if cp:
+                    condition+=' AND '+sector+' = %s';args.append(cp)
+                choices.append('('+condition+')')
+        conditions.append('('+' OR '.join(choices)+')' if choices else 'FALSE')
     query = """SELECT btrim(numero_predial::text), COALESCE(etapa::text, ''),
         COALESCE(upper(btrim(estado::text)), ''), count(*)
         FROM snc_cica_copy.cica_predio {where}
@@ -359,13 +367,18 @@ def cica_predio_details_from_snapshot(snapshot, zone='', cp='', offset=0):
     npn_index = snapshot.columns.index(column)
     stage_index = snapshot.columns.index('etapa') if 'etapa' in snapshot.columns else None
     state_index = snapshot.columns.index('estado') if 'estado' in snapshot.columns else None
-    scopes = {'Urbano': 'urban', 'Rural': 'rural', 'Centro poblado': 'center'}
+    from .cica_zones import zone_matches, selected_zones
+    selected_zones(zone)
+    if offset < 0:
+        raise ValueError('Selección del detalle CICA no válida.')
+    if cp and (not re.fullmatch(r'[0-9]{2}',cp) or cp <= '01'):
+        raise ValueError('Código de centro poblado no válido.')
+    zone_names = {'urban':'Urbano','rural':'Rural','center':'Centro poblado'}
     groups = Counter()
     with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
         for row in csv.reader(stream):
             npn = row[npn_index].strip() if len(row) > npn_index else ''
-            if zone and sector_scope(npn) != scopes.get(zone): continue
-            if zone == 'Centro poblado' and cp and npn[5:7] != cp: continue
+            if not zone_matches(zone_names.get(sector_scope(npn),''),npn[5:7],zone,cp): continue
             stage = row[stage_index] if stage_index is not None and len(row) > stage_index else ''
             state = row[state_index].strip().upper() if state_index is not None and len(row) > state_index else ''
             groups[(npn, stage, state)] += 1

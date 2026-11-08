@@ -30,8 +30,8 @@ Tenga disponibles la conexión a la Base catastral a validar y los archivos que 
 
 1. En **Conexión**, seleccione **Modelo Interno de Levantamiento 1.0** o **CICA**. Para datos XTF, elija Modelo Interno.
 2. Seleccione el ambiente:
-   - **Validaciones del modelo:** pulse **Buscar versión de sentencias…** y seleccione la versión publicada que corresponda.
-   - **Validaciones para cargue a SNC:** espere la carga de su versión disponible; no requiere escoger otra versión manualmente.
+   - **Validaciones de consistencia lógica:** pulse **Buscar versión de sentencias…** y seleccione la versión publicada que corresponda.
+   - **Pre-Validaciones para cargue a SNC:** espere la carga de su versión disponible; no requiere escoger otra versión manualmente.
 3. Compruebe la versión y la cantidad de sentencias mostradas.
 
 Volver a seleccionar el modelo limpia el ambiente y la versión SQL. Si lo hace, elija nuevamente ambas opciones.
@@ -60,8 +60,8 @@ Si la conexión falla, revise los datos de acceso y su conexión de red antes de
 Use esta función para elegir los CSV/GDB del usuario o la Copia base CICA. No es necesario seleccionar una conexión QGIS ni listar esquemas para CICA.
 
 1. Seleccione **CICA** y pulse **Seleccionar fuente de datos…**.
-2. Elija **Archivos CSV del usuario** o **Copia base CICA**. Para la segunda opción, pulse **Leer copia base CICA**: primero pulse **Consultar municipios y etapas**, seleccione el **Departamento** y después el **Municipio** (nombre y DIVIPOLA), o mantenga Todos los departamentos y elija **Todos los municipios**, y marque una o varias etapas. Puede seleccionar o deseleccionar todas las etapas. Después lea la copia: se consultan las siete tablas con esa selección y se muestran sus cantidades. Durante la lectura se indica la tabla en proceso y el avance por registros; si el servidor interrumpe una tabla por tiempo, se identifica y no se aplica una copia incompleta. Si cambia el municipio o las etapas, vuelva a leer la copia antes de usarla. La GDB continúa disponible y se valida sobre los predios seleccionados. Al seleccionar esta fuente se muestra la fecha de corte de `public.copia_cica_progreso`: el valor `inicio` del último registro creado (mayor `id`), sin filtrar por estado. Si no se puede consultar, se indica como no disponible. La lectura no modifica el esquema. Para CSV, pulse **Seleccionar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
-3. En **Validaciones del modelo**, si utilizará una geodatabase, pulse **Seleccionar GDB (.zip / .gdb)…** y elija **Archivo ZIP (.zip)** o **Carpeta geodatabase (.gdb)**. El ZIP debe contener una sola geodatabase. En **CICA → Validaciones para cargue a SNC**, esta opción se oculta y la GDB no participa en la ejecución. Si una capa no tiene un EPSG identificable, el plugin asigna automáticamente EPSG:9377 (MAGNA-SIRGAS 2018 / Origen-Nacional), sin mostrar un aviso. La asignación se aplica solo a la copia temporal, sin reproyectar coordenadas ni modificar la GDB original. Todas las capas espaciales se preparan con una columna PostGIS `geom`, obtenida de la geometría real de cada elemento, para ejecutar las consultas espaciales.
+2. Elija **Archivos CSV del usuario** o **Copia base CICA**. Para la segunda opción, pulse **Leer copia base CICA**: primero pulse **Consultar municipios**, seleccione el **Departamento** y después el **Municipio** (nombre y DIVIPOLA), o mantenga Todos los departamentos y elija **Todos los municipios**, y mantenga la validación estándar de etapas o configure la opción personalizada en su ventana independiente. Después lea la copia: se consultan las siete tablas con esa selección y se muestran sus cantidades. Durante la lectura se indica la tabla en proceso y el avance por registros; si el servidor interrumpe una tabla por tiempo, se identifica y no se aplica una copia incompleta. Si cambia el municipio o las etapas, vuelva a leer la copia antes de usarla. La GDB continúa disponible y se valida sobre los predios seleccionados. Al seleccionar esta fuente se muestra la fecha de corte de `public.copia_cica_progreso`: el valor `inicio` del último registro creado (mayor `id`), sin filtrar por estado. Si no se puede consultar, se indica como no disponible. La lectura no modifica el esquema. Para CSV, pulse **Seleccionar CSV…** junto al tipo de archivo correspondiente: Datos Contacto, Datos Predio - Derecho, Predio, Datos Propietario, Justificación, Seguimiento de Control o Unidad de Construcción.
+3. En **Validaciones de consistencia lógica**, si utilizará una geodatabase, pulse **Seleccionar GDB (.zip / .gdb)…** y elija **Archivo ZIP (.zip)** o **Carpeta geodatabase (.gdb)**. El ZIP debe contener una sola geodatabase. En **CICA → Pre-Validaciones para cargue a SNC**, esta opción se oculta y la GDB no participa en la ejecución. Si una capa no tiene un EPSG identificable, el plugin asigna automáticamente EPSG:9377 (MAGNA-SIRGAS 2018 / Origen-Nacional), sin mostrar un aviso. La asignación se aplica solo a la copia temporal, sin reproyectar coordenadas ni modificar la GDB original. Todas las capas espaciales se preparan con una columna PostGIS `geom`, obtenida de la geometría real de cada elemento, para ejecutar las consultas espaciales.
 4. Revise los nombres y cantidades informados. El resumen muestra los predios activos y cancelados de la fuente leída; en Copia base CICA corresponde al municipio y etapas seleccionados. Los otros estados se indican aparte. Para la distribución territorial y los filtros detallados, utilice la pestaña de estadística y filtro avanzado.
 5. Pulse **Usar fuente de datos** para aplicar la selección.
 
@@ -206,7 +206,7 @@ Conserve los Excel revisados en su carpeta de trabajo. Después de cerrar el plu
 
 ## 12. Descargar el formato homologado
 
-1. Ejecute **Validaciones del modelo** con una versión V2 de CICA o Modelo Interno.
+1. Ejecute **Validaciones de consistencia lógica** con una versión V2 de CICA o Modelo Interno.
 2. Al finalizar, pulse el enlace de descarga del formato correspondiente.
 3. Seleccione la carpeta y guarde el Excel:
    - Modelo Interno V2: **fo_gct_pc01_07_v2.xlsx**.
@@ -246,7 +246,7 @@ Al validar con Copia base CICA, el alcance se prepara una sola vez en tablas tem
 
 ### Validar CICA con o sin GDB
 
-En **Validaciones del modelo**, la GDB es opcional si la base alfanumérica CICA está cargada (CSV o Copia base CICA). Al ejecutar sin GDB, aparece un mensaje emergente **CICA: validación sin GDB** antes del resumen de parámetros, con el listado de controles seleccionados que requieren datos geográficos. La advertencia también queda visible dentro de la confirmación. Solo se ejecutan los restantes. Una regla que mezcla datos alfanuméricos y capas GDB se omite completa; las sentencias publicadas no se modifican.
+En **Validaciones de consistencia lógica**, la GDB es opcional si la base alfanumérica CICA está cargada (CSV o Copia base CICA). Al ejecutar sin GDB, aparece un mensaje emergente **CICA: validación sin GDB** antes del resumen de parámetros, con el listado de controles seleccionados que requieren datos geográficos. La advertencia también queda visible dentro de la confirmación. Solo se ejecutan los restantes. Una regla que mezcla datos alfanuméricos y capas GDB se omite completa; las sentencias publicadas no se modifican.
 
 Las reglas omitidas no se cuentan como ejecutadas, correctas ni errores técnicos. La cobertura sin GDB y los controles no ejecutados quedan indicados en los metadatos de los reportes. El reporte general CICA se genera con los indicadores alfanuméricos; los indicadores que dependen de GDB conservan su descripción y se marcan **No evaluado: GDB no cargada**, sin mostrarlos como cero. Esta separación se aplica al formato de reporte reconocido, sin cambiar la versión publicada. Si una sentencia tiene una estructura que no permite separar sus indicadores de forma segura, se informa y no se genera ese reporte. Si todas las reglas seleccionadas requieren GDB, cargue una geodatabase o seleccione otros controles antes de continuar. Con GDB se mantiene la ejecución normal de las reglas seleccionadas. En Cargue SNC, la GDB continúa oculta y excluida según ese ambiente.
 
@@ -263,3 +263,22 @@ El **Resumen ejecutivo** del resumen de control de calidad CICA indica **Geodata
 ### Unificación de R1 para ejecución y reportes
 
 En las tres opciones de origen se prepara **un solo registro R1 por NPN completo**. Se conserva el **primero leído**, incluso si los siguientes tienen valores distintos; no se suman áreas ni avalúos. Se mantienen los ceros iniciales y se recortan espacios exteriores del NPN. Las filas sin NPN no se usan como predios. Las estadísticas indican cuántos duplicados y filas sin NPN se excluyeron. Las sentencias, cruces, filtros y reportes usan esta misma referencia R1 unificada. R2 no se unifica. Los archivos y tablas originales permanecen intactos. Para referencias de base de datos, primero significa el primer registro devuelto en la lectura de esa copia de la fuente.
+
+### Combinar zonas en el informe de avance CICA
+
+Los botones **Urbano**, **Centro poblado** y **Rural** se pueden marcar o desmarcar por separado. Al elegir una zona desde **Todas las zonas**, se muestra esa zona; al activar otras, se suman sus indicadores. Volver a pulsar una zona seleccionada la excluye de la suma. **Todas las zonas** restablece el total de la fuente, incluidos registros sin zona identificada. Si desmarca todas, se muestran ceros y **Sin zonas seleccionadas**.
+
+Si la combinación incluye Centro poblado, puede seleccionar uno de sus códigos CP; este filtro afecta solamente a Centro poblado y conserva Urbano/Rural seleccionados. Las tarjetas, porcentajes, barras, áreas, cargados SNC y el detalle de códigos NPN corresponden a la misma combinación. Estos botones no modifican el alcance de la validación.
+
+El informe de avance separa **1. Predios activos: reconocimiento y control de calidad** y **2. Predios cancelados**, para distinguir sus bases de comparación. Cada indicador muestra la cifra **Faltan X predios para el 100 %**, calculada como el total de su estado en las zonas seleccionadas menos los predios que cumplen la etapa. El faltante de activos se calcula sobre activos y el de cancelados sobre cancelados; no se mezclan. Si no hay predios de ese estado, se informa expresamente; si el indicador no está disponible, no se inventa un faltante.
+
+Al abrir el selector **Ambiente**, se consulta la disponibilidad del modelo seleccionado. **Validaciones de consistencia lógica** se oculta si no hay controles activos con SQL y versión publicada. Si posteriormente se habilitan, vuelve a aparecer al abrir el selector. Una falla de conexión o permisos muestra un aviso en el estado y conserva las opciones; no se interpreta como ausencia de controles.
+
+El componente **Estructura** se mantiene en resultados y reportes de validación, pero no aparece en **Gestión de Excepciones**, porque no admite excepciones.
+
+### Alcance de etapas CICA
+
+- **Validación de predios en etapas de control de calidad**: opción estándar. No se añade un filtro de etapas al leer la copia; cada sentencia conserva su filtro publicado de CONTROL_CALIDAD_GENERAL / CONTROL_CALIDAD_GRUPO.
+- **Validación personalizada de etapas**: pulse **Seleccionar etapas…** para abrir una ventana independiente, marque una o varias etapas y pulse **Aplicar etapas**. Incluye **Seleccionar todas** y **Deseleccionar todas**. Para incluir todas las etapas disponibles, márquelas todas. La fuente debe estar consultada o Predio CSV cargado para obtener la lista real.
+
+En modo personalizado solo se sustituye, durante la ejecución, el filtro reconocido de etapas de control de calidad por las etapas elegidas. Los estados, relaciones y demás condiciones se mantienen. El alcance queda en la confirmación, los metadatos de los reportes y la identidad de la revisión. Las sentencias publicadas no se actualizan en el servidor. Si cambia el alcance de una copia ya leída, vuelva a pulsar **Leer copia base CICA**. Esta personalización corresponde a Validaciones de consistencia lógica; Pre-Validaciones para cargue a SNC conserva los filtros publicados de su ambiente.

@@ -16,7 +16,7 @@ DOWNLOAD_NAMES = {
 
 
 def validation_format(model, environment, version):
-    if model not in FORMATS or environment != 'Validaciones del modelo' or not version:
+    if model not in FORMATS or environment not in ('Validaciones de consistencia lógica', 'Validaciones del modelo') or not version:
         return None
     identifier = version.get('id', {})
     table = identifier.get('table', '') if isinstance(identifier, dict) else ''

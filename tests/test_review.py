@@ -12,7 +12,7 @@ from qgis_control_calidad.review import (
     ADJUST, EXCEPTION, PENDING, build_cases, digest, load_review, restore_review, save_review, review_statistics,
 )
 
-CONTEXT = {'model': 'CICA', 'environment': 'Validaciones del modelo', 'database': 'test', 'schema': 'municipio'}
+CONTEXT = {'model': 'CICA', 'environment': 'Validaciones de consistencia lógica', 'database': 'test', 'schema': 'municipio'}
 
 
 def result(rows, rule='regla_1', sql='SELECT id, numero_predial, dato FROM predio', safe=True):

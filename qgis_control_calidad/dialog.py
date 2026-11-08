@@ -30,6 +30,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .ingestion import CicaIngestionDialog
 from .cica_data import install_csv, resolve_csv_tables
+from .cica_stage_scope import apply_stage_scope, MODE_LABELS
+from .environment_availability import EnvironmentSelector, has_active_controls
 from .schema_selector import SchemaSelector, matching_schemas
 from .partial_general_report import alphanumeric_report_sql, mark_unevaluated_items
 from .general_report_counts import apply_unique_filtered_r1_count
@@ -61,7 +63,7 @@ DIVIPOLA_FILE = PLUGIN_DIR / "resources" / "data" / "divipola.xlsx"
 MODELS = {"Modelo Interno de Levantamiento 1.0": "rules_int_model", "CICA": "rules_cica_db"}
 HELP_URL = "https://github.com/wgz8607-star/Herramienta-Consistencia-L-gica/blob/main/qgis_control_calidad/ayuda/GUIA_USO.md"
 SNC_CATEGORY = "Cargue SNC"
-SNC_ENVIRONMENT = "Validaciones para cargue a SNC"
+SNC_ENVIRONMENT = "Pre-Validaciones para cargue a SNC"
 EXCEPTION_NOTICE = "Solo las excepciones validadas y marcadas por DT descuentan errores."
 
 SNC_REPOSITORY_TABLES = {
@@ -314,7 +316,8 @@ class RuleWorker(QObject):
         sql = sql.replace('{esquema}{punto}.', schema_prefix)
         sql = sql.replace('{esquema}{punto}', schema_prefix)
         sql = sql.replace('{esquema}.', schema_prefix).replace('{esquema}', schema_prefix).replace('{punto}', self.prefix)
-        return resolve_scope(resolve_csv_tables(sql, self.schema, self.cica_references, self.cica_gdb.layers if self.cica_gdb else ()), self.scope_views)
+        resolved = resolve_scope(resolve_csv_tables(sql, self.schema, self.cica_references, self.cica_gdb.layers if self.cica_gdb else ()), self.scope_views)
+        return apply_stage_scope(resolved, self.cica_selection) if self.validation_model == 'CICA' else resolved
 
     def run(self):
         owned_references = {}
@@ -608,8 +611,9 @@ class ControlCalidadDialog(QDialog):
         self.advanced_filter_summary = QLabel('Todos · Sin filtro de manzana/vereda')
         self.advanced_filter_summary.setWordWrap(True)
         self.advanced_filter_summary.setStyleSheet('color: #344054; background: white; border: 1px solid #DCE4EC; border-radius: 7px; padding: 10px; font-weight: 600;')
-        self.environment = QComboBox()
-        self.environment.addItems(["Seleccione un ambiente…", "Validaciones del modelo", SNC_ENVIRONMENT])
+        self.environment = EnvironmentSelector()
+        self.environment.before_open = self.refresh_environment_choices
+        self.environment.addItems(["Seleccione un ambiente…", "Validaciones de consistencia lógica", SNC_ENVIRONMENT])
         self.environment_label = QLabel("Ambiente")
         self.environment.currentTextChanged.connect(self.model_changed)
         form.addRow(self.environment_label, self.environment)
@@ -1047,6 +1051,8 @@ class ControlCalidadDialog(QDialog):
     def reset_model_selection(self, *_):
         self.format_download.setEnabled(False)
         self.environment.blockSignals(True)
+        self.environment.clear()
+        self.environment.addItems(['Seleccione un ambiente…', 'Validaciones de consistencia lógica', SNC_ENVIRONMENT])
         self.environment.setCurrentIndex(0)
         self.environment.blockSignals(False)
         self.scope_selection = "all"
@@ -1059,10 +1065,56 @@ class ControlCalidadDialog(QDialog):
         self.format_download.setEnabled(False)
         self.clear_repository_rules()
         snc = self.environment.currentText() == SNC_ENVIRONMENT
+        if snc and self.cica_selection.get('stage_mode') in ('custom', 'all'):
+            for reference in self.cica_references.values(): reference.close()
+            self.cica_references = {}
+            self.cica_selection = {}
         self.choose_sql_version.setEnabled(self.environment.currentIndex() > 0 and not snc)
         self.choose_sql_version.setToolTip('Cargue SNC usa automáticamente su única versión publicada.' if snc else '')
         if self.environment.currentIndex() > 0:
             self.open_sql_version_dialog()
+
+    def refresh_environment_choices(self):
+        if self.controls_running or self.exporting or self.reference_lookup_running or self.filter_reading:
+            return
+        model = self.model.currentText()
+        if model not in SQL_REPOSITORY_TABLES:
+            return
+        params = self.repository_connection_params()
+        if params is None:
+            return
+        self.reference_lookup_running = True
+        self.left_tabs.setEnabled(False)
+        self.update_run_availability()
+        self.status.setText('Consultando ambientes con validaciones habilitadas…')
+        try:
+            source = self.report_task(self.repository_source, params, 'Validaciones de consistencia lógica', True, model)
+            available = self.report_task(has_active_controls, params, source)
+            previous = self.environment.currentText()
+            choices = ['Seleccione un ambiente…']
+            if available:
+                choices.append('Validaciones de consistencia lógica')
+            if model in SNC_REPOSITORY_TABLES:
+                choices.append(SNC_ENVIRONMENT)
+            self.environment.blockSignals(True)
+            self.environment.clear(); self.environment.addItems(choices)
+            index = self.environment.findText(previous)
+            self.environment.setCurrentIndex(max(0, index))
+            self.environment.blockSignals(False)
+            if index < 0:
+                self.clear_repository_rules()
+                self.choose_sql_version.setEnabled(False)
+            self.environment.setToolTip('')
+            self.status.setText('Ambientes actualizados.' if available else 'No hay validaciones de consistencia lógica habilitadas para ' + model + '.')
+        except Exception as error:
+            self.environment.blockSignals(False)
+            message = 'No se pudo verificar la disponibilidad de ambientes: ' + str(error)
+            self.status.setText(message)
+            self.environment.setToolTip(message)
+        finally:
+            self.reference_lookup_running = False
+            self.left_tabs.setEnabled(True)
+            self.update_run_availability()
 
     def repository_connection_params(self):
         params = dict(REPOSITORY_CONNECTION)
@@ -1081,9 +1133,11 @@ class ControlCalidadDialog(QDialog):
         params["password"] = self._repository_password
         return params
 
-    def repository_source(self, params):
-        if self.environment.currentText() == SNC_ENVIRONMENT:
-            table = SNC_REPOSITORY_TABLES[self.model.currentText()]
+    def repository_source(self, params, environment=None, allow_missing=False, model=None):
+        environment = self.environment.currentText() if environment is None else environment
+        model = self.model.currentText() if model is None else model
+        if environment == SNC_ENVIRONMENT:
+            table = SNC_REPOSITORY_TABLES[model]
             with psycopg2.connect(**params, connect_timeout=8) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT to_regclass(%s)", (f"public.{table}",))
@@ -1096,20 +1150,27 @@ class ControlCalidadDialog(QDialog):
         with psycopg2.connect(**params, connect_timeout=8) as connection:
             with connection.cursor() as cursor:
                 tables = []
-                for table in SQL_REPOSITORY_TABLES[self.model.currentText()]:
-                    cursor.execute("SELECT to_regclass(%s), has_table_privilege(current_user, %s, 'SELECT')", (f"public.{table}", f"public.{table}"))
+                unreadable = []
+                for table in SQL_REPOSITORY_TABLES[model]:
+                    cursor.execute("SELECT to_regclass(%s), has_table_privilege(current_user, to_regclass(%s), 'SELECT')", (f"public.{table}", f"public.{table}"))
                     exists, readable = cursor.fetchone()
                     if exists and readable:
                         tables.append(table)
+                    elif exists:
+                        unreadable.append(table)
                 if tables:
                     return {"kind": "tables", "schema": "public", "tables": tables, "label": "public." + ", public.".join(tables)}
-        candidates = SQL_REPOSITORIES[self.model.currentText()]
+        if unreadable:
+            raise ValueError('Falta permiso SELECT en las tablas del repositorio de este modelo.')
+        candidates = SQL_REPOSITORIES[model]
         with psycopg2.connect(**params, connect_timeout=8) as connection:
             with connection.cursor() as cursor:
                 for schema in candidates:
                     cursor.execute("SELECT to_regnamespace(%s)", (schema,))
                     if cursor.fetchone()[0]:
                         return {"kind": "schema", "schema": schema, "label": f"{schema}.reglas"}
+        if allow_missing:
+            return None
         raise ValueError("No se encontró el repositorio centralizado de SQL para el modelo seleccionado.")
 
     def clear_repository_rules(self):
@@ -1325,7 +1386,7 @@ class ControlCalidadDialog(QDialog):
         self.main_tabs.setEnabled(False)
         self.update_run_availability()
         try:
-            if self.cica_selection:
+            if self.cica_selection and self.cica_selection.get('source_kind', 'copy') == 'copy':
                 params = self.repository_connection_params()
                 if not params:
                     raise ValueError('Falta acceso a la copia base CICA.')
@@ -1360,7 +1421,7 @@ class ControlCalidadDialog(QDialog):
         self.main_tabs.setEnabled(False)
         self.update_run_availability()
         try:
-            if self.cica_selection:
+            if self.cica_selection and self.cica_selection.get('source_kind', 'copy') == 'copy':
                 params = self.repository_connection_params()
                 if not params: raise ValueError('Falta acceso a la copia base CICA.')
                 return self.report_task(read_cica_predio_details, params, self.cica_selection.get('municipality', ''), zone, cp, offset)
@@ -1373,11 +1434,11 @@ class ControlCalidadDialog(QDialog):
     def open_ingestion(self):
         if self.controls_running or self.exporting:
             return
-        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT)
+        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT, allow_stage_override=self.environment.currentText() != SNC_ENVIRONMENT)
         try:
             if dialog.exec() == QDialog.Accepted:
                 self.clear_territorial_prefixes()
-                self.cica_selection = dialog.selected_source_filter() if dialog.source_mode.currentIndex() == 1 else {}
+                self.cica_selection = dialog.selected_source_filter() if dialog.source_mode.currentIndex() == 1 or dialog.stage_mode.currentData() == 'custom' else {}
                 if dialog.replace_references:
                     for reference in self.cica_references.values():
                         reference.close()
@@ -1894,7 +1955,10 @@ class ControlCalidadDialog(QDialog):
             rows = [row for row in rows if row[0] != 'Esquema']
             if self.cica_selection:
                 rows.append(('Municipio CICA (DIVIPOLA)', self.cica_selection.get('municipality') or 'Todos'))
-                rows.append(('Etapas CICA', ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ())) or 'Todas'))
+                mode = self.cica_selection.get('stage_mode', 'default')
+                rows.append(('Alcance de etapas CICA', MODE_LABELS[mode]))
+                if mode == 'custom':
+                    rows.append(('Etapas CICA', ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ()))))
             if self.active_cica_gdb():
                 rows.append(('Geodatabase CICA', self.active_cica_gdb().filename))
             if self.cica_references:
@@ -2056,6 +2120,10 @@ class ControlCalidadDialog(QDialog):
         if self.model.currentText() == 'CICA':
             self.execution_info['Cobertura geográfica'] = 'Con GDB' if self.active_cica_gdb() else 'Sin GDB: solo reglas alfanuméricas'
             self.execution_info['Geodatabase CICA'] = self.active_cica_gdb().filename if self.active_cica_gdb() else 'GDB no cargada'
+            mode = self.cica_selection.get('stage_mode', 'default')
+            self.execution_info['Alcance de etapas CICA'] = MODE_LABELS[mode]
+            if mode == 'custom':
+                self.execution_info['Etapas CICA'] = ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ()))
             if omitted_gdb_rules:
                 self.execution_info['Reglas no ejecutadas por falta de GDB'] = omission_description(omitted_gdb_rules)
             if partial_report:
@@ -2213,7 +2281,7 @@ class ControlCalidadDialog(QDialog):
         return True
 
     def model_validation_results(self):
-        return self.execution_info.get('Ambiente', self.environment.currentText()) == 'Validaciones del modelo'
+        return self.execution_info.get('Ambiente', self.environment.currentText()) in ('Validaciones de consistencia lógica', 'Validaciones del modelo')
 
     def ordered_result_groups(self, groups):
         return sorted(groups.items(), key=lambda item: model_component_sort_key(item[0])) if self.model_validation_results() else sorted(groups.items())
@@ -2247,7 +2315,7 @@ class ControlCalidadDialog(QDialog):
 
     def refresh_detail_review_controls(self):
         self.refresh_review_statistics()
-        components = [component for component, _ in self.ordered_result_groups(dict.fromkeys(case.component for case in self.review_cases))]
+        components = [component for component, _ in self.ordered_result_groups(dict.fromkeys(case.component for case in self.review_cases if case.component.strip().casefold() != 'estructura'))]
         if components != list(self.detail_review_rows):
             self.detail_review_table.setRowCount(0)
             self.detail_review_rows = {}
@@ -2367,6 +2435,8 @@ class ControlCalidadDialog(QDialog):
         )
 
     def recover_detail(self, component):
+        if component.strip().casefold() == 'estructura':
+            return
         if self.controls_running or self.exporting or not self.review_cases:
             return
         path, _ = QFileDialog.getOpenFileName(self, f"Cargar detalle: {component}", "", "Excel de revisión (*.xlsx)")

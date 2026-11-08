@@ -129,7 +129,7 @@ class SncTests(unittest.TestCase):
             self.assertTrue(self.widget.category_checks[module.SNC_CATEGORY].isChecked())
             self.assertTrue(self.widget.run_button.isEnabled())
         with patch.object(self.widget, 'open_sql_version_dialog'):
-            self.widget.environment.setCurrentText('Validaciones del modelo')
+            self.widget.environment.setCurrentText('Validaciones de consistencia lógica')
         self.assertTrue(self.widget.choose_sql_version.isEnabled())
         self.assertIsNone(self.widget.selected_sql_version)
 

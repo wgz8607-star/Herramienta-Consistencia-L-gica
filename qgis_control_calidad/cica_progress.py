@@ -14,6 +14,9 @@ def number(value):
     return f'{value:,}'.replace(',', '.')
 
 
+from .cica_zones import ZONES, selected_zones, zone_matches, zone_label
+
+
 class CicaProgressDialog(QDialog):
     def __init__(self, loader, parent=None):
         super().__init__(parent)
@@ -55,10 +58,10 @@ class CicaProgressDialog(QDialog):
             value = QLabel('—'); value.setStyleSheet(f'color: {color}; font-size: 29px; font-weight: bold;')
             body.addWidget(label); body.addWidget(value); self.values[key] = value; cards.addWidget(card, 1)
         layout.addLayout(cards)
-        controls = QHBoxLayout(); self.zone_buttons = {}; self.zone_group = QButtonGroup(self); self.zone_group.setExclusive(True)
+        controls = QHBoxLayout(); self.zone_buttons = {}; self.zone_group = QButtonGroup(self); self.zone_group.setExclusive(False)
         for zone, label in [('', 'Todas las zonas'), ('Urbano', 'Urbano'), ('Centro poblado', 'Centro poblado'), ('Rural', 'Rural')]:
             button = QPushButton(label); button.setCheckable(True); button.setChecked(not zone)
-            button.clicked.connect(lambda _checked, value=zone: self.set_zone(value))
+            button.clicked.connect(lambda _checked, value=zone: self.toggle_zone(value))
             self.zone_group.addButton(button); self.zone_buttons[zone] = button; controls.addWidget(button)
         controls.addStretch()
         self.mode = QComboBox(self); self.mode.addItems(['Cantidad', 'Porcentaje']); self.mode.hide(); self.mode.currentIndexChanged.connect(self.sync_mode)
@@ -77,21 +80,41 @@ class CicaProgressDialog(QDialog):
         chip_scroll.viewport().setObjectName('cicaCpViewport'); chip_scroll.viewport().setStyleSheet('QWidget#cicaCpViewport { background: #F3F6FA; }')
         self.cp_chips.setObjectName('cicaCpChips'); self.cp_chips.setStyleSheet('QWidget#cicaCpChips { background: #F3F6FA; }')
         self.cp_layout.addWidget(chip_scroll, 1); layout.addWidget(self.cp_container); self.cp_container.hide()
-        self.metric_widgets = {}
-        panels = QHBoxLayout()
-        for key, title, color in [('recognition', 'Reconocimiento predial', GREEN), ('quality', 'Control de calidad', BLUE)]:
-            card, body = self.card(title)
-            metrics = []
-            for role, caption, role_color in [('active', 'Activos', color), ('cancelled', 'Cancelados', RED)]:
-                body.addWidget(QLabel(caption))
+        self.metric_widgets = {'recognition': [], 'quality': []}
+        self.remaining_widgets = {}
+        self.metric_sections = {}
+        for role, heading, section_color in [
+                ('active', '1. Predios activos · Reconocimiento y control de calidad', GREEN),
+                ('cancelled', '2. Predios cancelados', RED)]:
+            section = QWidget()
+            section.setObjectName('cicaMetrics_' + role)
+            section_layout = QVBoxLayout(section)
+            section_layout.setContentsMargins(0, 0, 0, 0)
+            section_layout.setSpacing(10)
+            title = QLabel(heading)
+            title.setStyleSheet(f'font-size: 16px; font-weight: bold; color: {section_color};')
+            title.setWordWrap(True)
+            section_layout.addWidget(title)
+            panels = QHBoxLayout()
+            for key, title, color in [('recognition', 'Reconocimiento predial', GREEN), ('quality', 'Control de calidad', BLUE)]:
+                role_color = color if role == 'active' else RED
+                card, body = self.card(title)
+                body.addWidget(QLabel('Activos' if role == 'active' else 'Cancelados'))
                 row = QHBoxLayout(); bar = QProgressBar(); bar.setRange(0, 1000); bar.setTextVisible(False); bar.setFixedHeight(20)
                 bar.setStyleSheet(f'QProgressBar {{ background: #EAF0F5; border: none; border-radius: 5px; }} QProgressBar::chunk {{ background: {role_color}; border-radius: 5px; }}')
                 value = QLabel('—'); value.setStyleSheet(f'color: {role_color}; font-weight: bold;')
-                row.addWidget(bar, 1); row.addWidget(value); body.addLayout(row); body.addSpacing(13)
-                metrics.append((bar, value, role))
-            note = QLabel('Porcentaje sobre el total del estado en la zona seleccionada.'); note.setStyleSheet('color: #60758A; font-size: 10px;'); note.setWordWrap(True); body.addWidget(note)
-            self.metric_widgets[key] = metrics; panels.addWidget(card, 1)
-        layout.addLayout(panels)
+                row.addWidget(bar, 1); row.addWidget(value); body.addLayout(row)
+                remaining = QLabel('—'); remaining.setWordWrap(True)
+                remaining.setStyleSheet(f'color: {role_color}; font-size: 13px; font-weight: bold;')
+                body.addWidget(remaining)
+                self.remaining_widgets[(key, role)] = remaining
+                note = QLabel('Porcentaje sobre el total de ' + ('activos' if role == 'active' else 'cancelados') + ' de las zonas seleccionadas.')
+                note.setStyleSheet('color: #60758A; font-size: 10px;'); note.setWordWrap(True); body.addWidget(note)
+                self.metric_widgets[key].append((bar, value, role))
+                panels.addWidget(card, 1)
+            section_layout.addLayout(panels)
+            self.metric_sections[role] = section
+        layout.addWidget(self.metric_sections['active'])
         lower = QHBoxLayout()
         card, body = self.card('Activos sin áreas geográficas')
         row = QHBoxLayout(); self.no_areas = QLabel('—'); self.no_areas.setStyleSheet('color: #D69322; font-size: 28px; font-weight: bold;')
@@ -103,8 +126,9 @@ class CicaProgressDialog(QDialog):
         lower.addWidget(card, 2)
         card, body = self.card('Consultar el detalle')
         detail = QPushButton('Ver tabla y códigos NPN'); detail.setStyleSheet('background: #0066B3; color: white;'); detail.clicked.connect(self.open_detail); body.addWidget(detail)
-        note = QLabel('Valores exactos de la zona visible.'); note.setStyleSheet('color: #60758A; font-size: 10px;'); body.addWidget(note); lower.addWidget(card, 1)
+        note = QLabel('Valores exactos de las zonas seleccionadas.'); note.setStyleSheet('color: #60758A; font-size: 10px;'); body.addWidget(note); lower.addWidget(card, 1)
         layout.addLayout(lower)
+        layout.addWidget(self.metric_sections['cancelled'])
         card, body = self.card()
         card.setStyleSheet('QFrame { background: white; border-left: 5px solid #0096A8; border-radius: 10px; } QLabel { border: none; background: transparent; }')
         title = QLabel('RESULTADO FINAL · CARGADOS A SNC'); title.setStyleSheet('color: #0096A8; font-weight: bold; font-size: 11px;'); body.addWidget(title)
@@ -135,9 +159,29 @@ class CicaProgressDialog(QDialog):
         self.origin.setToolTip(data.get('source', ''))
         self.set_zone(self.zone)
 
+    def toggle_zone(self, zone):
+        if not zone:
+            self.set_zone('')
+            return
+        current=selected_zones(self.zone)
+        values=set(current or ())
+        if zone in values:
+            values.remove(zone)
+        else:
+            values.add(zone)
+        self.set_zone(tuple(values))
+
     def set_zone(self, zone):
-        self.zone = zone
-        self.zone_buttons[zone].setChecked(True)
+        zones=selected_zones(zone)
+        if zones is None:
+            self.zone=''
+            zones=None
+        elif len(zones)==1:
+            self.zone=zones[0]
+        else:
+            self.zone=zones
+        for value,button in self.zone_buttons.items():
+            button.setChecked((zones is None) if not value else (zones is not None and value in zones))
         self.cp.blockSignals(True); previous = self.cp.currentData()
         self.cp.clear(); self.cp.addItem('Todos los CP', '')
         for code in sorted({row[2] for row in self.rows if row[1] == 'Centro poblado'}):
@@ -145,7 +189,7 @@ class CicaProgressDialog(QDialog):
         index = self.cp.findData(previous)
         if index >= 0: self.cp.setCurrentIndex(index)
         self.cp.blockSignals(False)
-        self.cp_container.setVisible(zone == 'Centro poblado')
+        self.cp_container.setVisible(zones is not None and 'Centro poblado' in zones)
         while self.cp_chip_layout.count():
             item = self.cp_chip_layout.takeAt(0)
             if item.widget(): item.widget().deleteLater()
@@ -164,8 +208,7 @@ class CicaProgressDialog(QDialog):
 
     def render(self, *_):
         code = self.cp.currentData() or ''
-        rows = [row for row in self.rows if (not self.zone or row[1] == self.zone) and
-                (self.zone != 'Centro poblado' or not code or row[2] == code)]
+        rows = [row for row in self.rows if zone_matches(row[1],row[2],self.zone,code)]
         totals = [sum(row[index] for row in rows) for index in range(4, 8)]
         for key, value in zip(('total', 'active', 'cancelled'), totals[:3]): self.values[key].setText(number(value))
         for value, button in getattr(self, 'cp_buttons', {}).items(): button.setChecked(value == code)
@@ -179,7 +222,7 @@ class CicaProgressDialog(QDialog):
             self.table.addTopLevelItem(item)
         for index in range(8): self.table.resizeColumnToContents(index)
         indicators = self.data.get('indicator_rows')
-        visible_indicators = [item for item in (indicators or []) if (not self.zone or item['zona'] == self.zone) and (self.zone != 'Centro poblado' or not code or item['codigo_zona'] == code)]
+        visible_indicators = [item for item in (indicators or []) if zone_matches(item['zona'],item['codigo_zona'],self.zone,code)]
         for key, stages in [('recognition', self.data.get('recognition_stages')),
                             ('quality', self.data.get('quality_stages', ('CONTROL_CALIDAD_GENERAL', 'CONTROL_CALIDAD_GRUPO', 'DEVUELTO', 'RECHAZADO', 'VALIDADO')))]:
             for position, (bar, value, role) in enumerate(self.metric_widgets[key]):
@@ -194,12 +237,22 @@ class CicaProgressDialog(QDialog):
                 value.setText(f'{number(count)} | {percent:.1f} %' if count is not None else '—')
                 tip = f'{number(count)} de {number(denominator)} · {percent:.1f} %' if count is not None else 'Pendiente de definir las etapas que corresponden a este indicador.'
                 value.setToolTip(tip); bar.setToolTip(tip)
+                remaining = self.remaining_widgets[(key, role)]
+                if count is None:
+                    remaining.setText('Pendiente de calcular')
+                elif count > denominator:
+                    remaining.setText('Revisar datos: el avance supera el total en ' + number(count - denominator))
+                elif not denominator:
+                    remaining.setText('Sin predios ' + ('activos' if role == 'active' else 'cancelados') + ' en la selección')
+                else:
+                    remaining.setText('Faltan ' + number(denominator - count) + ' predios para el 100 %')
+                remaining.setToolTip(tip)
         area_rows = self.data.get('with_areas_rows')
         if indicators is not None and self.data.get('areas_available'):
             area_rows = [(item['divipola'], item['zona'], item['codigo_zona'], item['with_areas']) for item in indicators]
         if area_rows is not None:
             self.no_areas.setToolTip('Total predios − cancelados − predios con área geográfica positiva.')
-            with_areas = sum(row[3] for row in area_rows if (not self.zone or row[1] == self.zone) and (self.zone != 'Centro poblado' or not code or row[2] == code))
+            with_areas = sum(row[3] for row in area_rows if zone_matches(row[1],row[2],self.zone,code))
             missing = totals[0] - totals[2] - with_areas
             if missing < 0:
                 self.no_areas.setText('—'); self.no_areas_percent.setText('Datos de áreas por revisar'); self.area_bar.setValue(0)
@@ -213,11 +266,11 @@ class CicaProgressDialog(QDialog):
         if indicators is not None and self.data.get('snc_available'):
             self.snc.setText(number(sum(item['snc'] for item in visible_indicators)))
         self.snc.setToolTip('VALIDADO y estado_control = DESCARGADO_AL_SNC' if self.data.get('snc_available') else 'El campo estado_control no está disponible en esta fuente.')
-        self.final_scope.setText((self.zone or 'Todas las zonas') + (' · ' + (code or 'Todos los códigos CP') if self.zone == 'Centro poblado' else ''))
+        self.final_scope.setText(zone_label(self.zone) + (' · ' + (code or 'Todos los códigos CP') if selected_zones(self.zone) is not None and 'Centro poblado' in selected_zones(self.zone) else ''))
         self.note.setText('Esta consulta no modifica los filtros de validación.')
 
     def open_detail(self):
-        dialog = QDialog(self); dialog.setWindowTitle('Detalle CICA · ' + (self.zone or 'Todas las zonas')); dialog.resize(1000, 550)
+        dialog = QDialog(self); dialog.setWindowTitle('Detalle CICA · ' + zone_label(self.zone)); dialog.resize(1000, 550)
         layout = QVBoxLayout(dialog)
         tabs = QTabWidget(); layout.addWidget(tabs)
         summary = QWidget(); summary_layout = QVBoxLayout(summary)
@@ -267,6 +320,7 @@ class CicaProgressDialog(QDialog):
             self.rows = []; self.data = {}; self.render()
             for metrics in self.metric_widgets.values():
                 for bar, value, role in metrics: bar.setValue(0); value.setText('—')
+            for remaining in self.remaining_widgets.values(): remaining.setText('—')
             self.no_areas.setText('—'); self.snc.setText('—')
             for value in self.values.values(): value.setText('—')
             self.origin.setText('Informe no disponible: ' + str(error))

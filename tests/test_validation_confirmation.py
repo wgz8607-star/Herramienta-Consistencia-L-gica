@@ -12,7 +12,7 @@ class ValidationConfirmationTests(unittest.TestCase):
         self.widget = module.ControlCalidadDialog()
         self.addCleanup(self.cleanup)
         self.widget.environment.blockSignals(True)
-        self.widget.environment.setCurrentText('Validaciones del modelo')
+        self.widget.environment.setCurrentText('Validaciones de consistencia lógica')
         self.widget.environment.blockSignals(False)
         self.widget.schema.addItem('municipio')
         self.widget.repository_rules = [{'type': 'CONTROL', 'component': 'Administrativas', 'rule': 'regla_1_1', 'sql': 'SELECT 1', 'description': 'Control'}]

@@ -170,17 +170,17 @@ class CicaAndFormatsTests(unittest.TestCase):
 
     def test_formats_use_model_v2_and_exclude_v3_and_snc(self):
         for model in ('CICA', 'Modelo Interno de Levantamiento 1.0'):
-            format = validation_format(model, 'Validaciones del modelo', {'codigo': 'V2_29_07_2024'})
+            format = validation_format(model, 'Validaciones de consistencia lógica', {'codigo': 'V2_29_07_2024'})
             self.assertIsNotNone(format)
             self.assertTrue(format[1].is_file())
-            self.assertIsNone(validation_format(model, 'Validaciones del modelo', {'codigo': 'V3_07_09_2026'}))
+            self.assertIsNone(validation_format(model, 'Validaciones de consistencia lógica', {'codigo': 'V3_07_09_2026'}))
             self.assertIsNone(validation_format(model, module.SNC_ENVIRONMENT, {'codigo': 'V2_29_07_2024'}))
-            self.assertIsNone(validation_format(model, 'Validaciones del modelo', {'codigo': 'V2', 'id': {'table': 'reglas_cica_v3_07_09_2026'}}))
-        self.assertIsNone(validation_format('CICA', 'Validaciones del modelo', None))
+            self.assertIsNone(validation_format(model, 'Validaciones de consistencia lógica', {'codigo': 'V2', 'id': {'table': 'reglas_cica_v3_07_09_2026'}}))
+        self.assertIsNone(validation_format('CICA', 'Validaciones de consistencia lógica', None))
 
     def test_format_download_after_validation_is_an_exact_copy(self):
         owner = module.ControlCalidadDialog(); self.addCleanup(owner.close)
-        owner.pending_format = validation_format('CICA', 'Validaciones del modelo', {'codigo': 'V2_29_07_2024'})
+        owner.pending_format = validation_format('CICA', 'Validaciones de consistencia lógica', {'codigo': 'V2_29_07_2024'})
         self.assertFalse(owner.format_download.isEnabled())
         owner.results = [module.RuleResult('r1', 'Administrativas', 'Correcta', 0, rows=[])]
         owner.finished()

@@ -222,7 +222,7 @@ class ReviewUiTests(unittest.TestCase):
 
     def test_five_detail_buttons_load_and_reload_independently(self):
         from qgis_control_calidad.review import save_review
-        components = ('Administrativas', 'Economicas', 'Estructura', 'Fisicas', 'Juridicas')
+        components = ('Administrativas', 'Economicas', 'Novedades', 'Fisicas', 'Juridicas')
         self.owner.results = [module.RuleResult('r1', c, 'Correcta', 1,
             rows=[{'numero_predial': '00001', 'dato': c}], criterion_hash=digest(c)) for c in components]
         self.owner.review_cases = build_cases(self.owner.results, self.owner.review_context)

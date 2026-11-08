@@ -102,6 +102,7 @@ class CicaProgressTests(unittest.TestCase):
         widget = ControlCalidadDialog(); self.addCleanup(widget.close)
         widget.model.setCurrentText('CICA')
         widget.scope_selection = 'urban'; widget.scope_prefixes = (U,)
+        widget.cica_selection = {'source_kind': 'files', 'stage_mode': 'custom', 'stages': ('ASIGNADO',), 'municipality': ''}
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'predio.csv'
             source.write_text('numero_predial;estado;etapa\n0842101000001;ACTIVO;ASIGNADO\n0842100000001;CANCELADO;TRAMITADO\n')

@@ -69,11 +69,14 @@ class CicaSelectionTests(unittest.TestCase):
         app = QgsApplication.instance() or QgsApplication([], False)
         dialog = CicaIngestionDialog()
         self.addCleanup(dialog.close)
+        with patch.object(dialog, 'refresh_repository_date'):
+            dialog.source_mode.setCurrentIndex(1)
         dialog.repository_options = [('08421', 'ASIGNADO', 3), ('08421', 'TRAMITADO', 2), ('13006', 'TRAMITADO', 7)]
         dialog.municipality.addItem('Todos', '')
         dialog.municipality.addItem('08421', '08421')
         dialog.municipality.setCurrentIndex(2)
-        self.assertEqual(dialog.selected_source_filter(), cica_selection('08421', ['ASIGNADO', 'TRAMITADO']))
+        dialog.stage_mode.setCurrentIndex(dialog.stage_mode.findData('custom'))
+        self.assertEqual(dialog.selected_source_filter(), dict(cica_selection('08421', ['ASIGNADO', 'TRAMITADO']), stage_mode='custom'))
         dialog.stages.topLevelItem(1).setCheckState(0, Qt.Unchecked)
         self.assertEqual(dialog.selected_source_filter()['stages'], ('ASIGNADO',))
         dialog.municipality.setCurrentIndex(1)
@@ -124,6 +127,7 @@ class CicaSelectionTests(unittest.TestCase):
         dialog.municipality.setCurrentIndex(1)
         dialog.loaded_selection = dialog.selected_source_filter()
         dialog.replace_references = True
+        dialog.stage_mode.setCurrentIndex(dialog.stage_mode.findData('custom'))
         dialog.stages.topLevelItem(0).setCheckState(0, Qt.Unchecked)
         with patch('qgis_control_calidad.ingestion.QMessageBox.warning') as warning:
             dialog.validate_inputs()
@@ -141,6 +145,8 @@ class CicaSelectionTests(unittest.TestCase):
         app = QgsApplication.instance() or QgsApplication([], False)
         owner = Owner(); self.addCleanup(owner.close)
         dialog = CicaIngestionDialog(owner); self.addCleanup(dialog.close)
+        with patch.object(dialog, 'refresh_repository_date'):
+            dialog.source_mode.setCurrentIndex(1)
         dialog.load_source_options()
         self.assertGreaterEqual(dialog.municipality.findData(''), 0)
         self.assertIn('ATLÁNTICO', dialog.department.itemText(dialog.department.findData('08')))

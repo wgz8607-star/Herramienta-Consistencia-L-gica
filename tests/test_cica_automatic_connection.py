@@ -38,7 +38,7 @@ class CicaAutomaticConnectionTests(unittest.TestCase):
     def test_cica_runs_without_hidden_schema_or_qgis_connection(self):
         self.widget.model.setCurrentText('CICA')
         self.widget.environment.blockSignals(True)
-        self.widget.environment.setCurrentText('Validaciones del modelo')
+        self.widget.environment.setCurrentText('Validaciones de consistencia lógica')
         self.widget.environment.blockSignals(False)
         self.widget.repository_rules = [{'type': 'CONTROL', 'component': 'Administrativas', 'rule': 'regla_1_1', 'sql': 'SELECT * FROM {esquema}.cica_predio', 'description': ''}]
         self.widget.selected_sql_version = {'codigo': 'V2'}

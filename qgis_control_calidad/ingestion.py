@@ -1,7 +1,7 @@
 """Prepare independent CICA CSV snapshots for temporary validation tables."""
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (
-    QAbstractItemView, QHeaderView, QComboBox, QDialog, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QAbstractItemView, QHeaderView, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QTreeWidget, QTreeWidgetItem, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QMenu, QProgressDialog, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 from .cica_data import TABLES as CSV_INPUTS, prepare_csv, prepare_repository_cica, predio_status_summary, read_repository_cica_date, read_repository_cica_options, cica_selection
@@ -13,9 +13,11 @@ from pathlib import Path
 class CicaIngestionDialog(QDialog):
     copyReadProgress = pyqtSignal(str)
 
-    def __init__(self, parent=None, references=None, geodatabase=None, allow_gdb=True):
+    def __init__(self, parent=None, references=None, geodatabase=None, allow_gdb=True, allow_stage_override=True):
         super().__init__(parent)
         self.setWindowTitle('Seleccionar fuente de datos CICA')
+        self.allow_stage_override = allow_stage_override
+        self.custom_stage_selection_confirmed = False
         self.replace_references = False
         self.resize(900, 800)
         self.setMinimumSize(650, 540)
@@ -81,12 +83,12 @@ class CicaIngestionDialog(QDialog):
         self.source_note = QLabel('Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.')
         self.source_note.setProperty('muted', True); self.source_note.setWordWrap(True); source_layout.addWidget(self.source_note)
 
-        self.copy_filters, filter_layout = card('2. Municipio y etapas')
+        self.copy_filters, filter_layout = card('2. Municipio')
         filter_layout.addWidget(self.repository_date)
         municipality_row = QHBoxLayout()
         municipality_row.addWidget(QLabel('Municipio · DIVIPOLA'))
         municipality_row.addStretch()
-        self.load_options_button = QPushButton('Consultar municipios y etapas')
+        self.load_options_button = QPushButton('Consultar municipios')
         self.load_options_button.clicked.connect(self.load_source_options)
         municipality_row.addWidget(self.load_options_button); filter_layout.addLayout(municipality_row)
         location_form = QFormLayout(); location_form.setSpacing(8)
@@ -96,9 +98,17 @@ class CicaIngestionDialog(QDialog):
         self.municipality = QComboBox(); self.municipality.addItem('Seleccione municipio por DIVIPOLA…', None)
         location_form.addRow('Municipio', self.municipality)
         filter_layout.addLayout(location_form)
+        self.stage_notice = QLabel('La validación se hará para los predios que estén en etapas de control de calidad, según los filtros definidos en las sentencias seleccionadas.')
+        self.stage_notice.setWordWrap(True)
+        source_layout.addWidget(self.stage_notice)
+        self.stage_mode = QComboBox()
+        self.stage_mode.addItem('Validación de predios en etapas de control de calidad', 'default')
+        self.stage_mode.addItem('Validación personalizada de etapas', 'custom')
+        self.stage_mode.setVisible(allow_stage_override)
+        source_layout.addWidget(self.stage_mode)
         self.stage_summary = QLabel('Consulte los municipios para ver las etapas disponibles.')
         self.stage_summary.setProperty('muted', True); self.stage_summary.setWordWrap(True)
-        filter_layout.addWidget(self.stage_summary)
+        source_layout.addWidget(self.stage_summary)
         self.stages = QTreeWidget(); self.stages.setHeaderLabels(['Etapas a validar', 'Predios'])
         self.stages.setRootIsDecorated(False); self.stages.setAlternatingRowColors(True)
         self.stages.setSelectionMode(QAbstractItemView.NoSelection)
@@ -106,7 +116,10 @@ class CicaIngestionDialog(QDialog):
         self.stages.header().setStretchLastSection(False)
         self.stages.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.stages.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        filter_layout.addWidget(self.stages)
+        self.stages.setParent(self)
+        self.stage_selector_button = QPushButton('Seleccionar etapas…')
+        self.stage_selector_button.clicked.connect(self.open_stage_selector)
+        source_layout.addWidget(self.stage_selector_button)
         stage_buttons = QHBoxLayout()
         select_stages = QPushButton('Seleccionar todas'); clear_stages = QPushButton('Deseleccionar todas')
         select_stages.clicked.connect(lambda: self.check_stages(True)); clear_stages.clicked.connect(lambda: self.check_stages(False))
@@ -117,6 +130,10 @@ class CicaIngestionDialog(QDialog):
         filter_layout.addLayout(stage_buttons)
         self.municipality.currentIndexChanged.connect(self.update_stages)
         self.stages.itemChanged.connect(self.source_filter_changed)
+        self.stage_select_buttons = (select_stages, clear_stages)
+        self.stage_mode.currentIndexChanged.connect(self.update_stage_mode)
+        self.stages.hide()
+        for button in self.stage_select_buttons: button.hide()
         self.copy_filters.hide()
 
         self.csv_card, csv_layout = card('2. Archivos CSV')
@@ -164,6 +181,7 @@ class CicaIngestionDialog(QDialog):
         self.source_mode.currentIndexChanged.connect(self.change_source_mode)
         if not allow_gdb:
             self.source_note.setText('Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.')
+        self.update_stage_mode()
         self.update_predio_summary()
         from .button_styles import style_disabled_buttons
         style_disabled_buttons(self)
@@ -202,6 +220,7 @@ class CicaIngestionDialog(QDialog):
             self.setEnabled(True)
 
     def change_source_mode(self, index):
+        self.custom_stage_selection_confirmed = False
         for reference in self.prepared.values():
             reference.close()
         self.prepared = {}
@@ -212,7 +231,7 @@ class CicaIngestionDialog(QDialog):
         self.read_repository.setVisible(index == 1)
         self.copy_filters.setVisible(index == 1)
         self.csv_card.setVisible(index == 0)
-        self.source_note.setText(('Lea la copia del municipio y las etapas que seleccione.' + (' Puede agregar una GDB para validar.' if self.allow_gdb else '')) if index == 1 else ('Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.' if self.allow_gdb else 'Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.'))
+        self.source_note.setText(('Lea la copia del municipio seleccionado.' + (' Puede agregar una GDB para validar.' if self.allow_gdb else '')) if index == 1 else ('Cargue los CSV y, si corresponde, una GDB. Los originales no se modifican.' if self.allow_gdb else 'Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.'))
         self.repository_date.setVisible(index == 1)
         for label, row in self.csv_rows:
             label.setVisible(index == 0)
@@ -248,18 +267,97 @@ class CicaIngestionDialog(QDialog):
         finally:
             self.setEnabled(True)
 
+    def update_stage_mode(self, *_):
+        custom = self.allow_stage_override and self.stage_mode.currentData() == 'custom'
+        self.stages.hide()
+        self.stage_selector_button.setVisible(custom)
+        for button in self.stage_select_buttons: button.hide()
+        mode = self.stage_mode.currentData() if self.allow_stage_override else 'default'
+        self.stage_notice.setText('La validación se hará para los predios que estén en etapas de control de calidad, según los filtros definidos en las sentencias seleccionadas.' if mode == 'default' else 'Alcance personalizado: se sustituirá temporalmente el filtro de etapas de control de calidad por las etapas seleccionadas.' if mode == 'custom' else 'Todas las etapas: se omitirá temporalmente el filtro de etapas de control de calidad. Los demás criterios de las sentencias se conservan.')
+        if not self.allow_stage_override:
+            self.stage_notice.setText('La validación se hará con las etapas definidas en las sentencias de prevalidación para cargue a SNC.')
+        self.source_filter_changed()
+
     def source_filter_changed(self, *_):
-        selected = [self.stages.topLevelItem(i) for i in range(self.stages.topLevelItemCount()) if self.stages.topLevelItem(i).checkState(0) == Qt.Checked]
-        count = sum(int(item.text(1).replace('.', '')) for item in selected)
-        self.stage_summary.setText(f'{len(selected)} de {self.stages.topLevelItemCount()} etapas seleccionadas · {count:,} predios'.replace(',', '.'))
+        mode = self.stage_mode.currentData() if self.allow_stage_override else 'default'
+        municipality = self.municipality.currentData()
+        if mode == 'custom':
+            selected = [self.stages.topLevelItem(i) for i in range(self.stages.topLevelItemCount()) if self.stages.topLevelItem(i).checkState(0) == Qt.Checked]
+            count = sum(int(item.text(1).replace('.', '')) for item in selected)
+            self.stage_summary.setText(f'{len(selected)} etapas seleccionadas · {count:,} predios'.replace(',', '.'))
+        else:
+            count = sum(count for code, stage, count in self.repository_options if municipality is not None and (not municipality or code == municipality))
+            self.stage_summary.setText(f'{count:,} predios en la fuente del municipio seleccionado'.replace(',', '.'))
         if self.loaded_selection is not None and self.selected_source_filter() != self.loaded_selection:
-            self.status.setText('Cambió el municipio o las etapas. Pulse «Leer copia base CICA» para actualizar los datos.')
+            self.status.setText('Cambió el municipio o el alcance de etapas. Pulse «Leer copia base CICA» para actualizar los datos.')
             self.predio_summary.setText('Resumen pendiente de actualizar con los nuevos filtros.')
 
     def selected_source_filter(self):
-        return cica_selection(self.municipality.currentData() or '',
-            [self.stages.topLevelItem(i).data(0, Qt.UserRole) for i in range(self.stages.topLevelItemCount())
-             if self.stages.topLevelItem(i).checkState(0) == Qt.Checked])
+        mode = self.stage_mode.currentData() if self.allow_stage_override else 'default'
+        stages = [self.stages.topLevelItem(i).data(0, Qt.UserRole) for i in range(self.stages.topLevelItemCount()) if self.stages.topLevelItem(i).checkState(0) == Qt.Checked] if mode == 'custom' else []
+        selection = dict(cica_selection((self.municipality.currentData() or '') if self.source_mode.currentIndex() == 1 else '', stages), stage_mode=mode)
+        if self.source_mode.currentIndex() == 0:
+            selection['source_kind'] = 'files'
+        return selection
+
+    def open_stage_selector(self):
+        if self.source_mode.currentIndex() == 0:
+            snapshot = self.prepared.get('cica_predio') or self.existing.get('cica_predio')
+            gdb = self.prepared_gdb or self.existing_gdb
+            if snapshot is None and gdb:
+                snapshot = gdb.layers.get('cica_predio')
+            if snapshot is None or 'etapa' not in snapshot.columns:
+                QMessageBox.warning(self, 'Etapas no disponibles', 'Cargue Predio antes de seleccionar etapas personalizadas.')
+                return
+            import csv
+            from collections import Counter
+            index = snapshot.columns.index('etapa')
+            counts = Counter()
+            with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
+                for row in csv.reader(stream):
+                    counts[row[index] if len(row) > index else ''] += 1
+            previous = set(self.selected_source_filter()['stages']) if self.custom_stage_selection_confirmed else None
+            self.stages.blockSignals(True); self.stages.clear()
+            for stage, count in sorted(counts.items()):
+                item = QTreeWidgetItem([stage or 'Sin etapa', f'{count:,}'.replace(',', '.')])
+                item.setData(0, Qt.UserRole, stage)
+                item.setCheckState(0, Qt.Checked if previous is None or stage in previous else Qt.Unchecked)
+                self.stages.addTopLevelItem(item)
+            self.stages.blockSignals(False)
+        if not self.stages.topLevelItemCount():
+            QMessageBox.warning(self, 'Etapas no disponibles', 'Consulte primero los municipios y seleccione uno para ver sus etapas.')
+            return
+        before = [self.stages.topLevelItem(i).checkState(0) for i in range(self.stages.topLevelItemCount())]
+        previous_status = self.status.text(); previous_summary = self.predio_summary.text()
+        dialog = QDialog(self); dialog.setWindowTitle('Validación personalizada de etapas'); dialog.resize(660, 440)
+        layout = QVBoxLayout(dialog)
+        note = QLabel('Seleccione una o varias etapas. Solo se sustituye el filtro de etapas de control de calidad; las demás condiciones de las sentencias se conservan.')
+        note.setWordWrap(True); layout.addWidget(note)
+        layout.addWidget(self.stages); self.stages.show()
+        actions = QHBoxLayout()
+        all_button = QPushButton('Seleccionar todas'); none_button = QPushButton('Deseleccionar todas')
+        all_button.clicked.connect(lambda: self.check_stages(True)); none_button.clicked.connect(lambda: self.check_stages(False))
+        actions.addWidget(all_button); actions.addWidget(none_button); layout.addLayout(actions)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText('Aplicar etapas')
+        buttons.button(QDialogButtonBox.Cancel).setText('Cancelar')
+        def accept():
+            if not self.selected_source_filter()['stages']:
+                QMessageBox.warning(dialog, 'Seleccione etapas', 'Seleccione al menos una etapa.')
+                return
+            dialog.accept()
+        buttons.accepted.connect(accept); buttons.rejected.connect(dialog.reject); layout.addWidget(buttons)
+        try:
+            if dialog.exec_() == QDialog.Accepted:
+                self.custom_stage_selection_confirmed = True
+            else:
+                self.stages.blockSignals(True)
+                for i, state in enumerate(before): self.stages.topLevelItem(i).setCheckState(0, state)
+                self.stages.blockSignals(False)
+                self.status.setText(previous_status); self.predio_summary.setText(previous_summary)
+        finally:
+            self.stages.hide(); self.stages.setParent(self)
+        self.source_filter_changed()
 
     def check_stages(self, checked):
         for i in range(self.stages.topLevelItemCount()):
@@ -285,7 +383,7 @@ class CicaIngestionDialog(QDialog):
                 self.department.addItem(f'{department_name(prefix)} · {prefix}', prefix)
             self.department.blockSignals(False)
             self.populate_municipalities()
-            self.status.setText('Seleccione un municipio o Todos y marque las etapas a validar. Después pulse «Leer copia base CICA».')
+            self.status.setText('Seleccione un municipio o Todos. Las etapas de las sentencias son el alcance predeterminado. Después pulse «Leer copia base CICA».')
         except Exception as error:
             QMessageBox.warning(self, 'No se pudieron consultar municipios y etapas', str(error))
         finally:
@@ -331,10 +429,10 @@ class CicaIngestionDialog(QDialog):
 
     def choose_repository(self):
         if self.municipality.currentData() is None:
-            QMessageBox.warning(self, 'Seleccione municipio', 'Consulte los municipios y etapas y seleccione un DIVIPOLA o Todos los municipios.')
+            QMessageBox.warning(self, 'Seleccione municipio', 'Consulte los municipios y seleccione un DIVIPOLA o Todos los municipios.')
             return
         selection = self.selected_source_filter()
-        if not selection['stages']:
+        if selection['stage_mode'] == 'custom' and (not selection['stages'] or not self.custom_stage_selection_confirmed):
             QMessageBox.warning(self, 'Seleccione etapas', 'Marque al menos una etapa para validar.')
             return
         owner = self.parent()
@@ -377,6 +475,9 @@ class CicaIngestionDialog(QDialog):
             self.setEnabled(True)
         previous = self.prepared.get(table)
         self.prepared[table] = reference
+        if table == 'cica_predio':
+            self.custom_stage_selection_confirmed = False
+            self.stages.clear()
         if previous:
             previous.close()
         self.files[key].setText(f'{reference.filename} · {reference.row_count} registros')
@@ -458,6 +559,9 @@ class CicaIngestionDialog(QDialog):
         self.status.setText('Geodatabase preparada. Pulse «Usar fuente de datos» para aplicarla. Si una tabla también tiene CSV seleccionado, se utiliza el CSV.')
 
     def validate_inputs(self):
+        if self.stage_mode.currentData() == 'custom' and (not self.custom_stage_selection_confirmed or not self.selected_source_filter()['stages']):
+            QMessageBox.warning(self, 'Seleccione etapas', 'Abra «Seleccionar etapas…» y aplique una o varias etapas.')
+            return
         if self.source_mode.currentIndex() == 1 and (not self.replace_references or self.loaded_selection != self.selected_source_filter()):
             QMessageBox.warning(self, 'Fuente pendiente', 'Pulse «Leer copia base CICA» antes de usar esta fuente.')
             return

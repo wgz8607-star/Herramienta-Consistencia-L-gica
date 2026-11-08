@@ -228,7 +228,7 @@ class CicaGdbTests(unittest.TestCase):
         rows = dict(widget.validation_confirmation_metadata({'dbname': 'sentencias'}, 'pg_temp', [], None))
         self.assertNotIn('Geodatabase CICA', rows)
         widget.environment.blockSignals(True)
-        widget.environment.setCurrentText('Validaciones del modelo')
+        widget.environment.setCurrentText('Validaciones de consistencia lógica')
         widget.environment.blockSignals(False)
         self.assertIs(widget.active_cica_gdb(), prepared)
         rows = dict(widget.validation_confirmation_metadata({'dbname': 'sentencias'}, 'pg_temp', [], None))

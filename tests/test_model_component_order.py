@@ -11,7 +11,7 @@ class ModelComponentOrderTests(unittest.TestCase):
         self.widget.review_cases = []
 
     def test_model_results_have_requested_order_and_numbers_with_total_last(self):
-        self.widget.execution_info = {'Ambiente': 'Validaciones del modelo'}
+        self.widget.execution_info = {'Ambiente': 'Validaciones de consistencia lógica'}
         self.widget.refresh_review_statistics()
         table = self.widget.table
         self.assertEqual([table.item(i, 0).text() for i in range(table.rowCount())],
@@ -21,7 +21,7 @@ class ModelComponentOrderTests(unittest.TestCase):
         self.assertEqual(table.item(7, 1).text(), '7')
 
     def test_cargue_environment_keeps_its_existing_order(self):
-        self.widget.execution_info = {'Ambiente': 'Validaciones para cargue a SNC'}
+        self.widget.execution_info = {'Ambiente': 'Pre-Validaciones para cargue a SNC'}
         self.widget.refresh_review_statistics()
         self.assertEqual([self.widget.table.item(i, 0).text() for i in range(7)], sorted(self.names))
         self.assertIsNone(self.widget.table.verticalHeaderItem(0))

@@ -631,6 +631,14 @@ class ControlCalidadDialog(QDialog):
         self.ingestion_button = QPushButton("Seleccionar fuente de datos…")
         self.ingestion_button.clicked.connect(self.open_ingestion)
         form.addRow(self.ingestion_label, self.ingestion_button)
+        self.cica_stage_status = QLabel('Validación de predios en etapas de control de calidad')
+        self.cica_stage_status.setWordWrap(True)
+        self.cica_stage_status.setStyleSheet('QLabel { background: #EAF2FA; color: #0066B3; padding: 9px; border-radius: 5px; font-weight: bold; }')
+        self.cica_stage_button = QPushButton('Validación personalizada de etapas…')
+        self.cica_stage_button.clicked.connect(lambda: self.open_ingestion(configure_stages=True))
+        form.addRow(self.cica_stage_status)
+        form.addRow(self.cica_stage_button)
+        self.environment.currentTextChanged.connect(self.update_cica_stage_presentation)
         self.connection_mode_label = QLabel("Forma de conexión")
         form.addRow(self.connection_mode_label, self.connection_mode)
         form.addRow("", self.connection_stack)
@@ -1029,6 +1037,19 @@ class ControlCalidadDialog(QDialog):
         gdb = self.active_cica_gdb()
         return self.cica_references.get('cica_predio') or (gdb.layers.get('cica_predio') if gdb else None)
 
+    def update_cica_stage_presentation(self, *_):
+        if not hasattr(self, 'cica_stage_status'):
+            return
+        visible = self.model.currentText() == 'CICA' and self.environment.currentText() != SNC_ENVIRONMENT
+        self.cica_stage_status.setVisible(visible)
+        self.cica_stage_button.setVisible(visible)
+        custom = self.cica_selection.get('stage_mode') == 'custom'
+        text = 'Validación de predios en etapas de control de calidad'
+        if custom:
+            text = 'Validación personalizada de etapas\n' + ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ()))
+        self.cica_stage_status.setText(text)
+        self.cica_stage_button.setEnabled(not self.controls_running and not self.exporting and not self.filter_reading and not self.reference_lookup_running)
+
     def update_ingestion_button(self, *_):
         supports_snc = self.model.currentText() in SNC_REPOSITORY_TABLES
         self.environment.setVisible(supports_snc)
@@ -1047,6 +1068,7 @@ class ControlCalidadDialog(QDialog):
         self.schema_controls.setVisible(not visible)
         self.connection_group.setTitle('1. Fuente de datos CICA' if visible else '1. Conexión PostgreSQL / PostGIS')
         self.left_tabs.setTabText(0, 'Fuente de datos' if visible else 'Conexión')
+        self.update_cica_stage_presentation()
 
     def reset_model_selection(self, *_):
         self.format_download.setEnabled(False)
@@ -1183,6 +1205,7 @@ class ControlCalidadDialog(QDialog):
 
     def update_run_availability(self):
         self.update_advanced_filter_availability()
+        self.update_cica_stage_presentation()
         selected = {name for name, card in self.category_checks.items() if card.isChecked()}
         ready = bool(self.selected_sql_version) and any(
             item["type"] == "CONTROL" and item["component"] in selected
@@ -1431,10 +1454,12 @@ class ControlCalidadDialog(QDialog):
             self.main_tabs.setEnabled(True)
             self.update_run_availability()
 
-    def open_ingestion(self):
+    def open_ingestion(self, configure_stages=False):
         if self.controls_running or self.exporting:
             return
-        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT, allow_stage_override=self.environment.currentText() != SNC_ENVIRONMENT)
+        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT, allow_stage_override=self.environment.currentText() != SNC_ENVIRONMENT, initial_selection=self.cica_selection)
+        if configure_stages:
+            dialog.stage_mode.setFocus()
         try:
             if dialog.exec() == QDialog.Accepted:
                 self.clear_territorial_prefixes()
@@ -1458,6 +1483,7 @@ class ControlCalidadDialog(QDialog):
         finally:
             dialog.clear_prepared()
             self.update_advanced_filter_availability()
+            self.update_cica_stage_presentation()
 
     def download_validation_format(self):
         if not self.completed_format or not self.format_download.isEnabled():

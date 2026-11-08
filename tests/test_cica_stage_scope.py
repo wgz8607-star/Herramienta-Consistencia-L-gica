@@ -42,6 +42,40 @@ class StageScopeTests(unittest.TestCase):
         self.assertIn("E'ASIGNADO'",result)
         self.assertIn('base.cica_predio',result)
 
+    def test_stage_scope_is_visible_on_main_screen_and_custom_selection_is_shown(self):
+        from qgis_control_calidad.dialog import ControlCalidadDialog, SNC_ENVIRONMENT
+        dialog=ControlCalidadDialog();self.addCleanup(dialog.close)
+        dialog.model.setCurrentText('CICA')
+        dialog.update_cica_stage_presentation()
+        self.assertFalse(dialog.cica_stage_status.isHidden())
+        self.assertFalse(dialog.cica_stage_button.isHidden())
+        self.assertIn('Validación de predios en etapas de control de calidad',dialog.cica_stage_status.text())
+        dialog.cica_selection={'stage_mode':'custom','stages':('ASIGNADO','VALIDADO'),'source_kind':'files'}
+        dialog.update_cica_stage_presentation()
+        self.assertIn('Validación personalizada de etapas',dialog.cica_stage_status.text())
+        self.assertIn('ASIGNADO',dialog.cica_stage_status.text())
+        dialog.environment.blockSignals(True);dialog.environment.setCurrentText(SNC_ENVIRONMENT);dialog.environment.blockSignals(False)
+        dialog.update_cica_stage_presentation()
+        self.assertTrue(dialog.cica_stage_button.isHidden())
+
+    def test_reopening_file_source_preserves_custom_stage_selection(self):
+        import csv,tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'predio.csv'
+            with path.open('w',newline='') as stream:
+                csv.writer(stream).writerows([['0842101000001','ASIGNADO'],['0842101000002','VALIDADO']])
+            snapshot=SimpleNamespace(columns=('numero_predial','etapa'),csv_path=path,filename='predio.csv',row_count=2)
+            selection={'stage_mode':'custom','stages':('ASIGNADO',),'source_kind':'files','municipality':''}
+            dialog=CicaIngestionDialog(references={'cica_predio':snapshot},initial_selection=selection)
+            try:
+                self.assertEqual(dialog.stage_mode.currentData(),'custom')
+                self.assertEqual(dialog.selected_source_filter()['stages'],('ASIGNADO',))
+                self.assertTrue(dialog.custom_stage_selection_confirmed)
+                self.assertFalse(dialog.stage_selector_button.isHidden())
+            finally:dialog.close()
+
     def test_default_stage_selector_is_hidden_and_custom_selection_uses_separate_window(self):
         dialog=CicaIngestionDialog();self.addCleanup(dialog.close)
         with patch.object(dialog,'refresh_repository_date'):dialog.source_mode.setCurrentIndex(1)

@@ -13,7 +13,7 @@ from pathlib import Path
 class CicaIngestionDialog(QDialog):
     copyReadProgress = pyqtSignal(str)
 
-    def __init__(self, parent=None, references=None, geodatabase=None, allow_gdb=True, allow_stage_override=True):
+    def __init__(self, parent=None, references=None, geodatabase=None, allow_gdb=True, allow_stage_override=True, initial_selection=None):
         super().__init__(parent)
         self.setWindowTitle('Seleccionar fuente de datos CICA')
         self.allow_stage_override = allow_stage_override
@@ -181,10 +181,60 @@ class CicaIngestionDialog(QDialog):
         self.source_mode.currentIndexChanged.connect(self.change_source_mode)
         if not allow_gdb:
             self.source_note.setText('Cargue los CSV para las validaciones de cargue al SNC. Los originales no se modifican.')
+        self.restore_stage_selection(initial_selection or {})
         self.update_stage_mode()
         self.update_predio_summary()
         from .button_styles import style_disabled_buttons
         style_disabled_buttons(self)
+
+    def restore_stage_selection(self, selection):
+        if not selection:
+            return
+        copy = selection.get('source_kind', 'copy') == 'copy'
+        if copy:
+            self.source_mode.setCurrentIndex(1)
+            code = selection.get('municipality', '')
+            index = self.municipality.findData(code)
+            if index < 0:
+                label = (self.municipality_catalog.get(code, ('', code))[1] + ' · ' + code) if code else 'Todos los municipios'
+                self.municipality.addItem(label, code)
+                index = self.municipality.count() - 1
+            self.municipality.setCurrentIndex(index)
+        snapshot = self.existing.get('cica_predio')
+        if snapshot is None and self.existing_gdb:
+            snapshot = self.existing_gdb.layers.get('cica_predio')
+        if snapshot is not None and 'etapa' in snapshot.columns:
+            import csv
+            from collections import Counter
+            stage_index = snapshot.columns.index('etapa')
+            npn_index = next((snapshot.columns.index(name) for name in ('numero_predial', 'numero_predial_nacional') if name in snapshot.columns), None)
+            counts = Counter()
+            with snapshot.csv_path.open(encoding='utf-8', newline='') as stream:
+                for row in csv.reader(stream):
+                    code = row[npn_index].strip()[:5] if npn_index is not None and len(row) > npn_index else selection.get('municipality', '')
+                    counts[(code, row[stage_index] if len(row) > stage_index else '')] += 1
+            self.repository_options = [(code, stage, count) for (code, stage), count in counts.items()]
+            if copy:
+                self.update_stages()
+            else:
+                stage_counts = Counter()
+                for (_code, stage), count in counts.items(): stage_counts[stage] += count
+                self.stages.blockSignals(True); self.stages.clear()
+                for stage, count in sorted(stage_counts.items()):
+                    item = QTreeWidgetItem([stage or 'Sin etapa', f'{count:,}'.replace(',', '.')])
+                    item.setData(0, Qt.UserRole, stage); item.setCheckState(0, Qt.Checked)
+                    self.stages.addTopLevelItem(item)
+                self.stages.blockSignals(False)
+        mode = selection.get('stage_mode', 'default') if self.allow_stage_override else 'default'
+        self.stage_mode.setCurrentIndex(self.stage_mode.findData(mode))
+        if mode == 'custom':
+            chosen = set(selection.get('stages', ()))
+            self.stages.blockSignals(True)
+            for index in range(self.stages.topLevelItemCount()):
+                item = self.stages.topLevelItem(index)
+                item.setCheckState(0, Qt.Checked if item.data(0, Qt.UserRole) in chosen else Qt.Unchecked)
+            self.stages.blockSignals(False)
+            self.custom_stage_selection_confirmed = bool(chosen)
 
     def update_predio_summary(self):
         repository = self.source_mode.currentIndex() == 1

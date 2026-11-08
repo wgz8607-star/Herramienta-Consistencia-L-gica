@@ -574,3 +574,7 @@ Informe de avance CICA con selección combinada de zonas, cifras faltantes para 
 ### Versión 2.14.13
 
 Corrige la escala de las barras del informe de avance CICA: cada indicador usa el total de su propio estado como 100 %, tanto en Cantidad como en Porcentaje. Los cancelados no se escalan respecto al volumen de activos. Verificado el ejemplo 930 de 1.893 cancelados (49,1 %), manteniendo 963 pendientes. Trece pruebas específicas correctas.
+
+### Versión 2.14.14
+
+Muestra en la pantalla principal CICA el alcance estándar de validación de predios en etapas de control de calidad, o las etapas personalizadas elegidas. Incorpora el acceso visible Validación personalizada de etapas. Al abrir nuevamente la fuente se conserva el modo y la selección anterior, evitando que vuelva silenciosamente al modo estándar. La copia de base requiere releerse antes de aplicar cambios de alcance. La personalización continúa disponible para consistencia lógica y no para prevalidaciones SNC. Verificación: 322 pruebas ejecutadas, 4 omitidas.

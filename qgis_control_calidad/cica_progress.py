@@ -232,7 +232,8 @@ class CicaProgressDialog(QDialog):
                     count = sum(item[field] for item in visible_indicators)
                 denominator = totals[1 + position]
                 percent = 100 * count / denominator if count is not None and denominator else 0
-                scale = denominator if self.mode.currentText() == 'Porcentaje' else max(totals[1:3], default=0)
+                # Each state section has its own 100%; never scale cancelled by active totals.
+                scale = denominator
                 bar.setValue(round(1000 * count / scale) if count is not None and scale else 0)
                 value.setText(f'{number(count)} | {percent:.1f} %' if count is not None else '—')
                 tip = f'{number(count)} de {number(denominator)} · {percent:.1f} %' if count is not None else 'Pendiente de definir las etapas que corresponden a este indicador.'

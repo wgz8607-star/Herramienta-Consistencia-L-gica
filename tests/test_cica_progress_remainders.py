@@ -31,6 +31,23 @@ class CicaProgressRemainderTests(unittest.TestCase):
                 other='cancelled' if role=='active' else 'active'
                 self.assertFalse(dialog.metric_sections[other].isAncestorOf(bar))
 
+    def test_cancelled_bar_uses_cancelled_total_in_both_display_modes(self):
+        dialog=self.make_dialog({'rows':[
+            ('08421','Urbano','01','VALIDADO',30930,30000,930,0),
+            ('08421','Urbano','01','ASIGNADO',963,0,963,0)],
+            'recognition_stages':('VALIDADO',),'quality_stages':('VALIDADO',)})
+        for mode in ('Cantidad','Porcentaje'):
+            dialog.mode.setCurrentText(mode)
+            for key in ('recognition','quality'):
+                bar,value,role=dialog.metric_widgets[key][1]
+                self.assertEqual(bar.value(),491)
+                self.assertIn('930 | 49.1 %',value.text())
+                self.assertEqual(dialog.remaining_widgets[(key,'cancelled')].text(),'Faltan 963 predios para el 100 %')
+                self.assertEqual(dialog.metric_widgets[key][0][0].value(),1000)
+        dialog.set_data({'rows':[('08421','Urbano','01','VALIDADO',10,0,10,0)],'recognition_stages':('VALIDADO',),'quality_stages':('VALIDADO',)})
+        self.assertEqual(dialog.metric_widgets['recognition'][1][0].value(),1000)
+        self.assertEqual(dialog.metric_widgets['recognition'][0][0].value(),0)
+
     def test_remaining_counts_follow_zone_combinations_and_mode(self):
         dialog=self.make_dialog(self.source());dialog.toggle_zone('Urbano')
         self.assertEqual(dialog.remaining_widgets[('recognition','active')].text(),'Faltan 75 predios para el 100 %')

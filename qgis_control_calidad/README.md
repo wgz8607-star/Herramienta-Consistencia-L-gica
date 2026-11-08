@@ -570,3 +570,7 @@ Sin GDB, CICA genera el reporte general con sus indicadores alfanuméricos y mar
 ### Versión 2.14.12
 
 Informe de avance CICA con selección combinada de zonas, cifras faltantes para el 100 % y secciones independientes de activos/cancelados. Ambientes renombrados y disponibilidad de consistencia consultada al abrir el selector. Estructura queda fuera de Gestión de Excepciones. Etapas CICA con modo estándar y modo personalizado en ventana independiente, seleccionando una, varias o todas las etapas reales; el ajuste del filtro de etapas se realiza solo durante la ejecución, sin modificar las sentencias publicadas. Alcance documentado en confirmación/reportes/revisión. Suite: 319 pruebas, 4 omitidas.
+
+### Versión 2.14.13
+
+Corrige la escala de las barras del informe de avance CICA: cada indicador usa el total de su propio estado como 100 %, tanto en Cantidad como en Porcentaje. Los cancelados no se escalan respecto al volumen de activos. Verificado el ejemplo 930 de 1.893 cancelados (49,1 %), manteniendo 963 pendientes. Trece pruebas específicas correctas.

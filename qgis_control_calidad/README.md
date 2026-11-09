@@ -578,3 +578,7 @@ Corrige la escala de las barras del informe de avance CICA: cada indicador usa e
 ### Versión 2.14.14
 
 Muestra en la pantalla principal CICA el alcance estándar de validación de predios en etapas de control de calidad, o las etapas personalizadas elegidas. Incorpora el acceso visible Validación personalizada de etapas. Al abrir nuevamente la fuente se conserva el modo y la selección anterior, evitando que vuelva silenciosamente al modo estándar. La copia de base requiere releerse antes de aplicar cambios de alcance. La personalización continúa disponible para consistencia lógica y no para prevalidaciones SNC. Verificación: 322 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2.14.15
+
+Habilita el selector de etapas CICA también en Pre-Validaciones para cargue a SNC, tanto en la pantalla principal como en la fuente de datos. Conserva el modo estándar de etapas de las sentencias y permite acceder a Validación personalizada de etapas en ventana independiente. La GDB permanece oculta y excluida en este ambiente. No se borra la selección personalizada al cambiar de ambiente. Se mantienen los demás criterios de las sentencias y se informa el alcance en los metadatos. Verificación: 323 pruebas ejecutadas, 4 omitidas.

@@ -102,7 +102,7 @@ class CicaIngestionDialog(QDialog):
         self.stage_notice.setWordWrap(True)
         source_layout.addWidget(self.stage_notice)
         self.stage_mode = QComboBox()
-        self.stage_mode.addItem('Validación de predios en etapas de control de calidad', 'default')
+        self.stage_mode.addItem('Validación de predios en etapas de control de calidad' if allow_gdb else 'Validación con las etapas de las sentencias de prevalidación', 'default')
         self.stage_mode.addItem('Validación personalizada de etapas', 'custom')
         self.stage_mode.setVisible(allow_stage_override)
         source_layout.addWidget(self.stage_mode)
@@ -324,7 +324,7 @@ class CicaIngestionDialog(QDialog):
         for button in self.stage_select_buttons: button.hide()
         mode = self.stage_mode.currentData() if self.allow_stage_override else 'default'
         self.stage_notice.setText('La validación se hará para los predios que estén en etapas de control de calidad, según los filtros definidos en las sentencias seleccionadas.' if mode == 'default' else 'Alcance personalizado: se sustituirá temporalmente el filtro de etapas de control de calidad por las etapas seleccionadas.' if mode == 'custom' else 'Todas las etapas: se omitirá temporalmente el filtro de etapas de control de calidad. Los demás criterios de las sentencias se conservan.')
-        if not self.allow_stage_override:
+        if mode == 'default' and not self.allow_gdb:
             self.stage_notice.setText('La validación se hará con las etapas definidas en las sentencias de prevalidación para cargue a SNC.')
         self.source_filter_changed()
 

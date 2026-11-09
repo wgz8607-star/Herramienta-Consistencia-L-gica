@@ -1040,11 +1040,11 @@ class ControlCalidadDialog(QDialog):
     def update_cica_stage_presentation(self, *_):
         if not hasattr(self, 'cica_stage_status'):
             return
-        visible = self.model.currentText() == 'CICA' and self.environment.currentText() != SNC_ENVIRONMENT
+        visible = self.model.currentText() == 'CICA'
         self.cica_stage_status.setVisible(visible)
         self.cica_stage_button.setVisible(visible)
         custom = self.cica_selection.get('stage_mode') == 'custom'
-        text = 'Validación de predios en etapas de control de calidad'
+        text = 'Validación con las etapas de las sentencias de prevalidación' if self.environment.currentText() == SNC_ENVIRONMENT else 'Validación de predios en etapas de control de calidad'
         if custom:
             text = 'Validación personalizada de etapas\n' + ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ()))
         self.cica_stage_status.setText(text)
@@ -1087,10 +1087,6 @@ class ControlCalidadDialog(QDialog):
         self.format_download.setEnabled(False)
         self.clear_repository_rules()
         snc = self.environment.currentText() == SNC_ENVIRONMENT
-        if snc and self.cica_selection.get('stage_mode') in ('custom', 'all'):
-            for reference in self.cica_references.values(): reference.close()
-            self.cica_references = {}
-            self.cica_selection = {}
         self.choose_sql_version.setEnabled(self.environment.currentIndex() > 0 and not snc)
         self.choose_sql_version.setToolTip('Cargue SNC usa automáticamente su única versión publicada.' if snc else '')
         if self.environment.currentIndex() > 0:
@@ -1457,7 +1453,7 @@ class ControlCalidadDialog(QDialog):
     def open_ingestion(self, configure_stages=False):
         if self.controls_running or self.exporting:
             return
-        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT, allow_stage_override=self.environment.currentText() != SNC_ENVIRONMENT, initial_selection=self.cica_selection)
+        dialog = CicaIngestionDialog(self, self.cica_references, self.active_cica_gdb(), allow_gdb=self.environment.currentText() != SNC_ENVIRONMENT, allow_stage_override=True, initial_selection=self.cica_selection)
         if configure_stages:
             dialog.stage_mode.setFocus()
         try:
@@ -1982,7 +1978,7 @@ class ControlCalidadDialog(QDialog):
             if self.cica_selection:
                 rows.append(('Municipio CICA (DIVIPOLA)', self.cica_selection.get('municipality') or 'Todos'))
                 mode = self.cica_selection.get('stage_mode', 'default')
-                rows.append(('Alcance de etapas CICA', MODE_LABELS[mode]))
+                rows.append(('Alcance de etapas CICA', 'Etapas definidas en las sentencias de prevalidación' if mode == 'default' and self.environment.currentText() == SNC_ENVIRONMENT else MODE_LABELS[mode]))
                 if mode == 'custom':
                     rows.append(('Etapas CICA', ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ()))))
             if self.active_cica_gdb():
@@ -2147,7 +2143,7 @@ class ControlCalidadDialog(QDialog):
             self.execution_info['Cobertura geográfica'] = 'Con GDB' if self.active_cica_gdb() else 'Sin GDB: solo reglas alfanuméricas'
             self.execution_info['Geodatabase CICA'] = self.active_cica_gdb().filename if self.active_cica_gdb() else 'GDB no cargada'
             mode = self.cica_selection.get('stage_mode', 'default')
-            self.execution_info['Alcance de etapas CICA'] = MODE_LABELS[mode]
+            self.execution_info['Alcance de etapas CICA'] = 'Etapas definidas en las sentencias de prevalidación' if mode == 'default' and self.environment.currentText() == SNC_ENVIRONMENT else MODE_LABELS[mode]
             if mode == 'custom':
                 self.execution_info['Etapas CICA'] = ', '.join(stage or 'Sin etapa' for stage in self.cica_selection.get('stages', ()))
             if omitted_gdb_rules:

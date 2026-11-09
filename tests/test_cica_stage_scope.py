@@ -56,7 +56,23 @@ class StageScopeTests(unittest.TestCase):
         self.assertIn('ASIGNADO',dialog.cica_stage_status.text())
         dialog.environment.blockSignals(True);dialog.environment.setCurrentText(SNC_ENVIRONMENT);dialog.environment.blockSignals(False)
         dialog.update_cica_stage_presentation()
-        self.assertTrue(dialog.cica_stage_button.isHidden())
+        self.assertFalse(dialog.cica_stage_button.isHidden())
+        self.assertIn('Validación personalizada de etapas',dialog.cica_stage_status.text())
+        dialog.cica_selection={}
+        dialog.update_cica_stage_presentation()
+        self.assertIn('prevalidación',dialog.cica_stage_status.text())
+
+    def test_snc_source_shows_both_stage_options_but_keeps_gdb_hidden(self):
+        dialog=CicaIngestionDialog(allow_gdb=False,allow_stage_override=True)
+        try:
+            self.assertFalse(dialog.stage_mode.isHidden())
+            self.assertEqual(dialog.stage_mode.count(),2)
+            self.assertIn('prevalidación',dialog.stage_mode.itemText(0))
+            self.assertTrue(dialog.gdb_card.isHidden())
+            dialog.stage_mode.setCurrentIndex(1)
+            self.assertFalse(dialog.stage_selector_button.isHidden())
+            self.assertTrue(dialog.stages.isHidden())
+        finally:dialog.close()
 
     def test_reopening_file_source_preserves_custom_stage_selection(self):
         import csv,tempfile

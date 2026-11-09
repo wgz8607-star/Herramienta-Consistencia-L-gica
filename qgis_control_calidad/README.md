@@ -1,5 +1,7 @@
 # Validador Consistencia Lógica Alfanumérica
 
+> Versión estable actual: **2.0.0 — Versión 2**.
+
 Plugin para QGIS 3.28 o superior. Ejecuta las reglas SQL para **Modelo Interno de Levantamiento 1.0** y **CICA** contra PostgreSQL/PostGIS, muestra el resultado de cada regla y permite exportar un CSV.
 
 ## Formas de conexión
@@ -582,3 +584,7 @@ Muestra en la pantalla principal CICA el alcance estándar de validación de pre
 ### Versión 2.14.15
 
 Habilita el selector de etapas CICA también en Pre-Validaciones para cargue a SNC, tanto en la pantalla principal como en la fuente de datos. Conserva el modo estándar de etapas de las sentencias y permite acceder a Validación personalizada de etapas en ventana independiente. La GDB permanece oculta y excluida en este ambiente. No se borra la selección personalizada al cambiar de ambiente. Se mantienen los demás criterios de las sentencias y se informa el alcance en los metadatos. Verificación: 323 pruebas ejecutadas, 4 omitidas.
+
+### Versión 2 estable — 2.0.0
+
+Se consolida la versión estable con las funcionalidades de 2.14.15, sin cambios en los criterios de validación. Metadata QGIS: version=2.0.0 y experimental=False. Paquete estable independiente para conservar los ZIP históricos. La renumeración desde 2.14.15 requiere instalación manual del ZIP, porque QGIS ordena 2.0.0 como una versión anterior.

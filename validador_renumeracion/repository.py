@@ -1,0 +1,29 @@
+"""Reuse the installed consistency validator configuration without executing it."""
+import ast
+import importlib.util
+from pathlib import Path
+
+
+def repository_params():
+    spec=importlib.util.find_spec('qgis_control_calidad')
+    if spec is None or not spec.origin:
+        raise ValueError('Instale el Validador de Consistencia Lógica para reutilizar su acceso a sentencias.')
+    filename=Path(spec.origin).parent/'dialog.py'
+    values={}
+
+    class Resolve(ast.NodeTransformer):
+        def visit_Name(self,node):
+            if node.id in values:return ast.Constant(value=values[node.id])
+            return node
+
+    for statement in ast.parse(filename.read_text(encoding='utf-8')).body:
+        if not isinstance(statement,ast.Assign):continue
+        if len(statement.targets)!=1 or not isinstance(statement.targets[0],ast.Name):continue
+        name=statement.targets[0].id
+        if name not in ('POSTGRES_HOST','REPOSITORY_CONNECTION'):continue
+        try:values[name]=ast.literal_eval(Resolve().visit(statement.value))
+        except (ValueError,TypeError):continue
+    params=values.get('REPOSITORY_CONNECTION')
+    if not isinstance(params,dict) or params.get('dbname')!='sentencias' or not params.get('password'):
+        raise ValueError('No se encontró una configuración válida de sentencias en el Validador de Consistencia Lógica.')
+    return dict(params)

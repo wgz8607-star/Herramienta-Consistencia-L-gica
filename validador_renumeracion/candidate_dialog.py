@@ -1,4 +1,4 @@
-from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QInputDialog
+from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout
 from openpyxl import Workbook
 from .database import model_schemas,source_records,cica_municipalities
 from .candidates import identify_candidates
@@ -8,7 +8,7 @@ HEADERS=['Número predial','DIVIPOLA','Zona','Prefijo 13','Manzana','Prefijo 17'
 
 class CandidateDialog(QDialog):
     def __init__(self,parent,window_parent=None):
-        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self._cica_password=None
+        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[]
         self.setWindowTitle('Renumeración predial · Seleccionar fuente de datos');self.resize(1150,740)
         layout=QVBoxLayout(self)
         title=QLabel('Seleccione la fuente de datos a revisar');title.setStyleSheet('font-size: 20px; font-weight: bold; color: #0066B3;');layout.addWidget(title)
@@ -80,17 +80,8 @@ class CandidateDialog(QDialog):
     def params(self):
         cica=self.model.currentText()=='CICA'
         if cica:
-            from qgis.core import QgsSettings
-            settings=QgsSettings()
-            for index in range(self.owner.connection.count()):
-                name=self.owner.connection.itemText(index)
-                if settings.value('PostgreSQL/connections/'+name+'/database','')=='sentencias':
-                    return self.owner.params(preloaded=True,connection_name=name)
-            if self._cica_password is None:
-                password,accepted=QInputDialog.getText(self,'Acceso a la copia CICA','Contraseña de lectura de sentencias (solo esta sesión):',QLineEdit.Password)
-                if not accepted:raise ValueError('Consulta CICA cancelada.')
-                self._cica_password=password
-            return {'host':'172.19.3.225','port':'5432','dbname':'sentencias','user':'admin_ant','password':self._cica_password}
+            from .repository import repository_params
+            return repository_params()
         if self.connection_mode.currentIndex()==0:
             return self.owner.params(preloaded=cica,connection_name=self.connection.currentText())
         params={key:(field.text() if key=='password' else field.text().strip()) for key,field in self.direct.items()}

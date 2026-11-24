@@ -111,3 +111,18 @@ class CandidateTests(unittest.TestCase):
             self.assertFalse(dialog.connection_mode.isHidden())
             self.assertTrue(dialog.department.isHidden())
         finally:dialog.close();parent.close()
+
+    def test_cica_reuses_installed_validator_without_password_prompt(self):
+        from validador_renumeracion.repository import repository_params
+        params=repository_params()
+        self.assertEqual(params['dbname'],'sentencias')
+        self.assertTrue(params.get('password'))
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from unittest.mock import patch
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            with patch.object(parent,'params',side_effect=AssertionError('No debe pedir conexión QGIS')):
+                self.assertEqual(dialog.params(),params)
+        finally:dialog.close();parent.close()

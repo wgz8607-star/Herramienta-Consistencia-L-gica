@@ -213,3 +213,69 @@ class RenumberingTests(unittest.TestCase):
                 self.assertEqual(groups['F2'].value,'0010')
                 self.assertEqual(groups['G2'].value,'0011');book.close()
         finally:dialog.close();parent.close();owner.close()
+
+    def test_comparison_strict_scope_omits_unchanged_non_provisional_rows(self):
+        proposal=generate([old()]);item=proposal[0]
+        rows=[{'line':2,'old':item['old'],'new':item['new']},{'line':3,'old':npn(),'new':npn()}]
+        result=compare_proposal(proposal,rows,only_provisionals=True)
+        self.assertEqual(len(result),1);self.assertEqual(result[0]['status'],'Coincide')
+        candidate_rows=[(npn(),)]+[(old(),)]
+        r1=build_maxima([(1,npn(block='0010',plot='0020'))])
+        self.assertEqual([row['old'] for row in generate_proposal(candidate_rows,r1,'CICA')],[old()])
+
+    def test_optional_090x_condition9_changes_only_terrain_baseline(self):
+        from validador_renumeracion.renumbering import terrain_baselines
+        r1=build_maxima([(1,npn(block='0010',plot='0042')),(2,npn(block='0010',plot='0903',condition='9'))])
+        rows=identify_candidates([(1,old('0010')),(2,old('9001'))],'CICA')['rows']
+        snapshot=deepcopy(r1)
+        excluded=generate_proposal(rows,r1,'CICA')
+        included=generate_proposal(rows,r1,'CICA',True)
+        a=next(row for row in excluded if row['old']==old('0010'))
+        b=next(row for row in included if row['old']==old('0010'))
+        self.assertEqual(a['base_t'],42);self.assertEqual(a['new'][17:21],'0043')
+        self.assertEqual(b['base_t'],903);self.assertEqual(b['new'][17:21],'0904')
+        self.assertEqual([row['base_m'] for row in excluded],[row['base_m'] for row in included])
+        self.assertEqual(r1,snapshot)
+        other=build_maxima([(1,npn(block='0010',plot='0903',condition='0')),(2,npn(block='0010',plot='0909',condition='9'))])
+        self.assertEqual(terrain_baselines(other)[npn(block='0010')[:17]],903)
+        beyond=build_maxima([(1,npn(block='0010',plot='0910',condition='9'))])
+        self.assertEqual(terrain_baselines(beyond)[npn(block='0010')[:17]],910)
+
+    def test_only_090x_reference_does_not_invent_zero_and_collisions_remain_pending(self):
+        r1=build_maxima([(1,npn(block='0010',plot='0903',condition='9'))])
+        rows=identify_candidates([(1,old('0010'))],'CICA')['rows']
+        excluded=generate_proposal(rows,r1,'CICA')
+        self.assertEqual(excluded[0]['status'],'Pendiente');self.assertIn('090x',excluded[0]['reason'])
+        self.assertEqual(generate_proposal(rows,r1,'CICA',True)[0]['new'][17:21],'0904')
+        r1=build_maxima([(1,npn(block='0010',plot='0900')),(2,npn(block='0010',plot='0901',condition='9'))])
+        rows=identify_candidates([(1,old('0010',condition='9'))],'CICA')['rows']
+        proposal=generate_proposal(rows,r1,'CICA')
+        self.assertEqual(proposal[0]['status'],'Pendiente');self.assertIn('ya existe',proposal[0]['reason'])
+
+    def test_090x_checkbox_recalculates_existing_comparison_and_export_policy(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.proposal_dialog import ProposalDialog
+        owner=MaximaDialog();parent=CandidateDialog(owner)
+        r1=build_maxima([(1,npn(block='0010',plot='0042')),(2,npn(block='0010',plot='0903',condition='9'))]);owner.result=r1
+        candidates=identify_candidates([(1,old('0010'))],'CICA')['rows']
+        proposal=generate_proposal(candidates,r1,'CICA');dialog=ProposalDialog(proposal,'Contexto',parent)
+        try:
+            self.assertFalse(dialog.take_090x.isChecked())
+            item=proposal[0];dialog.file_rows=[{'line':2,'old':item['old'],'new':item['new']}];dialog.compared=True
+            dialog.comparison=compare_proposal(proposal,dialog.file_rows,True)
+            dialog.take_090x.setChecked(True)
+            self.assertTrue(dialog.applied_090x)
+            self.assertEqual(dialog.proposal[0]['new'][17:21],'0904')
+            self.assertEqual(dialog.comparison[0]['status'],'Diferencia')
+            dialog.take_090x.setChecked(False)
+            self.assertEqual(dialog.comparison[0]['status'],'Coincide')
+            self.assertEqual(dialog.proposal[0]['new'][17:21],'0043')
+            with tempfile.TemporaryDirectory() as directory:
+                filename=str(Path(directory)/'policy.xlsx')
+                with patch('validador_renumeracion.proposal_dialog.QFileDialog.getSaveFileName',return_value=(filename,'')):dialog.export()
+                book=load_workbook(filename,read_only=True)
+                summary=dict(book['Resumen'].iter_rows(values_only=True))
+                self.assertEqual(summary['Tomar terrenos 090x condición 9 como máximos R1'],'No');book.close()
+        finally:dialog.close();parent.close();owner.close()

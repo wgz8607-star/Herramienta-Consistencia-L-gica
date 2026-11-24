@@ -9,12 +9,25 @@ def provisional(value,model):
     return value in '789' if model=='CICA' else value.isascii() and value.isalpha()
 
 
-def generate_proposal(candidate_rows,r1,model):
+def terrain_baselines(r1,take_090x_as_max=False):
+    """090x means 0900–0909, and only R1 condition 9 is optional."""
+    if take_090x_as_max:return {r['block17']:int(r['max_t']) for r in r1.blocks}
+    numbers=getattr(r1,'r1_numbers',())
+    if not numbers and r1.blocks:raise ValueError('Vuelva a leer el R1 para calcular los máximos excluyendo terrenos 090x de condición 9.')
+    maxima={r['block17']:None for r in r1.blocks}
+    for npn in numbers:
+        if npn[21]=='9' and npn[17:21].startswith('090'):continue
+        block=npn[:17];value=int(npn[17:21])
+        maxima[block]=value if maxima.get(block) is None else max(maxima[block],value)
+    return maxima
+
+
+def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
     if model not in ('CICA','Modelo Interno'):raise ValueError('Fuente no reconocida.')
     prefix_max={r['prefix13']:int(r['max_m']) for r in r1.prefixes}
-    terrain_max={r['block17']:int(r['max_t']) for r in r1.blocks}
+    terrain_max=terrain_baselines(r1,take_090x_as_max)
     blocks=defaultdict(list)
-    for old in sorted({r[0] for r in candidate_rows}):blocks[old[:17]].append(old)
+    for old in sorted({r[0] for r in candidate_rows if provisional(r[0][13],model) or provisional(r[0][17],model)}):blocks[old[:17]].append(old)
     new_blocks=defaultdict(list)
     for block in blocks:
         if provisional(block[13],model):new_blocks[block[:13]].append(block)
@@ -31,7 +44,8 @@ def generate_proposal(candidate_rows,r1,model):
         target_block=assigned.get(block,block)
         baseline=0 if is_new else terrain_max.get(block)
         block_error=errors.get(block,'')
-        if baseline is None:block_error='Sin referencia R1 de terreno para la manzana/vereda 1–17'
+        if baseline is None:
+            block_error=('Sin terreno R1 elegible: los 090x de condición 9 están excluidos' if block in terrain_max and not take_090x_as_max else 'Sin referencia R1 de terreno para la manzana/vereda 1–17')
         plots=defaultdict(list)
         for old in olds:plots[old[:21]].append(old)
         for offset,(plot,family) in enumerate(sorted(plots.items()),1):
@@ -56,10 +70,13 @@ def generate_proposal(candidate_rows,r1,model):
                     'prefix13':old[:13],'old_block':block,'new_block':target_block if not block_error else '',
                     'base_m':prefix_max.get(old[:13]),
                     'base_t':baseline,'family':plot,'condition':old[21]})
+    existing=set(getattr(r1,'r1_numbers',()))
     targets=Counter(row['new'] for row in output if row['new'])
     for row in output:
         if row['new'] and targets[row['new']]>1:
             row.update(new='',status='Pendiente',reason='Colisión de NPN definitivos entre provisionales')
+        elif row['new'] and row['new'] in existing:
+            row.update(new='',status='Pendiente',reason='El NPN definitivo ya existe en el R1')
     return sorted(output,key=lambda row:row['old'])
 
 
@@ -82,12 +99,12 @@ def read_comparison(filename,sheet=None):
     return rows,invalid
 
 
-def compare_proposal(proposal,file_rows):
+def compare_proposal(proposal,file_rows,only_provisionals=False):
     expected={row['old']:row for row in proposal};found=defaultdict(list)
     for row in file_rows:found[row['old']].append(row)
     final_counts=Counter(row['new'] for row in file_rows)
     result=[]
-    for old in sorted(set(expected)|set(found)):
+    for old in sorted(set(expected) if only_provisionals else set(expected)|set(found)):
         target=expected.get(old);entries=found.get(old,[])
         for entry in entries or [None]:
             actual=entry['new'] if entry else ''

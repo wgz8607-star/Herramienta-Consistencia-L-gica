@@ -3,10 +3,10 @@ from collections import Counter
 from pathlib import Path
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
-    QTreeWidget,QTreeWidgetItem,QTabWidget,QComboBox,QLineEdit,QFileDialog,QMessageBox,QMenu,QWidgetAction)
+    QTreeWidget,QTreeWidgetItem,QTabWidget,QComboBox,QLineEdit,QFileDialog,QMessageBox,QMenu,QWidgetAction,QCheckBox)
 from openpyxl import load_workbook,Workbook
 from openpyxl.styles import Font,PatternFill
-from .renumbering import read_comparison,compare_proposal
+from .renumbering import read_comparison,compare_proposal,generate_proposal
 
 PROPOSAL_FIELDS=[('Provisional','old'),('Definitivo esperado','new'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t')]
 COMPARE_FIELDS=[('Provisional','old'),('Definitivo esperado','expected'),('Definitivo del archivo','actual'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t'),('Fila Excel','line')]
@@ -19,6 +19,9 @@ class ProposalDialog(QDialog):
         self.by_old={row['old']:row for row in proposal};self.column_filters={'Propuesta':{},'Comparación':{}}
         self.fields={'Propuesta':PROPOSAL_FIELDS,'Comparación':COMPARE_FIELDS}
         reference=getattr(getattr(parent,'owner',None),'result',None)
+        self.reference=reference;self.applied_090x=False;self.compared=False
+        self.generation_rows=[(row['old'],) for row in proposal]
+        self.generation_model='Modelo Interno' if hasattr(parent,'model') and parent.model.currentText()!='CICA' else 'CICA'
         self.prefix_max={row['prefix13']:int(row['max_m']) for row in reference.prefixes} if reference is not None else {}
         for row in proposal:
             if row['old'][:13] not in self.prefix_max and row.get('base_m') is not None:self.prefix_max[row['old'][:13]]=row['base_m']
@@ -31,6 +34,8 @@ class ProposalDialog(QDialog):
         note=QLabel('Propuesta de consulta: no modifica la base. Consecutivos sin saltos, en orden de provisionales. Excel de comparación: A = nuevo; B = provisional. Los pendientes no se aprueban. «Coincide» compara archivo y propuesta; no acredita cambios aplicados en la base.');note.setWordWrap(True);layout.addWidget(note)
         totals=Counter(row['status'] for row in proposal)
         self.summary=QLabel(f'Provisionales en la propuesta: {len(proposal)} · Generados: {totals["Generado"]} · Pendientes: {totals["Pendiente"]}');self.summary.setWordWrap(True);layout.addWidget(self.summary)
+        self.take_090x=QCheckBox('Tomar terrenos 090x (0900–0909), condición 9, como máximos R1');self.take_090x.setChecked(False);self.take_090x.setEnabled(reference is not None and bool(proposal));self.take_090x.toggled.connect(self.recalculate);layout.addWidget(self.take_090x)
+        self.policy_status=QLabel('Sin marcar: los terrenos 090x con condición 9 no elevan el máximo de terreno. Los máximos de manzana/vereda se conservan.');self.policy_status.setWordWrap(True);layout.addWidget(self.policy_status)
         row=QHBoxLayout();self.browse=QPushButton('Cargar archivo de renumeración…');self.browse.clicked.connect(self.choose_file);row.addWidget(self.browse)
         self.sheet=QComboBox();row.addWidget(self.sheet,1);self.compare_button=QPushButton('Comparar columnas A / B');self.compare_button.setEnabled(False);self.compare_button.clicked.connect(self.compare);row.addWidget(self.compare_button);layout.addLayout(row)
         self.file_status=QLabel('Archivo pendiente de cargar. Solo se presentan los provisionales de la propuesta seleccionada.');self.file_status.setWordWrap(True);layout.addWidget(self.file_status)
@@ -43,8 +48,28 @@ class ProposalDialog(QDialog):
         row=QHBoxLayout();export=QPushButton('Exportar propuesta y comparación');export.clicked.connect(self.export);row.addWidget(export);row.addStretch();close=QPushButton('Cerrar');close.clicked.connect(self.accept);row.addWidget(close);layout.addLayout(row)
         self.sheet.currentTextChanged.connect(self.clear_comparison);self.tabs.currentChanged.connect(self.update_filters);self.status_filter.currentIndexChanged.connect(self.render);self.search.textChanged.connect(self.render);self.update_filters()
 
+    def update_comparison_status(self):
+        counts=Counter(row['status'] for row in self.comparison if row['old'] in self.by_old)
+        omitted=sum(row['old'] not in self.by_old for row in self.file_rows)
+        self.file_status.setText(Path(self.filename).name+' · hoja '+self.sheet.currentText()+' · '+' · '.join(f'{key}: {count}' for key,count in sorted(counts.items()))+f' · Filas inválidas: {len(self.invalid_rows)} · Fuera del alcance omitidos: {omitted}')
+
+    def recalculate(self,checked):
+        if self.reference is None:return
+        try:
+            proposal=self.parent().run(lambda:generate_proposal(self.generation_rows,self.reference,self.generation_model,checked))
+            self.proposal=proposal;self.by_old={row['old']:row for row in proposal};self.applied_090x=checked
+            totals=Counter(row['status'] for row in proposal)
+            self.summary.setText(f'Provisionales en la propuesta: {len(proposal)} · Generados: {totals["Generado"]} · Pendientes: {totals["Pendiente"]}')
+            self.policy_status.setText(('Incluidos' if checked else 'Excluidos')+' del máximo de terreno: 0900–0909 con condición 9. Máximos de manzana/vereda sin cambios.')
+            if self.compared:
+                self.comparison=compare_proposal(proposal,self.file_rows,only_provisionals=True);self.update_comparison_status()
+            self.update_filters()
+        except Exception as error:
+            self.take_090x.blockSignals(True);self.take_090x.setChecked(self.applied_090x);self.take_090x.blockSignals(False)
+            QMessageBox.warning(self,'No se recalculó la propuesta',str(error))
+
     def clear_comparison(self,*_):
-        self.comparison=[];self.file_rows=[];self.invalid_rows=[];self.invalid.clear()
+        self.compared=False;self.comparison=[];self.file_rows=[];self.invalid_rows=[];self.invalid.clear()
         self.update_filters()
         if self.filename:self.file_status.setText(Path(self.filename).name+' · hoja '+self.sheet.currentText()+' · pendiente de comparar.')
 
@@ -163,15 +188,13 @@ class ProposalDialog(QDialog):
 
     def compare(self):
         if not self.filename:return
-        self.comparison=[];self.invalid_rows=[];self.invalid.clear()
+        self.compared=False;self.comparison=[];self.file_rows=[];self.invalid_rows=[];self.invalid.clear()
         try:
             filename=self.filename;sheet=self.sheet.currentText()
             rows,invalid=self.parent().run(lambda:read_comparison(filename,sheet))
-            self.file_rows=rows;self.invalid_rows=invalid;self.comparison=compare_proposal(self.proposal,rows)
+            self.file_rows=rows;self.invalid_rows=invalid;self.comparison=compare_proposal(self.proposal,rows,only_provisionals=True)
             for row in invalid:self.invalid.addTopLevelItem(QTreeWidgetItem([str(value) for value in row]))
-            counts=Counter(row['status'] for row in self.comparison if row['old'] in self.by_old)
-            omitted=sum(row['old'] not in self.by_old for row in self.comparison)
-            self.file_status.setText(Path(filename).name+' · hoja '+sheet+' · '+' · '.join(f'{key}: {count}' for key,count in sorted(counts.items()))+f' · Filas inválidas: {len(invalid)} · Fuera del alcance omitidos: {omitted}')
+            self.compared=True;self.update_comparison_status()
             self.tabs.setCurrentIndex(1);self.update_filters()
         except Exception as error:
             self.file_status.setText('No se completó la comparación.');self.update_filters();QMessageBox.warning(self,'No se comparó el archivo',str(error))
@@ -183,7 +206,7 @@ class ProposalDialog(QDialog):
         try:
             from datetime import datetime
             from zoneinfo import ZoneInfo
-            book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Fecha de generación',datetime.now(ZoneInfo('America/Bogota')).isoformat(timespec='seconds')]);summary.append(['Contexto',self.context]);summary.append(['Archivo comparado',Path(self.filename).name+' · '+self.sheet.currentText() if self.filename else 'Sin archivo']);summary.append(['Alcance','Propuesta; no se modifican datos. Generado no equivale a cambio aplicado.'])
+            book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Fecha de generación',datetime.now(ZoneInfo('America/Bogota')).isoformat(timespec='seconds')]);summary.append(['Contexto',self.context]);summary.append(['Tomar terrenos 090x condición 9 como máximos R1','Sí' if self.applied_090x else 'No']);summary.append(['Archivo comparado',Path(self.filename).name+' · '+self.sheet.currentText() if self.filename else 'Sin archivo']);summary.append(['Alcance','Propuesta; no se modifican datos. Generado no equivale a cambio aplicado.'])
             for status,count in sorted(Counter(r['status'] for r in self.proposal).items()):summary.append(['Propuesta completa · '+status,count])
             for status,count in sorted(Counter(r['status'] for r in self.visible_data('Propuesta')).items()):summary.append(['Propuesta visible · '+status,count])
             for status,count in sorted(Counter(r['status'] for r in self.visible_data('Comparación')).items()):summary.append(['Comparación · '+status,count])
@@ -196,7 +219,7 @@ class ProposalDialog(QDialog):
             groups=book.create_sheet('Grupos y maximos R1');groups.append(['Vista','Prefijo 1–9','Código 10–13','Prefijo completo 1–13','Provisionales','Máximo manzana/vereda R1','Inicio manzana/vereda','Manzanas/veredas'])
             for name in self.fields:
                 for item in self.group_summary(self.visible_data(name)):groups.append([name,item['prefix9'],item['part10_13'],item['prefix13'],item['count'],item['max_m'],item['next_m'],item['blocks']])
-            summary.append(['Fuera del alcance omitidos',sum(row['old'] not in self.by_old for row in self.comparison)]);summary.append(['Vista del filtro de resultado',self.tabs.tabText(self.tabs.currentIndex())]);summary.append(['Filtros de columnas',str(self.column_filters)]);summary.append(['Búsqueda',self.search.text()]);summary.append(['Filtro de resultado',self.status_filter.currentText()])
+            summary.append(['Fuera del alcance omitidos',sum(row['old'] not in self.by_old for row in self.file_rows)]);summary.append(['Vista del filtro de resultado',self.tabs.tabText(self.tabs.currentIndex())]);summary.append(['Filtros de columnas',str(self.column_filters)]);summary.append(['Búsqueda',self.search.text()]);summary.append(['Filtro de resultado',self.status_filter.currentText()])
             invalid=book.create_sheet('Filas no utilizadas');invalid.append(['Fila Excel','A · Nuevo','B · Provisional','Motivo'])
             for row in self.invalid_rows:invalid.append(row)
             for sheet in book:

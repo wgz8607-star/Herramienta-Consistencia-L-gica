@@ -1,10 +1,10 @@
-# Renumeración predial · v0.7.1
+# Renumeración predial · v0.7.2
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.1.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.2.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -67,3 +67,16 @@ Ambas tablas muestran dos niveles: **prefijo 1–9 → código 10–13**, con lo
 Pulse cualquier encabezado **▾** para filtrar esa columna por texto o uno de los valores sugeridos. Los filtros de varias columnas se combinan con la búsqueda y el filtro de resultado. **Limpiar filtros de columnas** restablece los encabezados. **Desagrupar detalle / Agrupar** controla el árbol.
 
 El Excel conserva la hoja A nuevo / B provisional, exporta las filas visibles según los filtros y añade **Grupos y maximos R1** con claves 1–9, 10–13, referencia completa e inicios de cada subgrupo. Conserva en Resumen los filtros empleados y la cantidad de filas externas omitidas.
+
+
+## Terrenos 090x del R1 con condición 9
+
+En Propuesta y comparación aparece **Tomar terrenos 090x (0900–0909), condición 9, como máximos R1**, desmarcado por defecto. Solo afecta a posiciones 18–21 y condición 9 en posición 22; no modifica máximos de manzana/vereda ni excluye terrenos de otras condiciones o códigos fuera de 0900–0909.
+
+- Sin marcar: el inicio usa el mayor terreno elegible de la misma manzana/vereda, excluyendo esos registros PH.
+- Marcado: el cálculo considera también esos terrenos del R1.
+- Cambiar la opción regenera la propuesta y recalcula una comparación ya cargada. Los NPN originales del R1 y de la fuente permanecen intactos.
+- Si no queda ningún terreno elegible, el caso queda Pendiente con motivo específico; no se supone máximo cero. Un definitivo ya existente en el R1 también queda Pendiente, sin saltar automáticamente números.
+- La elección se registra en Resumen del Excel; Bases R1 refleja los máximos efectivos usados. Para recalcular sin volver a consultar el servidor se conserva en memoria la colección de NPN únicos del R1 leído.
+
+La comparación genera resultados únicamente para provisionales de la propuesta seleccionada. Los no provisionales y otros registros externos del archivo no se incorporan como filas a la tabla ni a la exportación de comparación; se informa su cantidad omitida.

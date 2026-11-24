@@ -16,6 +16,7 @@ class Maxima:
     prefixes: list
     blocks: list
     fingerprint: str
+    r1_numbers: tuple = ()
 
 
 def zone_name(code):
@@ -60,7 +61,7 @@ def build_maxima(records, progress=None):
         witness=min(n for n in values if int(n[17:21])==maximum)
         block_rows.append({'municipality':prefix[:5],'zone':prefix[5:7],'zone_sector':prefix[5:9],'block_label':'Vereda' if prefix[5:7]=='00' else 'Manzana','prefix13':prefix[:13],'block17':prefix,'block':prefix[13:17],'npns':len(values),'plots':len({n[17:21] for n in values}),'max_t':f'{maximum:04d}','next_t':next_code(maximum),'witness':witness})
     fingerprint=hashlib.sha256('\n'.join(sorted(seen)).encode()).hexdigest()
-    return Maxima(count,len(seen),duplicates,blanks,invalid,zone_rows,prefix_rows,block_rows,fingerprint)
+    return Maxima(count,len(seen),duplicates,blanks,invalid,zone_rows,prefix_rows,block_rows,fingerprint,tuple(sorted(seen)))
 
 
 def visible_rows(rows, municipality='', zone='', search='', catalog=None):

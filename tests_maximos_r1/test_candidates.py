@@ -347,3 +347,11 @@ class CandidateTests(unittest.TestCase):
         connection.set_session.assert_called_once_with(readonly=True)
         self.assertEqual(cursor.execute.call_args.args[1],('^[0-9]{5}$',))
         connection.close.assert_called_once()
+
+    def test_public_package_uses_admin_and_prompts_once_instead_of_another_user(self):
+        from unittest.mock import patch
+        from validador_renumeracion.repository import repository_params
+        with patch('validador_renumeracion.repository._SESSION_PASSWORD',None),patch('validador_renumeracion.repository._validator_connection',return_value={'user':'consulta_sentencias','password':'other'}),patch('qgis.PyQt.QtWidgets.QInputDialog.getText',return_value=('test-only',True)) as prompt:
+            first=repository_params();second=repository_params()
+            self.assertEqual(first['user'],'admin_ant');self.assertEqual(first['password'],'test-only')
+            self.assertEqual(first,second);prompt.assert_called_once()

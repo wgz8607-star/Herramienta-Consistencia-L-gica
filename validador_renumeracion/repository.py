@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 LOCAL_CONNECTION_FILE=Path(__file__).with_name('sentencias.local.json')
+_SESSION_PASSWORD=None
 
 
 def repository_params():
@@ -18,9 +19,24 @@ def repository_params():
         except (OSError,ValueError,TypeError):
             raise ValueError('La configuración local de sentencias no es válida. Reinstale el paquete configurado.') from None
 
-    spec=importlib.util.find_spec('qgis_control_calidad')
-    if spec is None or not spec.origin:
-        raise ValueError('Instale el Validador de Consistencia Lógica para reutilizar su acceso a sentencias.')
+    global _SESSION_PASSWORD
+    params={'host':'172.19.3.225','port':'5432','dbname':'sentencias','user':'admin_ant'}
+    if _SESSION_PASSWORD is None:
+        installed=_validator_connection()
+        if installed and all(installed.get(key)==value for key,value in params.items()):
+            _SESSION_PASSWORD=installed['password']
+        else:
+            from qgis.PyQt.QtWidgets import QInputDialog,QLineEdit
+            password,accepted=QInputDialog.getText(None,'Acceso a sentencias · admin_ant','Contraseña de admin_ant (solo esta sesión):',QLineEdit.Password)
+            if not accepted or not password:raise ValueError('Acceso a sentencias cancelado.')
+            _SESSION_PASSWORD=password
+    return dict(params,password=_SESSION_PASSWORD)
+
+
+def _validator_connection():
+    try:spec=importlib.util.find_spec('qgis_control_calidad')
+    except (ImportError,ValueError):return None
+    if spec is None or not spec.origin:return None
     filename=Path(spec.origin).parent/'dialog.py'
     values={}
 
@@ -29,7 +45,10 @@ def repository_params():
             if node.id in values:return ast.Constant(value=values[node.id])
             return node
 
-    for statement in ast.parse(filename.read_text(encoding='utf-8')).body:
+    try:
+        statements=ast.parse(filename.read_text(encoding='utf-8')).body
+    except (OSError,SyntaxError):return None
+    for statement in statements:
         if not isinstance(statement,ast.Assign):continue
         if len(statement.targets)!=1 or not isinstance(statement.targets[0],ast.Name):continue
         name=statement.targets[0].id
@@ -37,6 +56,4 @@ def repository_params():
         try:values[name]=ast.literal_eval(Resolve().visit(statement.value))
         except (ValueError,TypeError):continue
     params=values.get('REPOSITORY_CONNECTION')
-    if not isinstance(params,dict) or params.get('dbname')!='sentencias' or not params.get('password'):
-        raise ValueError('No se encontró una configuración válida de sentencias en el Validador de Consistencia Lógica.')
-    return dict(params)
+    return dict(params) if isinstance(params,dict) and params.get('dbname')=='sentencias' and params.get('password') else None

@@ -278,3 +278,17 @@ class CandidateTests(unittest.TestCase):
             dialog.model.setCurrentIndex(1)
             self.assertTrue(dialog.copy_label.isHidden())
         finally:dialog.close();parent.close()
+
+    def test_private_connection_takes_precedence_without_loading_validator(self):
+        from validador_renumeracion.repository import repository_params
+        from unittest.mock import patch
+        from pathlib import Path
+        import tempfile,json
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'sentencias.local.json'
+            params={'host':'localhost','port':'5432','dbname':'sentencias','user':'admin_ant','password':'test-only'}
+            path.write_text(json.dumps(params))
+            with patch('validador_renumeracion.repository.LOCAL_CONNECTION_FILE',path),patch('validador_renumeracion.repository.importlib.util.find_spec',side_effect=AssertionError('No usar otro acceso')):
+                self.assertEqual(repository_params(),params)
+                path.write_text('archivo inválido')
+                with self.assertRaises(ValueError):repository_params()

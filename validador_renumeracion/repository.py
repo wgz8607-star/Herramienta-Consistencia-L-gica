@@ -1,10 +1,23 @@
 """Reuse the installed consistency validator configuration without executing it."""
 import ast
+import json
 import importlib.util
 from pathlib import Path
 
 
+LOCAL_CONNECTION_FILE=Path(__file__).with_name('sentencias.local.json')
+
+
 def repository_params():
+    if LOCAL_CONNECTION_FILE.is_file():
+        try:
+            params=json.loads(LOCAL_CONNECTION_FILE.read_text(encoding='utf-8'))
+            valid=isinstance(params,dict) and params.get('dbname')=='sentencias' and all(isinstance(params.get(key),str) and params[key] for key in ('host','port','user','password'))
+            if not valid:raise ValueError()
+            return {key:params[key] for key in ('host','port','dbname','user','password')}
+        except (OSError,ValueError,TypeError):
+            raise ValueError('La configuración local de sentencias no es válida. Reinstale el paquete configurado.') from None
+
     spec=importlib.util.find_spec('qgis_control_calidad')
     if spec is None or not spec.origin:
         raise ValueError('Instale el Validador de Consistencia Lógica para reutilizar su acceso a sentencias.')

@@ -1,10 +1,10 @@
-# Renumeración predial · v0.7.3
+# Renumeración predial · v0.7.4
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.3.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.4.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -87,3 +87,5 @@ La comparación genera resultados únicamente para provisionales de la propuesta
 Ambas pestañas presentan un árbol como el diagnóstico, con **Prefijo territorial** y **Agrupación** como primeras columnas. El sector muestra el prefijo 1–9; debajo, la subdivisión 10–13 identificada con su prefijo completo 1–13; al desplegar, los provisionales muestran su manzana o vereda 1–17 y el NPN en su columna correspondiente. Los encabezados de grupo se resaltan visualmente.
 
 El selector **Desagregación de la vista** permite alternar entre **Sectores · 1–9**, **Sector y subdivisión · 1–9 → 10–13** (inicial) y **Detalle de provisionales**. Se aplica a las dos pestañas, conserva filtros y no recalcula la numeración ni crea un reporte adicional. También se puede desplegar manualmente cada sector con su flecha.
+
+El paquete configurado puede incluir una configuración local de sentencias, que prevalece sobre la del validador instalado y se aplica a CICA y R1 precargado. Esa configuración se entrega solo en el ZIP privado y no se versiona en el repositorio.

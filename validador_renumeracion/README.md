@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.6.1. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.6.2. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.6.1.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.6.2.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -81,3 +81,5 @@ La sección 2 se denomina **Manzanas - Veredas nuevas y predios a renumerar**. A
 En Máximos, el municipio seleccionado en la fuente se transmite a la lectura del R1 y se muestra como única opción, sin Todos los municipios. Se conservan los cálculos internos por prefijo 13. Estos cambios son de identificación y consulta: la comprobación de consecutivos contra el archivo de renumeración continúa pendiente de implementación.
 
 La ventana principal abre maximizada y permite minimizar/restaurar/maximizar. Las manzanas o veredas nuevas se resumen por prefijo 1–9 con detalle desplegable 1–17; los botones Desagrupar detalle y Agrupar por zona–sector permiten expandir o contraer todo. Excel incluye resumen de nuevas por zona-sector y su detalle por manzana/vereda.
+
+La fecha se oculta antes de consultar departamentos/municipios y aparece debajo de ese botón como **Copia base CICA — Fecha y hora del corte**, leyendo inicio del último registro por id de public.copia_cica_progreso, igual al validador. También se conserva en el origen de la identificación exportada. El desplegable de departamentos tiene colores explícitos para mantener legible la selección.

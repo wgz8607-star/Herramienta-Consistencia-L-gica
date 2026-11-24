@@ -9,10 +9,10 @@ HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–v
 
 class CandidateDialog(QDialog):
     def __init__(self,parent,window_parent=None):
-        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self.copy_date='Fecha de copia pendiente de consultar'
+        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self.copy_date='Fecha de copia pendiente de consultar';self._copy_consulted=False
         self.setWindowTitle('Renumeración predial · Seleccionar fuente de datos');self.resize(1400,950)
         self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
-        self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QComboBox,QLineEdit { background: #FFFFFF; border: 1px solid #CDDFEF; border-radius: 4px; padding: 6px; } QPushButton { background: #0066B3; color: white; border-radius: 5px; padding: 8px 12px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; border: 1px solid #D9E5EF; } QHeaderView::section { background: #0066B3; color: white; padding: 7px; }')
+        self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QComboBox QAbstractItemView { background: #FFFFFF; color: #17324D; selection-background-color: #0066B3; selection-color: #FFFFFF; font-weight: normal; } QComboBox QAbstractItemView::item { min-height: 26px; padding: 4px; } QComboBox QAbstractItemView::item:selected { background: #0066B3; color: #FFFFFF; } QComboBox,QLineEdit { background: #FFFFFF; border: 1px solid #CDDFEF; border-radius: 4px; padding: 6px; } QPushButton { background: #0066B3; color: white; border-radius: 5px; padding: 8px 12px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; border: 1px solid #D9E5EF; } QHeaderView::section { background: #0066B3; color: white; padding: 7px; }')
         layout=QVBoxLayout(self)
         title=QLabel('Seleccione la fuente de datos a revisar');title.setStyleSheet('font-size: 20px; font-weight: bold; color: #0066B3;');layout.addWidget(title)
         source_card=QGroupBox('1. Fuente de datos y alcance');source_card.setStyleSheet('QGroupBox { background: white; border: 1px solid #D9E5EF; border-radius: 8px; margin-top: 12px; padding: 14px; font-weight: bold; color: #0066B3; } QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }');form=QFormLayout(source_card);form.setSpacing(8);layout.addWidget(source_card)
@@ -33,7 +33,7 @@ class CandidateDialog(QDialog):
         self.divipola=QLineEdit();self.divipola.setPlaceholderText('5 dígitos; vacío para todos los municipios');self.divipola.setMaxLength(5);form.addRow('Municipio · DIVIPOLA',self.divipola)
         self.cica_lookup=QPushButton('Consultar departamentos y municipios CICA');form.addRow(self.cica_lookup)
         self.department=QComboBox();self.cica_municipality=QComboBox();form.addRow('Departamento',self.department);form.addRow('Municipio CICA',self.cica_municipality)
-        self.copy_label=QLabel(self.copy_date);form.insertRow(1,'Fecha de la copia CICA',self.copy_label)
+        self.copy_label=QLabel(self.copy_date);form.insertRow(form.getWidgetPosition(self.cica_lookup)[0]+1,'',self.copy_label)
         self.copy_label.setStyleSheet('background: #E8F1FA; color: #0066B3; font-weight: bold; padding: 8px; border-left: 4px solid #0066B3;')
         self.cica_lookup.clicked.connect(self.load_cica_municipalities);self.department.currentIndexChanged.connect(self.update_cica_municipalities);self.cica_municipality.currentIndexChanged.connect(self.update_available_zones)
         self.note=note=QLabel('CICA: 7, 8 o 9 en posición 14 o 18. Modelo Interno: letra en posición 14 o 18. CICA: solo etapa VALIDADO y estado_control DESCARGADO_AL_SNC. Modelo Interno: sin filtro de etapa o estado. Las condiciones 8 y 9 (posición 22) quedan identificadas para revisión especial.');note.setWordWrap(True);layout.addWidget(note)
@@ -125,7 +125,7 @@ class CandidateDialog(QDialog):
             field.setVisible(cica);self.connection_form.labelForField(field).setVisible(cica)
         self.cica_lookup.setVisible(cica);self.list_button.setVisible(not cica)
         self.schema.setVisible(not cica);self.connection_form.labelForField(self.schema).setVisible(not cica)
-        self.copy_label.setVisible(cica);self.connection_form.labelForField(self.copy_label).setVisible(cica)
+        self.copy_label.setVisible(cica and self._copy_consulted)
         self.stats_button.setVisible(cica)
         self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' Condiciones 8 y 9 en posición 22: revisión especial pendiente.')
         if cica:self.schema.addItem('snc_cica_copy')
@@ -156,12 +156,14 @@ class CandidateDialog(QDialog):
         return params
 
     def refresh_copy_date(self,params):
+        self._copy_consulted=True
+        self.copy_label.setVisible(self.model.currentText()=='CICA')
         try:
             value=self.run(lambda:cica_copy_date(params))
             self.copy_date=value.strftime('%d/%m/%Y %H:%M:%S') if value else 'Fecha no disponible'
-            self.copy_label.setText(self.copy_date);self.copy_label.setToolTip('Último registro de public.copia_cica_progreso · inicio')
+            self.copy_label.setText('Copia base CICA — Fecha y hora del corte: '+self.copy_date);self.copy_label.setToolTip('Último registro de public.copia_cica_progreso · inicio')
         except Exception as error:
-            self.copy_date='Fecha no disponible';self.copy_label.setText(self.copy_date);self.copy_label.setToolTip(str(error))
+            self.copy_date='Fecha no disponible';self.copy_label.setText('Copia base CICA — Fecha y hora del corte: '+self.copy_date);self.copy_label.setToolTip(str(error))
 
     def update_available_zones(self,*_):
         self.invalidate()
@@ -182,6 +184,7 @@ class CandidateDialog(QDialog):
         dialog.exec_()
 
     def load_cica_municipalities(self):
+        self._copy_consulted=False;self.copy_date='Fecha de copia pendiente de consultar';self.copy_label.hide()
         self.cica_codes=[];self.department.clear();self.cica_municipality.clear();self.invalidate()
         try:
             params=self.params();self.status.setText('Consultando municipios de la copia CICA…')
@@ -226,7 +229,7 @@ class CandidateDialog(QDialog):
             params=self.params();self.status.setText('Leyendo los predios de la fuente…')
             result=self.run(lambda:identify_candidates(source_records(params,model,schema,code,zones),model))
             self.result=result;self.origin=f'{model} · {params.get("dbname",params.get("service",""))}.{schema} · DIVIPOLA: {code or "Todos"}'
-            if model=='CICA':self.origin+=' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: todas'
+            if model=='CICA':self.origin+=' · Corte: '+self.copy_date+' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: todas'
             self.render_candidate_statistics()
             pending=sum(row[8] in '89' for row in result['rows'])
             self.status.setText(f'{self.origin}\nLeídos: {result["total"]} · NPN únicos válidos: {result["unique"]} · Provisionales: {len(result["rows"])} · Condición especial pendiente: {pending} · Duplicados excluidos: {result["duplicates"]} · Inválidos: {len(result["invalid"])}')

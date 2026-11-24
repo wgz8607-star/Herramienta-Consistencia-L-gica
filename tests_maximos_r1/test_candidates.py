@@ -150,7 +150,7 @@ class CandidateTests(unittest.TestCase):
         try:
             self.assertTrue(dialog.list_button.isHidden())
             self.assertTrue(dialog.schema.isHidden())
-            self.assertFalse(dialog.copy_label.isHidden())
+            self.assertTrue(dialog.copy_label.isHidden())
             self.assertNotIn('Modelo Interno',dialog.note.text())
             self.assertFalse(hasattr(dialog,'zones_widget'))
         finally:dialog.close();parent.close()
@@ -258,4 +258,23 @@ class CandidateTests(unittest.TestCase):
             self.assertEqual(item.childCount(),2)
             dialog.expand_blocks.click();self.assertTrue(item.isExpanded())
             dialog.collapse_blocks.click();self.assertFalse(item.isExpanded())
+        finally:dialog.close();parent.close()
+
+    def test_copy_date_appears_after_lookup_and_uses_latest_progress_start(self):
+        from datetime import datetime
+        from unittest.mock import patch
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            self.assertTrue(dialog.copy_label.isHidden())
+            with patch.object(dialog,'params',return_value={}),patch('validador_renumeracion.candidate_dialog.cica_municipalities',return_value=['41020']),patch('validador_renumeracion.candidate_dialog.cica_copy_date',return_value=datetime(2026,11,24,13,29,50)):
+                dialog.load_cica_municipalities()
+            self.assertFalse(dialog.copy_label.isHidden())
+            self.assertIn('Copia base CICA',dialog.copy_label.text())
+            self.assertIn('24/11/2026 13:29:50',dialog.copy_label.text())
+            self.assertGreater(dialog.connection_form.getWidgetPosition(dialog.copy_label)[0],dialog.connection_form.getWidgetPosition(dialog.cica_lookup)[0])
+            dialog.model.setCurrentIndex(1)
+            self.assertTrue(dialog.copy_label.isHidden())
         finally:dialog.close();parent.close()

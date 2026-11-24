@@ -11,7 +11,7 @@ HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–v
 class CandidateDialog(QDialog):
     def __init__(self,parent,window_parent=None):
         super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self.copy_date='Fecha de copia pendiente de consultar';self._copy_consulted=False
-        self.setWindowTitle('Renumeración predial · Seleccionar fuente de datos');self.resize(1400,950)
+        self.setWindowTitle('Renumeración predial v1.0.0 · Seleccionar fuente de datos');self.resize(1400,950)
         self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
         self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QComboBox QAbstractItemView { background: #FFFFFF; color: #17324D; selection-background-color: #0066B3; selection-color: #FFFFFF; font-weight: normal; } QComboBox QAbstractItemView::item { min-height: 26px; padding: 4px; } QComboBox QAbstractItemView::item:selected { background: #0066B3; color: #FFFFFF; } QComboBox,QLineEdit { background: #FFFFFF; border: 1px solid #CDDFEF; border-radius: 4px; padding: 6px; } QPushButton { background: #0066B3; color: white; border-radius: 5px; padding: 8px 12px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; border: 1px solid #D9E5EF; } QHeaderView::section { background: #0066B3; color: white; padding: 7px; }')
         layout=QVBoxLayout(self)

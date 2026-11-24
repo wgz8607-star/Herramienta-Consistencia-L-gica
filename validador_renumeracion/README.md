@@ -1,10 +1,10 @@
-# Renumeración predial · v0.7.6
+# Renumeración predial · v1.0.0
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.6.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.0.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -95,4 +95,4 @@ El paquete configurado puede incluir una configuración local de sentencias, que
 
 El botón **Consultar esquemas** aparece antes del selector. El desplegable agrupa **Departamento → Municipio (DIVIPOLA) → Esquema**, con conteos por municipio y selección exclusiva de los esquemas. Los nombres sin código reconocido aparecen en Sin ubicación identificada. Al seleccionar uno se consulta el municipio real desde los NPN de ILC_Predio y se muestra en **Municipio a validar**; si solo hay uno se selecciona automáticamente. Si contiene varios, se elige entre los encontrados. No se muestra el antiguo campo manual Municipio · DIVIPOLA. La lectura de provisionales y el R1 utilizan ese municipio real. La ubicación del esquema seleccionado se actualiza en el árbol según los datos consultados.
 
-El ZIP público v0.7.6 se descarga desde GitHub y no contiene contraseñas. Configura sentencias con admin_ant. Reutiliza el acceso del validador solo si coincide con ese usuario y servidor; de lo contrario pide la contraseña una vez por sesión. La configuración local privada continúa teniendo prioridad si existe.
+El ZIP público v1.0.0 se descarga desde GitHub y no contiene contraseñas. Configura sentencias con admin_ant. Reutiliza el acceso del validador solo si coincide con ese usuario y servidor; de lo contrario pide la contraseña una vez por sesión. La configuración local privada continúa teniendo prioridad si existe.

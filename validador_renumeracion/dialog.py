@@ -23,7 +23,7 @@ class MaximaDialog(QDialog):
         self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QPushButton { background: #0066B3; color: white; padding: 7px 11px; border-radius: 5px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; } QHeaderView::section { background: #0066B3; color: white; padding: 6px; }')
         outer=QVBoxLayout(self)
         title=QLabel('Máximos de manzana y terreno del R1');title.setStyleSheet('font-size: 22px; font-weight: bold; color: #0066B3;');outer.addWidget(title)
-        note=QLabel('Solo consulta. Manzana: posiciones 14–17; terreno: 18–21. El máximo de manzana se calcula por prefijo 1–13 y el de terreno por manzana completa 1–17.');note.setWordWrap(True);outer.addWidget(note)
+        note=QLabel('Solo consulta. Manzana: posiciones 14–17; terreno: 18–21. Zona–sector: posiciones 6–9. El máximo de manzana se calcula por prefijo 1–13 y el de terreno por manzana completa 1–17.');note.setWordWrap(True);outer.addWidget(note)
         self.inputs=QWidget();form=QFormLayout(self.inputs);form.setContentsMargins(0,4,0,4)
         self.source_mode=QComboBox();self.source_mode.addItems(['Opción 1: Archivos r1 y r2 cargados por usuario','Opción 2: Archivos r1 y r2 precargados - Sin fecha seleccionada','Opción 3: Archivos r1 y r2 cargados en "Public" de la base seleccionada']);form.addRow('Origen del R1',self.source_mode)
         self.file_page=QWidget();file_form=QFormLayout(self.file_page);file_form.setContentsMargins(0,0,0,0)
@@ -32,8 +32,9 @@ class MaximaDialog(QDialog):
         self.sheet=QComboBox();self.column=QComboBox();file_form.addRow('Hoja',self.sheet);file_form.addRow('Columna de NPN',self.column);form.addRow(self.file_page)
         self.db_page=QWidget();db_form=QFormLayout(self.db_page);db_form.setContentsMargins(0,0,0,0)
         self.connection=QComboBox();refresh=QPushButton('Actualizar conexiones');refresh.clicked.connect(self.refresh_connections)
-        row=QHBoxLayout();row.addWidget(self.connection,1);row.addWidget(refresh);db_form.addRow('Base seleccionada · conexión QGIS',row)
-        hint=QLabel('Precargados: sentencias.r1_r2 del servidor elegido. Public: base de la conexión seleccionada. En este plugin se utiliza únicamente el R1.');hint.setWordWrap(True);db_form.addRow(hint)
+        row=QHBoxLayout();row.addWidget(self.connection,1);row.addWidget(refresh)
+        self.connection_controls=QWidget(self.db_page);self.connection_controls.setLayout(row);self.connection_controls.hide()
+        hint=QLabel('Precargados: sentencias.r1_r2. Public: base de la fuente seleccionada en la ventana principal. En este plugin se utiliza únicamente el R1.');hint.setWordWrap(True);db_form.addRow(hint)
         self.schema_label=QLabel('r1_r2');self.tables=QComboBox();list_button=QPushButton('Consultar tablas R1');list_button.clicked.connect(self.read_tables)
         row=QHBoxLayout();row.addWidget(self.tables,1);row.addWidget(list_button);db_form.addRow('Esquema',self.schema_label);db_form.addRow('Tabla y columna NPN',row);form.addRow(self.db_page)
         self.read_button=QPushButton('Leer R1 y calcular máximos');self.read_button.clicked.connect(self.read_maxima);form.addRow(self.read_button);outer.addWidget(self.inputs)
@@ -41,8 +42,8 @@ class MaximaDialog(QDialog):
         self.counts=QLabel();self.counts.setWordWrap(True);outer.addWidget(self.counts)
         self.filters=QWidget();row=QHBoxLayout(self.filters);row.setContentsMargins(0,0,0,0)
         self.municipality=QComboBox();self.zone=QComboBox();self.search=QLineEdit();self.search.setPlaceholderText('Buscar prefijo, manzana o número de referencia…')
-        row.addWidget(QLabel('Municipio'));row.addWidget(self.municipality,2);row.addWidget(QLabel('Zona'));row.addWidget(self.zone,1);row.addWidget(self.search,2);outer.addWidget(self.filters)
-        self.tabs=QTabWidget();self.views={};self.fields={'Por zona':ZONE_FIELDS,'Por prefijo 13':PREFIX_FIELDS,'Por manzana':BLOCK_FIELDS}
+        row.addWidget(QLabel('Municipio'));row.addWidget(self.municipality,2);row.addWidget(QLabel('Zona–sector (6–9)'));row.addWidget(self.zone,1);row.addWidget(self.search,2);outer.addWidget(self.filters)
+        self.tabs=QTabWidget();self.views={};self.fields={'Por zona-sector':ZONE_FIELDS,'Por prefijo 13':PREFIX_FIELDS,'Por manzana':BLOCK_FIELDS}
         for name,fields in self.fields.items():
             tree=QTreeWidget();tree.setRootIsDecorated(False);tree.setAlternatingRowColors(True);tree.setHeaderLabels(['Departamento','Municipio']+[label for label,_ in fields]);self.tabs.addTab(tree,name);self.views[name]=tree
         self.invalid=QTreeWidget();self.invalid.setRootIsDecorated(False);self.invalid.setHeaderLabels(['Fila de origen','NPN no utilizado','Motivo']);self.tabs.addTab(self.invalid,'Registros no utilizados');outer.addWidget(self.tabs,1)
@@ -69,7 +70,7 @@ class MaximaDialog(QDialog):
         self.search.clear()
         self.invalid.clear();self.origin_label.setText('R1 pendiente de cargar.');self.counts.clear()
         self.municipality.blockSignals(True);self.municipality.clear();self.municipality.addItem('Todos los municipios','');self.municipality.blockSignals(False)
-        self.zone.blockSignals(True);self.zone.clear();self.zone.addItem('Todas las zonas','');self.zone.blockSignals(False)
+        self.zone.blockSignals(True);self.zone.clear();self.zone.addItem('Todos los códigos zona–sector','');self.zone.blockSignals(False)
 
     def change_source(self,*_):
         mode=self.source_mode.currentIndex();self.file_page.setVisible(mode==0);self.db_page.setVisible(mode!=0)
@@ -113,6 +114,14 @@ class MaximaDialog(QDialog):
             params['dbname']='sentencias'
         return params
 
+    def reference_params(self):
+        if self.source_mode.currentIndex()==1:
+            from .repository import repository_params
+            return repository_params()
+        params=getattr(self,'selected_source_params',None)
+        if not params:raise ValueError('Seleccione la fuente de datos en la ventana principal antes de consultar Public.')
+        return dict(params)
+
     def task(self,function):
         self.busy=True;self.inputs.setEnabled(False);self.filters.setEnabled(False);self.export_button.setEnabled(False);self.progress.show()
         try:
@@ -152,7 +161,7 @@ class MaximaDialog(QDialog):
 
     def read_tables(self):
         try:
-            params=self.params();schema=self.schema_label.text();preloaded=self.source_mode.currentIndex()==1
+            params=self.reference_params();schema=self.schema_label.text();preloaded=self.source_mode.currentIndex()==1
             self.status.setText('Consultando tablas con columna de número predial…')
             tables=self.task(lambda:list_tables(params,schema,preloaded))
             self.tables.clear()
@@ -185,7 +194,7 @@ class MaximaDialog(QDialog):
                 function=lambda:build_maxima(file_records(filename,sheet,header,column))
             else:
                 if not self.tables.currentData():raise ValueError('Consulte y seleccione una tabla R1.')
-                params=self.params();schema=self.schema_label.text();table,column=self.tables.currentData()
+                params=self.reference_params();schema=self.schema_label.text();table,column=self.tables.currentData()
                 origin=f'{params.get("dbname",params.get("service",""))}.{schema}.{table} · {column}'
                 function=lambda:build_maxima(database_records(params,schema,table,column))
             self.status.setText('Leyendo R1 y calculando máximos…')
@@ -209,14 +218,14 @@ class MaximaDialog(QDialog):
 
     def update_zones(self,*_):
         previous=self.zone.currentData();municipality=self.municipality.currentData() or ''
-        codes=sorted({row['zone'] for row in self.result.zones if not municipality or row['municipality']==municipality}) if self.result else []
-        self.zone.blockSignals(True);self.zone.clear();self.zone.addItem('Todas las zonas','')
-        for code in codes:self.zone.addItem(zone_name(code)+' · '+code,code)
+        codes=sorted({row['zone_sector'] for row in self.result.zones if not municipality or row['municipality']==municipality}) if self.result else []
+        self.zone.blockSignals(True);self.zone.clear();self.zone.addItem('Todos los códigos zona–sector','')
+        for code in codes:self.zone.addItem(zone_name(code[:2])+' · '+code,code)
         index=self.zone.findData(previous);self.zone.setCurrentIndex(max(0,index));self.zone.blockSignals(False);self.render()
 
     def render(self,*_):
         if self.result is None:return
-        datasets={'Por zona':self.result.zones,'Por prefijo 13':self.result.prefixes,'Por manzana':self.result.blocks}
+        datasets={'Por zona-sector':self.result.zones,'Por prefijo 13':self.result.prefixes,'Por manzana':self.result.blocks}
         for name,tree in self.views.items():
             rows=visible_rows(datasets[name],self.municipality.currentData() or '',self.zone.currentData() or '',self.search.text(),self.catalog)
             tree.clear()

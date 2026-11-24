@@ -52,7 +52,12 @@ class CandidateDialog(QDialog):
         self.change_source();self.connection_mode_changed();self.update_available_zones()
 
     def open_r1(self):
-        self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
+        try:
+            params=self.params()
+            if getattr(self.owner,'selected_source_params',None)!=params:
+                self.owner.selected_source_params=dict(params);self.owner.tables.clear();self.owner.invalidate()
+            self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
+        except Exception as error:QMessageBox.warning(self,'Fuente pendiente',str(error))
 
     def invalidate(self,*_):
         self.result=None;self.tree.clear();self.export.setEnabled(False);self.status.setText('Fuente pendiente de consultar.')

@@ -25,9 +25,11 @@ class MaximaTests(unittest.TestCase):
         self.assertEqual(result.duplicates,2)
         self.assertEqual(result.blanks,2)
         self.assertEqual(len(result.invalid),2)
-        zones={(r['municipality'],r['zone']):r for r in result.zones}
-        self.assertEqual(zones[('41020','01')]['max_m'],'0012')
-        self.assertEqual(zones[('25377','01')]['max_m'],'0099')
+        zones={(r['municipality'],r['zone_sector']):r for r in result.zones}
+        self.assertEqual(zones[('41020','0101')]['max_m'],'0012')
+        self.assertEqual(zones[('41020','0102')]['max_m'],'0002')
+        self.assertEqual(len(visible_rows(result.zones,'41020','0102')),1)
+        self.assertEqual(zones[('25377','0101')]['max_m'],'0099')
         prefixes={r['prefix13']:r for r in result.prefixes}
         self.assertEqual(prefixes[npn()[:13]]['max_m'],'0012')
         self.assertEqual(prefixes[npn(sector='020000')[:13]]['max_m'],'0002')
@@ -35,8 +37,8 @@ class MaximaTests(unittest.TestCase):
         self.assertEqual(blocks[npn()[:17]]['max_t'],'0009')
         self.assertEqual(blocks[npn()[:17]]['next_t'],'0010')
         self.assertEqual(blocks[npn()[:17]]['witness'],npn(plot='0009'))
-        self.assertEqual(zones[('41020','02')]['max_m'],'0004')
-        self.assertEqual(zones[('41020','03')]['max_m'],'0008')
+        self.assertEqual(zones[('41020','0201')]['max_m'],'0004')
+        self.assertEqual(zones[('41020','0301')]['max_m'],'0008')
 
     def test_conditions_8_and_9_do_not_create_extra_terrain_codes(self):
         result=build_maxima(enumerate([npn(condition='0'),npn(condition='8'),npn(condition='9')]))
@@ -86,7 +88,7 @@ class MaximaTests(unittest.TestCase):
             path=Path(directory)/'maximos.xlsx';result=self.result()
             export_maxima(path,result,'R1 de prueba',{},'41020','02')
             book=load_workbook(path,data_only=True)
-            self.assertEqual(book['Por zona'].max_row,2)
+            self.assertEqual(book['Por zona-sector'].max_row,2)
             self.assertEqual(book['Por manzana'].max_row,2)
             self.assertEqual(book['Por manzana'].cell(2,12).data_type,'s')
             self.assertEqual(book['Registros no utilizados'].max_row,3)

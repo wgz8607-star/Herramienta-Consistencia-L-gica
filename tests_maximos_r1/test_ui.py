@@ -18,10 +18,10 @@ class MaximaUiTests(unittest.TestCase):
         self.assertEqual(self.dialog.source_mode.count(),3)
         result=build_maxima([(2,npn()),(3,npn(zone='02')),(4,npn(municipality='25377'))])
         self.dialog.set_result(result,'Origen de prueba')
-        self.assertEqual(self.dialog.views['Por zona'].topLevelItemCount(),3)
+        self.assertEqual(self.dialog.views['Por zona-sector'].topLevelItemCount(),3)
         self.dialog.municipality.setCurrentIndex(self.dialog.municipality.findData('41020'))
-        self.dialog.zone.setCurrentIndex(self.dialog.zone.findData('02'))
-        self.assertEqual(self.dialog.views['Por zona'].topLevelItemCount(),1)
+        self.dialog.zone.setCurrentIndex(self.dialog.zone.findData('0201'))
+        self.assertEqual(self.dialog.views['Por zona-sector'].topLevelItemCount(),1)
         self.assertTrue(self.dialog.export_button.isEnabled())
         self.dialog.source_mode.setCurrentIndex(1)
         self.assertIsNone(self.dialog.result)
@@ -32,7 +32,7 @@ class MaximaUiTests(unittest.TestCase):
     def test_preloaded_uses_latest_per_municipality_and_displays_date(self):
         self.dialog.source_mode.setCurrentIndex(1)
         rows=[('r1_41020_20260930','numero_predial'),('r1_41020_20261031','numero_predial'),('r1_25377_20261031','numero_predial')]
-        with patch.object(self.dialog,'params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.dialog.list_tables',return_value=rows):
+        with patch.object(self.dialog,'reference_params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.dialog.list_tables',return_value=rows):
             self.dialog.read_tables()
         self.assertEqual(self.dialog.tables.count(),2)
         self.dialog.tables.setCurrentIndex(1)
@@ -85,3 +85,12 @@ class MaximaUiTests(unittest.TestCase):
             plugin.dialog.r1_button.click();app.processEvents()
             self.assertTrue(plugin.reference_dialog.isVisible())
         finally:plugin.unload();window.close()
+
+    def test_maxima_uses_repository_or_selected_source_without_qgis_selector(self):
+        self.assertTrue(self.dialog.connection_controls.isHidden())
+        self.dialog.source_mode.setCurrentIndex(1)
+        with patch('validador_renumeracion.repository.repository_params',return_value={'dbname':'sentencias'}):
+            self.assertEqual(self.dialog.reference_params(),{'dbname':'sentencias'})
+        self.dialog.source_mode.setCurrentIndex(2)
+        self.dialog.selected_source_params={'dbname':'modelo_seleccionado'}
+        self.assertEqual(self.dialog.reference_params()['dbname'],'modelo_seleccionado')

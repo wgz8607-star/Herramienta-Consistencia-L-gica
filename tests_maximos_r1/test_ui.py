@@ -29,6 +29,30 @@ class MaximaUiTests(unittest.TestCase):
         self.assertEqual(self.dialog.schema_label.text(),'r1_r2')
         self.dialog.source_mode.setCurrentIndex(2)
         self.assertEqual(self.dialog.schema_label.text(),'public')
+    def test_preloaded_uses_latest_per_municipality_and_displays_date(self):
+        self.dialog.source_mode.setCurrentIndex(1)
+        rows=[('r1_41020_20260930','numero_predial'),('r1_41020_20261031','numero_predial'),('r1_25377_20261031','numero_predial')]
+        with patch.object(self.dialog,'params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.dialog.list_tables',return_value=rows):
+            self.dialog.read_tables()
+        self.assertEqual(self.dialog.tables.count(),2)
+        self.dialog.tables.setCurrentIndex(1)
+        self.assertEqual(self.dialog.tables.currentData()[0],'r1_41020_20261031')
+        self.assertIn('31/10/2026',self.dialog.source_mode.itemText(1))
+        self.dialog.source_mode.setCurrentIndex(2)
+        self.assertIn('Sin fecha seleccionada',self.dialog.source_mode.itemText(1))
+
+    def test_preloaded_database_is_sentencias_public_keeps_selected_database(self):
+        from qgis.core import QgsSettings
+        settings=QgsSettings();group='PostgreSQL/connections/maximos_test/'
+        for key,value in {'host':'localhost','database':'catastro_test','username':'reader','password':'test'}.items():settings.setValue(group+key,value)
+        try:
+            self.dialog.refresh_connections();self.dialog.connection.setCurrentText('maximos_test')
+            self.dialog.source_mode.setCurrentIndex(1)
+            self.assertEqual(self.dialog.params()['dbname'],'sentencias')
+            self.dialog.source_mode.setCurrentIndex(2)
+            self.assertEqual(self.dialog.params()['dbname'],'catastro_test')
+        finally:settings.remove('PostgreSQL/connections/maximos_test')
+
     def test_invalid_new_workbook_cannot_reuse_previous_column_selection(self):
         from openpyxl import Workbook
         with tempfile.TemporaryDirectory() as directory:

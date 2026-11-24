@@ -1,4 +1,6 @@
 from pathlib import Path
+from datetime import datetime
+import re
 from concurrent.futures import ThreadPoolExecutor
 from queue import SimpleQueue
 from qgis.core import QgsSettings,QgsApplication,QgsAuthMethodConfig
@@ -23,14 +25,15 @@ class MaximaDialog(QDialog):
         title=QLabel('Máximos de manzana y terreno del R1');title.setStyleSheet('font-size: 22px; font-weight: bold; color: #0066B3;');outer.addWidget(title)
         note=QLabel('Solo consulta. Manzana: posiciones 14–17; terreno: 18–21. El máximo de manzana se calcula por prefijo 1–13 y el de terreno por manzana completa 1–17.');note.setWordWrap(True);outer.addWidget(note)
         self.inputs=QWidget();form=QFormLayout(self.inputs);form.setContentsMargins(0,4,0,4)
-        self.source_mode=QComboBox();self.source_mode.addItems(['Archivo R1 Excel / TXT','R1 precargado · esquema r1_r2','R1 en public de una base seleccionada']);form.addRow('Origen del R1',self.source_mode)
+        self.source_mode=QComboBox();self.source_mode.addItems(['Opción 1: Archivos r1 y r2 cargados por usuario','Opción 2: Archivos r1 y r2 precargados - Sin fecha seleccionada','Opción 3: Archivos r1 y r2 cargados en "Public" de la base seleccionada']);form.addRow('Origen del R1',self.source_mode)
         self.file_page=QWidget();file_form=QFormLayout(self.file_page);file_form.setContentsMargins(0,0,0,0)
         self.file=QLineEdit();self.file.setReadOnly(True);browse=QPushButton('Seleccionar R1…');browse.clicked.connect(self.choose_file)
         row=QHBoxLayout();row.addWidget(self.file,1);row.addWidget(browse);file_form.addRow('Archivo',row)
         self.sheet=QComboBox();self.column=QComboBox();file_form.addRow('Hoja',self.sheet);file_form.addRow('Columna de NPN',self.column);form.addRow(self.file_page)
         self.db_page=QWidget();db_form=QFormLayout(self.db_page);db_form.setContentsMargins(0,0,0,0)
         self.connection=QComboBox();refresh=QPushButton('Actualizar conexiones');refresh.clicked.connect(self.refresh_connections)
-        row=QHBoxLayout();row.addWidget(self.connection,1);row.addWidget(refresh);db_form.addRow('Conexión guardada en QGIS',row)
+        row=QHBoxLayout();row.addWidget(self.connection,1);row.addWidget(refresh);db_form.addRow('Base seleccionada · conexión QGIS',row)
+        hint=QLabel('Precargados: sentencias.r1_r2 del servidor elegido. Public: base de la conexión seleccionada. En este plugin se utiliza únicamente el R1.');hint.setWordWrap(True);db_form.addRow(hint)
         self.schema_label=QLabel('r1_r2');self.tables=QComboBox();list_button=QPushButton('Consultar tablas R1');list_button.clicked.connect(self.read_tables)
         row=QHBoxLayout();row.addWidget(self.tables,1);row.addWidget(list_button);db_form.addRow('Esquema',self.schema_label);db_form.addRow('Tabla y columna NPN',row);form.addRow(self.db_page)
         self.read_button=QPushButton('Leer R1 y calcular máximos');self.read_button.clicked.connect(self.read_maxima);form.addRow(self.read_button);outer.addWidget(self.inputs)
@@ -50,7 +53,7 @@ class MaximaDialog(QDialog):
         close=QPushButton('Cerrar');close.clicked.connect(self.reject);actions.addWidget(self.export_button);actions.addStretch();actions.addWidget(close);outer.addLayout(actions)
         self.source_mode.currentIndexChanged.connect(self.change_source)
         self.connection.currentTextChanged.connect(self.connection_changed)
-        self.tables.currentIndexChanged.connect(self.invalidate)
+        self.tables.currentIndexChanged.connect(self.table_changed)
         self.sheet.currentTextChanged.connect(self.update_columns);self.column.currentIndexChanged.connect(self.invalidate)
         self.municipality.currentIndexChanged.connect(self.update_zones);self.zone.currentIndexChanged.connect(self.render);self.search.textChanged.connect(self.render)
         self.refresh_connections();self.change_source()
@@ -66,7 +69,16 @@ class MaximaDialog(QDialog):
 
     def change_source(self,*_):
         mode=self.source_mode.currentIndex();self.file_page.setVisible(mode==0);self.db_page.setVisible(mode!=0)
-        self.schema_label.setText('r1_r2' if mode==1 else 'public');self.tables.clear();self.invalidate()
+        self.schema_label.setText('r1_r2' if mode==1 else 'public');self.tables.clear();self.invalidate();self.update_reference_date()
+
+    def table_changed(self,*_):
+        self.invalidate();self.update_reference_date()
+
+    def update_reference_date(self):
+        selection=self.tables.currentData() if self.source_mode.currentIndex()==1 else None
+        match=re.fullmatch(r'r1_(\d{5})_(\d{8})',selection[0]) if selection else None
+        date=datetime.strptime(match[2],'%Y%m%d').strftime('%d/%m/%Y') if match else 'Sin fecha seleccionada'
+        self.source_mode.setItemText(1,'Opción 2: Archivos r1 y r2 precargados - '+date)
 
     def refresh_connections(self):
         settings=QgsSettings();settings.beginGroup('PostgreSQL/connections');names=sorted(settings.childGroups());settings.endGroup()
@@ -93,6 +105,8 @@ class MaximaDialog(QDialog):
                 if not accepted:raise ValueError('Consulta cancelada: no se suministró la contraseña.')
                 self._passwords[name]=password
             params['password']=self._passwords[name]
+        if self.source_mode.currentIndex()==1:
+            params['dbname']='sentencias'
         return params
 
     def task(self,function):
@@ -138,7 +152,20 @@ class MaximaDialog(QDialog):
             self.status.setText('Consultando tablas con columna de número predial…')
             tables=self.task(lambda:list_tables(params,schema,preloaded))
             self.tables.clear()
-            for table,column in tables:self.tables.addItem(table+' · '+column,(table,column))
+            if preloaded:
+                latest={}
+                for table,column in tables:
+                    code,stamp=table.split('_')[1:]
+                    try:datetime.strptime(stamp,'%Y%m%d')
+                    except ValueError:continue
+                    if code not in latest or stamp>latest[code][0]:latest[code]=(stamp,table,column)
+                for code,(stamp,table,column) in sorted(latest.items()):
+                    department,municipality=self.catalog.get(code,('Sin departamento identificado','Municipio no registrado'))
+                    date=datetime.strptime(stamp,'%Y%m%d').strftime('%d/%m/%Y')
+                    self.tables.addItem(f'{code} · {municipality} · {department} · {date}',(table,column))
+            else:
+                for table,column in tables:self.tables.addItem(table+' · '+column,(table,column))
+            self.update_reference_date()
             self.status.setText(f'{len(tables)} tablas disponibles en {params.get("dbname",params.get("service",""))}.{schema}. Seleccione el R1 y pulse Leer.')
         except Exception as error:QMessageBox.warning(self,'No se consultaron las tablas',str(error))
 

@@ -146,3 +146,70 @@ class RenumberingTests(unittest.TestCase):
             dialog.sheet.setCurrentIndex(1)
             self.assertEqual(dialog.comparison,[])
         finally:dialog.close();parent.close();owner.close()
+
+    def test_grouped_views_display_prefix9_subdivision10_13_and_r1_start(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.proposal_dialog import ProposalDialog,PROPOSAL_FIELDS
+        owner=MaximaDialog();parent=CandidateDialog(owner)
+        r1=build_maxima([(1,npn(block='0010')),(2,npn(sector='010100',block='0200'))])
+        owner.result=r1
+        proposal=generate([old(),old(sector='010100')],r1)
+        dialog=ProposalDialog(proposal,'Contexto',parent)
+        try:
+            tree=dialog.views['Propuesta'];self.assertEqual(tree.topLevelItemCount(),1)
+            root=tree.topLevelItem(0);self.assertEqual(root.text(0),'1–9: '+old()[:9])
+            self.assertEqual(root.childCount(),2)
+            first,second=root.child(0),root.child(1)
+            self.assertEqual(first.text(0),'10–13: 0000');self.assertEqual(second.text(0),'10–13: 0100')
+            base=next(i for i,(_,key) in enumerate(PROPOSAL_FIELDS) if key=='base_m')
+            start=next(i for i,(_,key) in enumerate(PROPOSAL_FIELDS) if key=='next_m')
+            self.assertEqual(first.text(base),'0010');self.assertEqual(first.text(start),'0011')
+            self.assertEqual(second.text(base),'0200');self.assertEqual(second.text(start),'0201')
+            dialog.set_column_filter('Propuesta',base,'0200')
+            root=tree.topLevelItem(0);self.assertEqual(root.childCount(),1)
+            self.assertEqual(root.child(0).text(0),'10–13: 0100')
+            dialog.clear_column_filters();self.assertEqual(tree.topLevelItem(0).childCount(),2)
+        finally:dialog.close();parent.close();owner.close()
+
+    def test_comparison_hides_non_provisionals_and_combines_header_and_status_filters(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.proposal_dialog import ProposalDialog,COMPARE_FIELDS
+        owner=MaximaDialog();parent=CandidateDialog(owner);proposal=generate([old(),old('9003')]);a,b=proposal
+        dialog=ProposalDialog(proposal,'Contexto',parent)
+        try:
+            rows=[{'line':2,'old':a['old'],'new':a['new']},{'line':3,'old':b['old'],'new':b['old']},{'line':4,'old':npn(),'new':npn()}]
+            dialog.comparison=compare_proposal(proposal,rows);dialog.tabs.setCurrentIndex(1);dialog.update_filters()
+            self.assertEqual(len(dialog.visible_data('Comparación')),2)
+            status=next(i for i,(_,key) in enumerate(COMPARE_FIELDS) if key=='status')
+            dialog.set_column_filter('Comparación',status,'Diferencia')
+            self.assertEqual([row['old'] for row in dialog.visible_data('Comparación')],[b['old']])
+            dialog.status_filter.setCurrentIndex(dialog.status_filter.findData('Coincide'))
+            self.assertEqual(dialog.views['Comparación'].topLevelItemCount(),0)
+            dialog.clear_column_filters();self.assertEqual(len(dialog.visible_data('Comparación')),1)
+        finally:dialog.close();parent.close();owner.close()
+
+    def test_export_contains_only_proposal_provisionals_and_group_baselines(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.proposal_dialog import ProposalDialog
+        owner=MaximaDialog();parent=CandidateDialog(owner);proposal=generate([old()]);a=proposal[0]
+        dialog=ProposalDialog(proposal,'Contexto',parent)
+        try:
+            dialog.comparison=compare_proposal(proposal,[{'line':2,'old':a['old'],'new':a['new']},{'line':3,'old':npn(),'new':npn()}])
+            with tempfile.TemporaryDirectory() as directory:
+                filename=str(Path(directory)/'grupos.xlsx')
+                with patch('validador_renumeracion.proposal_dialog.QFileDialog.getSaveFileName',return_value=(filename,'')):dialog.export()
+                book=load_workbook(filename,read_only=True)
+                self.assertEqual(book['Comparacion'].max_row,2)
+                self.assertEqual(book['Comparacion']['A2'].value,a['old'])
+                groups=book['Grupos y maximos R1']
+                self.assertEqual(groups['B2'].value,a['old'][:9])
+                self.assertEqual(groups['C2'].value,a['old'][9:13])
+                self.assertEqual(groups['F2'].value,'0010')
+                self.assertEqual(groups['G2'].value,'0011');book.close()
+        finally:dialog.close();parent.close();owner.close()

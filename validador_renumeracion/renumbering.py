@@ -54,7 +54,7 @@ def generate_proposal(candidate_rows,r1,model):
                 output.append({'old':old,'new':new,'status':'Pendiente' if error else 'Generado',
                     'reason':error or ('Manzana/vereda nueva' if is_new else 'Terreno en manzana/vereda existente'),
                     'prefix13':old[:13],'old_block':block,'new_block':target_block if not block_error else '',
-                    'base_m':prefix_max.get(old[:13]) if is_new else int(old[13:17]),
+                    'base_m':prefix_max.get(old[:13]),
                     'base_t':baseline,'family':plot,'condition':old[21]})
     targets=Counter(row['new'] for row in output if row['new'])
     for row in output:

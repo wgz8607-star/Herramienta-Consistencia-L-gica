@@ -1,10 +1,10 @@
-# Renumeración predial · v0.7.0
+# Renumeración predial · v0.7.1
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.0.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.1.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -48,7 +48,7 @@ Se habilita **Generar propuesta y comparar archivo** cuando hay R1 del mismo mun
 
 Cargue Excel `.xlsx`, elija hoja y compare **A = nuevo definitivo; B = provisional**. Se admiten cabeceras o datos desde la primera fila. Los NPN deben estar almacenados como texto para conservar precisión y ceros iniciales.
 
-Se distinguen Coincide, Diferencia, Falta en archivo, Pendiente de generar, provisionales o definitivos duplicados, registros fuera del alcance y filas inválidas. A = B se trata como Sin cambio fuera del alcance únicamente si no corresponde a un provisional identificado; si sí corresponde se compara con el esperado.
+Se distinguen Coincide, Diferencia, Falta en archivo, Pendiente de generar, provisionales o definitivos duplicados y filas inválidas. Las tablas y exportación de comparación solo incluyen los provisionales de la propuesta; los registros externos se omiten y se informa su cantidad. A = B se trata como Sin cambio fuera del alcance únicamente si no corresponde a un provisional identificado; si sí corresponde se compara con el esperado.
 
 **Coincide significa que el archivo coincide con la propuesta calculada; no acredita que el cambio ya haya sido aplicado en la base.** Generado tampoco significa aprobado ni ejecutado. Los casos pendientes conservan su explicación.
 
@@ -59,3 +59,11 @@ Exporte la propuesta y comparación a Excel. La hoja Renumeracion mantiene A nue
 `QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1 /workspace/.venvs/calidad-qgis/bin/python -m unittest discover -s tests_maximos_r1`
 
 Pruebas de agrupación, deduplicación, aislamiento territorial, máximos y faltantes, orden sin saltos, condición 2, PH/condominio, sufijos, agotamiento, comparación, lectura Excel y exportación. La conectividad institucional debe verificarse en QGIS desde la red de la entidad.
+
+## Agrupación y filtros en propuesta y comparación
+
+Ambas tablas muestran dos niveles: **prefijo 1–9 → código 10–13**, con los provisionales individuales desplegables debajo. Los encabezados territoriales se mantienen al filtrar. Cada subgrupo usa el prefijo completo 1–13 para mostrar **máximo manzana/vereda R1** e **inicio (máximo + 1)**. Si un grupo 1–9 contiene varios subgrupos con referencias distintas, se indica Ver subgrupos 10–13 para evitar presentar un único inicio incorrecto. El máximo e inicio de terreno se presentan por cada manzana/vereda en las filas individuales. Agotados y referencias ausentes se muestran explícitamente.
+
+Pulse cualquier encabezado **▾** para filtrar esa columna por texto o uno de los valores sugeridos. Los filtros de varias columnas se combinan con la búsqueda y el filtro de resultado. **Limpiar filtros de columnas** restablece los encabezados. **Desagrupar detalle / Agrupar** controla el árbol.
+
+El Excel conserva la hoja A nuevo / B provisional, exporta las filas visibles según los filtros y añade **Grupos y maximos R1** con claves 1–9, 10–13, referencia completa e inicios de cada subgrupo. Conserva en Resumen los filtros empleados y la cantidad de filas externas omitidas.

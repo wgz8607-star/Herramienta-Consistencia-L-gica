@@ -70,3 +70,18 @@ class MaximaUiTests(unittest.TestCase):
     def test_plugin_entrypoint_is_independent(self):
         plugin=classFactory(object())
         self.assertEqual(plugin.__class__.__module__,'validador_renumeracion.plugin')
+
+    def test_plugin_opens_source_selection_before_r1(self):
+        from unittest.mock import MagicMock
+        from qgis.PyQt.QtWidgets import QWidget
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        window=QWidget();iface=MagicMock();iface.mainWindow.return_value=window
+        plugin=classFactory(iface);plugin.initGui()
+        try:
+            plugin.action.trigger();app.processEvents()
+            self.assertIsInstance(plugin.dialog,CandidateDialog)
+            self.assertTrue(plugin.dialog.isVisible())
+            self.assertFalse(plugin.reference_dialog.isVisible())
+            plugin.dialog.r1_button.click();app.processEvents()
+            self.assertTrue(plugin.reference_dialog.isVisible())
+        finally:plugin.unload();window.close()

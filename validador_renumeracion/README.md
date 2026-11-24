@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.2.2. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.3.0. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.2.2.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.3.0.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -38,3 +38,9 @@ CICA identifica 7, 8 o 9 en posición 14 o 18; Modelo Interno identifica cualqui
 Esta fase identifica provisionales actuales. Los máximos siguen calculándose exclusivamente desde el R1. La comparación con el archivo de renumeración y la comprobación de cambios aplicados pertenecen a la siguiente fase.
 
 En CICA se pueden combinar Urbano (01), Rural (00) y Centro poblado (02–99), según posiciones 6–7 del NPN. Las tres zonas se proponen marcadas; se exige al menos una y el alcance se conserva en la exportación.
+
+Al abrir el plugin se muestra primero la selección de fuente CICA / Modelo Interno, conexión y alcance. Desde esa ventana, el botón **Consultar máximos del R1…** abre la consulta de referencias R1.
+
+### Inicio y selección territorial CICA
+
+La ventana inicial es la selección de fuente. En CICA se ocultan las conexiones y se usa la copia fija `sentencias.snc_cica_copy.cica_predio`. Pulse **Consultar departamentos y municipios CICA** y seleccione departamento y municipio. El catálogo incluye municipios con predios VALIDADO / DESCARGADO_AL_SNC. Se usa una conexión guardada a sentencias cuando está disponible; en otro caso se pide contraseña por sesión para el servidor institucional. No se incluye una contraseña en este plugin. Modelo Interno conserva las conexiones guardadas QGIS y la conexión directa PostgreSQL.

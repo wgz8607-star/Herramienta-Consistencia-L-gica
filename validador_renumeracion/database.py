@@ -72,3 +72,13 @@ def source_records(params,model,schema,municipality='',zones=None):
                 if filters:query+=sql.SQL(' WHERE ')+sql.SQL(' AND ').join(filters)
                 cursor.execute(query,tuple(args))
                 for number,row in enumerate(cursor,1):yield number,row[0]
+
+
+def cica_municipalities(params):
+    if params.get('dbname')!='sentencias':raise ValueError('La copia CICA se consulta en sentencias.')
+    with closing(psycopg2.connect(**params,connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection,connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout='90s'")
+            cursor.execute("SELECT DISTINCT left(trim(numero_predial::text),5) AS codigo FROM snc_cica_copy.cica_predio WHERE etapa=%s AND estado_control=%s AND trim(numero_predial::text) ~ '^[0-9]{30}$' ORDER BY codigo",('VALIDADO','DESCARGADO_AL_SNC'))
+            return [row[0] for row in cursor.fetchall()]

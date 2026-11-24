@@ -1,16 +1,18 @@
-from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout
+from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QInputDialog
 from openpyxl import Workbook
-from .database import model_schemas,source_records
+from .database import model_schemas,source_records,cica_municipalities
 from .candidates import identify_candidates
 
 HEADERS=['Número predial','DIVIPOLA','Zona','Prefijo 13','Manzana','Prefijo 17','Terreno','Tipo provisional','Condición','Clasificación']
 
 
 class CandidateDialog(QDialog):
-    def __init__(self,parent):
-        super().__init__(parent);self.owner=parent;self.result=None;self.origin=''
-        self.setWindowTitle('Predios a renumerar · CICA / Modelo Interno');self.resize(1150,740)
-        layout=QVBoxLayout(self);form=QFormLayout();layout.addLayout(form)
+    def __init__(self,parent,window_parent=None):
+        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self._cica_password=None
+        self.setWindowTitle('Renumeración predial · Seleccionar fuente de datos');self.resize(1150,740)
+        layout=QVBoxLayout(self)
+        title=QLabel('Seleccione la fuente de datos a revisar');title.setStyleSheet('font-size: 20px; font-weight: bold; color: #0066B3;');layout.addWidget(title)
+        form=QFormLayout();layout.addLayout(form)
         self.model=QComboBox();self.model.addItems(['CICA','Modelo Interno de Levantamiento 1.0']);form.addRow('Fuente',self.model)
         self.connection_mode=QComboBox();self.connection_mode.addItems(['Conexión guardada en QGIS','Conexión directa PostgreSQL']);form.addRow('Forma de conexión',self.connection_mode)
         self.connection=QComboBox()
@@ -26,6 +28,9 @@ class CandidateDialog(QDialog):
         self.connection_mode.currentIndexChanged.connect(self.connection_mode_changed)
         self.schema=QComboBox();self.list_button=QPushButton('Consultar esquemas del Modelo Interno');form.addRow('Esquema',self.schema);form.addRow(self.list_button)
         self.divipola=QLineEdit();self.divipola.setPlaceholderText('5 dígitos; vacío para todos los municipios');self.divipola.setMaxLength(5);form.addRow('Municipio · DIVIPOLA',self.divipola)
+        self.cica_lookup=QPushButton('Consultar departamentos y municipios CICA');form.addRow(self.cica_lookup)
+        self.department=QComboBox();self.cica_municipality=QComboBox();form.addRow('Departamento',self.department);form.addRow('Municipio CICA',self.cica_municipality)
+        self.cica_lookup.clicked.connect(self.load_cica_municipalities);self.department.currentIndexChanged.connect(self.update_cica_municipalities);self.cica_municipality.currentIndexChanged.connect(self.invalidate)
         self.zones_widget=QWidget();zone_layout=QHBoxLayout(self.zones_widget);zone_layout.setContentsMargins(0,0,0,0);self.zones={}
         for key,label in [('URBANO','Urbano'),('CP','Centro poblado (CP)'),('RURAL','Rural')]:
             checkbox=QCheckBox(label);checkbox.setChecked(True);checkbox.toggled.connect(self.invalidate);zone_layout.addWidget(checkbox);self.zones[key]=checkbox
@@ -35,16 +40,28 @@ class CandidateDialog(QDialog):
         self.status=QLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(HEADERS);layout.addWidget(self.tree,1)
         self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False);layout.addWidget(self.export)
+        self.r1_button=QPushButton('Consultar máximos del R1…');self.r1_button.clicked.connect(self.open_r1);layout.addWidget(self.r1_button)
         self.model.currentIndexChanged.connect(self.change_source);self.connection.currentTextChanged.connect(self.change_source)
         self.schema.currentTextChanged.connect(self.invalidate);self.divipola.textChanged.connect(self.invalidate)
         self.list_button.clicked.connect(self.list_schemas);self.read.clicked.connect(self.load);self.export.clicked.connect(self.save)
         self.change_source();self.connection_mode_changed()
+
+    def open_r1(self):
+        self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
 
     def invalidate(self,*_):
         self.result=None;self.tree.clear();self.export.setEnabled(False);self.status.setText('Fuente pendiente de consultar.')
 
     def change_source(self,*_):
         self.schema.clear();cica=self.model.currentText()=='CICA'
+        for field in [self.connection_mode,self.connection,self.divipola]:
+            field.setVisible(not cica);self.connection_form.labelForField(field).setVisible(not cica)
+        for field in self.direct.values():
+            visible=not cica and self.connection_mode.currentIndex()==1
+            field.setVisible(visible);self.connection_form.labelForField(field).setVisible(visible)
+        for field in [self.department,self.cica_municipality]:
+            field.setVisible(cica);self.connection_form.labelForField(field).setVisible(cica)
+        self.cica_lookup.setVisible(cica)
         if cica:self.schema.addItem('snc_cica_copy')
         self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.zones_widget.setVisible(cica);self.connection_form.labelForField(self.zones_widget).setVisible(cica);self.invalidate()
 
@@ -62,12 +79,43 @@ class CandidateDialog(QDialog):
 
     def params(self):
         cica=self.model.currentText()=='CICA'
+        if cica:
+            from qgis.core import QgsSettings
+            settings=QgsSettings()
+            for index in range(self.owner.connection.count()):
+                name=self.owner.connection.itemText(index)
+                if settings.value('PostgreSQL/connections/'+name+'/database','')=='sentencias':
+                    return self.owner.params(preloaded=True,connection_name=name)
+            if self._cica_password is None:
+                password,accepted=QInputDialog.getText(self,'Acceso a la copia CICA','Contraseña de lectura de sentencias (solo esta sesión):',QLineEdit.Password)
+                if not accepted:raise ValueError('Consulta CICA cancelada.')
+                self._cica_password=password
+            return {'host':'172.19.3.225','port':'5432','dbname':'sentencias','user':'admin_ant','password':self._cica_password}
         if self.connection_mode.currentIndex()==0:
             return self.owner.params(preloaded=cica,connection_name=self.connection.currentText())
         params={key:(field.text() if key=='password' else field.text().strip()) for key,field in self.direct.items()}
         if cica:params['dbname']='sentencias'
         if not all(params[key] for key in ('host','port','dbname','user')):raise ValueError('Complete servidor, puerto, base de datos y usuario.')
         return params
+
+    def load_cica_municipalities(self):
+        self.cica_codes=[];self.department.clear();self.cica_municipality.clear();self.invalidate()
+        try:
+            params=self.params();self.status.setText('Consultando municipios de la copia CICA…')
+            codes=self.run(lambda:cica_municipalities(params));self.cica_codes=codes
+            self.department.clear();self.department.addItem('Todos los departamentos','')
+            departments=sorted({self.owner.catalog.get(code,('Sin departamento identificado',''))[0] for code in codes})
+            for name in departments:self.department.addItem(name,name)
+            self.update_cica_municipalities();self.status.setText(f'{len(codes)} municipios disponibles en la copia CICA.')
+        except Exception as error:QMessageBox.warning(self,'No se consultaron los municipios CICA',str(error))
+
+    def update_cica_municipalities(self,*_):
+        self.cica_municipality.clear();self.cica_municipality.addItem('Seleccione un municipio…',None)
+        department=self.department.currentData() or ''
+        for code in self.cica_codes:
+            dep,name=self.owner.catalog.get(code,('Sin departamento identificado','Municipio no identificado'))
+            if not department or dep==department:self.cica_municipality.addItem(f'{name} · {code}',code)
+        self.invalidate()
 
     def run(self,function):
         self.setEnabled(False)
@@ -84,7 +132,9 @@ class CandidateDialog(QDialog):
     def load(self):
         self.invalidate()
         try:
-            code=self.divipola.text().strip()
+            cica=self.model.currentText()=='CICA'
+            code=(self.cica_municipality.currentData() or '') if cica else self.divipola.text().strip()
+            if cica and not code:raise ValueError('Consulte y seleccione el departamento y municipio de la copia CICA.')
             if code and (len(code)!=5 or not code.isascii() or not code.isdigit()):raise ValueError('Ingrese una DIVIPOLA de cinco dígitos.')
             model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno';schema=self.schema.currentText()
             if not schema:raise ValueError('Consulte y seleccione el esquema del Modelo Interno.')

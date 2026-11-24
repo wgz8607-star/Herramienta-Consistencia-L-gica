@@ -24,11 +24,11 @@ class CandidateTests(unittest.TestCase):
         from validador_renumeracion.dialog import MaximaDialog
         from validador_renumeracion.candidate_dialog import CandidateDialog
         from unittest.mock import patch
-        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        parent=MaximaDialog();dialog=CandidateDialog(parent);dialog._cica_password='test'
         try:
             self.assertEqual(dialog.schema.currentText(),'snc_cica_copy')
             with patch.object(parent,'params',return_value={}) as params:
-                dialog.params();self.assertTrue(params.call_args.kwargs['preloaded'])
+                self.assertEqual(dialog.params()['dbname'],'sentencias')
                 dialog.model.setCurrentIndex(1);dialog.params();self.assertFalse(params.call_args.kwargs['preloaded'])
             self.assertEqual(dialog.schema.count(),0)
             self.assertIsNone(dialog.result)
@@ -52,7 +52,7 @@ class CandidateTests(unittest.TestCase):
         from test_ui import app
         from validador_renumeracion.dialog import MaximaDialog
         from validador_renumeracion.candidate_dialog import CandidateDialog
-        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        parent=MaximaDialog();dialog=CandidateDialog(parent);dialog._cica_password='test'
         try:
             dialog.connection_mode.setCurrentIndex(1)
             for key,value in {'host':'localhost','dbname':'catastro','user':'reader'}.items():dialog.direct[key].setText(value)
@@ -91,3 +91,23 @@ class CandidateTests(unittest.TestCase):
             list(source_records({'dbname':'sentencias'},'CICA','snc_cica_copy','41020',('URBANO','CP')))
         self.assertEqual(cursor.execute.call_args.args[1],('VALIDADO','DESCARGADO_AL_SNC','^01$','^(0[2-9]|[1-9][0-9])$','41020'))
         with self.assertRaises(ValueError):list(source_records({'dbname':'sentencias'},'CICA','snc_cica_copy',zones=()))
+
+    def test_cica_hides_connections_and_filters_municipalities_by_department(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from unittest.mock import patch
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            self.assertTrue(dialog.connection_mode.isHidden())
+            self.assertTrue(dialog.connection.isHidden())
+            self.assertFalse(dialog.department.isHidden())
+            parent.catalog={'41020':('Huila','Algeciras'),'25377':('Cundinamarca','La Calera')}
+            with patch.object(dialog,'params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.candidate_dialog.cica_municipalities',return_value=['41020','25377']):dialog.load_cica_municipalities()
+            dialog.department.setCurrentIndex(dialog.department.findData('Huila'))
+            self.assertEqual(dialog.cica_municipality.count(),2)
+            self.assertEqual(dialog.cica_municipality.itemData(1),'41020')
+            dialog.model.setCurrentIndex(1)
+            self.assertFalse(dialog.connection_mode.isHidden())
+            self.assertTrue(dialog.department.isHidden())
+        finally:dialog.close();parent.close()

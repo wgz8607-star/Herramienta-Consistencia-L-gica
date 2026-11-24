@@ -80,3 +80,14 @@ class CandidateTests(unittest.TestCase):
             self.assertIn('"etapa"=%s AND "estado_control"=%s',render(query))
             self.assertEqual(args,('VALIDADO','DESCARGADO_AL_SNC')+((municipality,) if municipality else ()))
             self.assertEqual('left(trim(' in render(query),bool(municipality))
+
+    def test_cica_zones_are_combined_and_empty_selection_is_rejected(self):
+        from unittest.mock import MagicMock,patch
+        from validador_renumeracion.database import source_records
+        connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.return_value=[('cica_predio','numero_predial')]
+        cursor.__iter__.return_value=iter([])
+        with patch('psycopg2.connect',return_value=connection):
+            list(source_records({'dbname':'sentencias'},'CICA','snc_cica_copy','41020',('URBANO','CP')))
+        self.assertEqual(cursor.execute.call_args.args[1],('VALIDADO','DESCARGADO_AL_SNC','^01$','^(0[2-9]|[1-9][0-9])$','41020'))
+        with self.assertRaises(ValueError):list(source_records({'dbname':'sentencias'},'CICA','snc_cica_copy',zones=()))

@@ -1,4 +1,4 @@
-from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog
+from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout
 from openpyxl import Workbook
 from .database import model_schemas,source_records
 from .candidates import identify_candidates
@@ -26,6 +26,10 @@ class CandidateDialog(QDialog):
         self.connection_mode.currentIndexChanged.connect(self.connection_mode_changed)
         self.schema=QComboBox();self.list_button=QPushButton('Consultar esquemas del Modelo Interno');form.addRow('Esquema',self.schema);form.addRow(self.list_button)
         self.divipola=QLineEdit();self.divipola.setPlaceholderText('5 dígitos; vacío para todos los municipios');self.divipola.setMaxLength(5);form.addRow('Municipio · DIVIPOLA',self.divipola)
+        self.zones_widget=QWidget();zone_layout=QHBoxLayout(self.zones_widget);zone_layout.setContentsMargins(0,0,0,0);self.zones={}
+        for key,label in [('URBANO','Urbano'),('CP','Centro poblado (CP)'),('RURAL','Rural')]:
+            checkbox=QCheckBox(label);checkbox.setChecked(True);checkbox.toggled.connect(self.invalidate);zone_layout.addWidget(checkbox);self.zones[key]=checkbox
+        form.addRow('Zonas CICA',self.zones_widget)
         note=QLabel('CICA: 7, 8 o 9 en posición 14 o 18. Modelo Interno: letra en posición 14 o 18. CICA: solo etapa VALIDADO y estado_control DESCARGADO_AL_SNC. Modelo Interno: sin filtro de etapa o estado. Las condiciones 8 y 9 (posición 22) quedan identificadas para revisión especial.');note.setWordWrap(True);layout.addWidget(note)
         self.read=QPushButton('Identificar predios a renumerar');layout.addWidget(self.read)
         self.status=QLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
@@ -42,7 +46,7 @@ class CandidateDialog(QDialog):
     def change_source(self,*_):
         self.schema.clear();cica=self.model.currentText()=='CICA'
         if cica:self.schema.addItem('snc_cica_copy')
-        self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.invalidate()
+        self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.zones_widget.setVisible(cica);self.connection_form.labelForField(self.zones_widget).setVisible(cica);self.invalidate()
 
     def connection_mode_changed(self,*_):
         direct=self.connection_mode.currentIndex()==1
@@ -84,10 +88,12 @@ class CandidateDialog(QDialog):
             if code and (len(code)!=5 or not code.isascii() or not code.isdigit()):raise ValueError('Ingrese una DIVIPOLA de cinco dígitos.')
             model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno';schema=self.schema.currentText()
             if not schema:raise ValueError('Consulte y seleccione el esquema del Modelo Interno.')
+            zones=tuple(key for key,checkbox in self.zones.items() if checkbox.isChecked()) if model=='CICA' else None
+            if model=='CICA' and not zones:raise ValueError('Seleccione al menos una zona para CICA.')
             params=self.params();self.status.setText('Leyendo los predios de la fuente…')
-            result=self.run(lambda:identify_candidates(source_records(params,model,schema,code),model))
+            result=self.run(lambda:identify_candidates(source_records(params,model,schema,code,zones),model))
             self.result=result;self.origin=f'{model} · {params.get("dbname",params.get("service",""))}.{schema} · DIVIPOLA: {code or "Todos"}'
-            if model=='CICA':self.origin+=' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC'
+            if model=='CICA':self.origin+=' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: '+', '.join(zones)
             for row in result['rows']:self.tree.addTopLevelItem(QTreeWidgetItem(list(row)))
             pending=sum(row[8] in '89' for row in result['rows'])
             self.status.setText(f'{self.origin}\nLeídos: {result["total"]} · NPN únicos válidos: {result["unique"]} · Provisionales: {len(result["rows"])} · Condición especial pendiente: {pending} · Duplicados excluidos: {result["duplicates"]} · Inválidos: {len(result["invalid"])}')

@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.2.1. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.2.2. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.2.1.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.2.2.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -36,3 +36,5 @@ Abra **Predios a renumerar · CICA / Modelo Interno**. Elija **CICA** o **Modelo
 CICA identifica 7, 8 o 9 en posición 14 o 18; Modelo Interno identifica cualquier letra en esas posiciones. El listado distingue manzana, terreno o ambos, excluye NPN duplicados e informa registros inválidos. CICA incluye únicamente `etapa = VALIDADO` y `estado_control = DESCARGADO_AL_SNC`; el filtro se aplica en PostgreSQL junto a la DIVIPOLA y se registra en el origen exportado. Modelo Interno no filtra etapas ni estados. Las condiciones 8 y 9 en posición 22 se muestran como pendientes de revisión especial. Se exportan listado, procedencia e inválidos a Excel.
 
 Esta fase identifica provisionales actuales. Los máximos siguen calculándose exclusivamente desde el R1. La comparación con el archivo de renumeración y la comprobación de cambios aplicados pertenecen a la siguiente fase.
+
+En CICA se pueden combinar Urbano (01), Rural (00) y Centro poblado (02–99), según posiciones 6–7 del NPN. Las tres zonas se proponen marcadas; se exige al menos una y el alcance se conserva en la exportación.

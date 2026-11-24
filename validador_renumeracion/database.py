@@ -39,7 +39,9 @@ def model_schemas(params):
             return [row[0] for row in cursor.fetchall()]
 
 
-def source_records(params,model,schema,municipality=''):
+def source_records(params,model,schema,municipality='',zones=None):
+    if model=='CICA' and zones is not None and (not zones or set(zones)-{'URBANO','CP','RURAL'}):
+        raise ValueError('Seleccione al menos una zona válida para CICA.')
     expected='cica_predio' if model=='CICA' else 'ilc_predio'
     if model=='CICA' and (schema!='snc_cica_copy' or params.get('dbname')!='sentencias'):
         raise ValueError('La copia CICA debe consultarse en sentencias.snc_cica_copy.')
@@ -59,6 +61,12 @@ def source_records(params,model,schema,municipality=''):
                 if model=='CICA':
                     filters.append(sql.SQL('{}=%s AND {}=%s').format(sql.Identifier('etapa'),sql.Identifier('estado_control')))
                     args.extend(['VALIDADO','DESCARGADO_AL_SNC'])
+                if model=='CICA' and zones is not None:
+                    patterns={'URBANO':'^01$','RURAL':'^00$','CP':'^(0[2-9]|[1-9][0-9])$'}
+                    parts=[]
+                    for zone in zones:
+                        parts.append(sql.SQL('substring(trim({}::text),6,2) ~ %s').format(sql.Identifier(column)));args.append(patterns[zone])
+                    filters.append(sql.SQL('(')+sql.SQL(' OR ').join(parts)+sql.SQL(')'))
                 if municipality:
                     filters.append(sql.SQL('left(trim({}::text),5)=%s').format(sql.Identifier(column)));args.append(municipality)
                 if filters:query+=sql.SQL(' WHERE ')+sql.SQL(' AND ').join(filters)

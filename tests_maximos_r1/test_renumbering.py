@@ -159,17 +159,17 @@ class RenumberingTests(unittest.TestCase):
         dialog=ProposalDialog(proposal,'Contexto',parent)
         try:
             tree=dialog.views['Propuesta'];self.assertEqual(tree.topLevelItemCount(),1)
-            root=tree.topLevelItem(0);self.assertEqual(root.text(0),'1–9: '+old()[:9])
+            root=tree.topLevelItem(0);self.assertEqual(root.text(0),old()[:9])
             self.assertEqual(root.childCount(),2)
             first,second=root.child(0),root.child(1)
-            self.assertEqual(first.text(0),'10–13: 0000');self.assertEqual(second.text(0),'10–13: 0100')
-            base=next(i for i,(_,key) in enumerate(PROPOSAL_FIELDS) if key=='base_m')
-            start=next(i for i,(_,key) in enumerate(PROPOSAL_FIELDS) if key=='next_m')
+            self.assertEqual(first.text(0),old()[:13]);self.assertEqual(second.text(0),old(sector='010100')[:13])
+            base=next(i for i,(_,key) in enumerate(dialog.fields['Propuesta']) if key=='base_m')
+            start=next(i for i,(_,key) in enumerate(dialog.fields['Propuesta']) if key=='next_m')
             self.assertEqual(first.text(base),'0010');self.assertEqual(first.text(start),'0011')
             self.assertEqual(second.text(base),'0200');self.assertEqual(second.text(start),'0201')
             dialog.set_column_filter('Propuesta',base,'0200')
             root=tree.topLevelItem(0);self.assertEqual(root.childCount(),1)
-            self.assertEqual(root.child(0).text(0),'10–13: 0100')
+            self.assertEqual(root.child(0).text(0),old(sector='010100')[:13])
             dialog.clear_column_filters();self.assertEqual(tree.topLevelItem(0).childCount(),2)
         finally:dialog.close();parent.close();owner.close()
 
@@ -184,7 +184,7 @@ class RenumberingTests(unittest.TestCase):
             rows=[{'line':2,'old':a['old'],'new':a['new']},{'line':3,'old':b['old'],'new':b['old']},{'line':4,'old':npn(),'new':npn()}]
             dialog.comparison=compare_proposal(proposal,rows);dialog.tabs.setCurrentIndex(1);dialog.update_filters()
             self.assertEqual(len(dialog.visible_data('Comparación')),2)
-            status=next(i for i,(_,key) in enumerate(COMPARE_FIELDS) if key=='status')
+            status=next(i for i,(_,key) in enumerate(dialog.fields['Comparación']) if key=='status')
             dialog.set_column_filter('Comparación',status,'Diferencia')
             self.assertEqual([row['old'] for row in dialog.visible_data('Comparación')],[b['old']])
             dialog.status_filter.setCurrentIndex(dialog.status_filter.findData('Coincide'))
@@ -278,4 +278,29 @@ class RenumberingTests(unittest.TestCase):
                 book=load_workbook(filename,read_only=True)
                 summary=dict(book['Resumen'].iter_rows(values_only=True))
                 self.assertEqual(summary['Tomar terrenos 090x condición 9 como máximos R1'],'No');book.close()
+        finally:dialog.close();parent.close();owner.close()
+
+    def test_visual_sector_disaggregation_switches_both_tabs_without_changing_rows(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.proposal_dialog import ProposalDialog
+        owner=MaximaDialog();parent=CandidateDialog(owner);proposal=generate([old(),old('9003')])
+        dialog=ProposalDialog(proposal,'Contexto',parent)
+        try:
+            dialog.comparison=compare_proposal(proposal,[{'line':i+2,'old':row['old'],'new':row['new']} for i,row in enumerate(proposal)],True)
+            dialog.render();before=deepcopy(dialog.proposal)
+            dialog.view_level.setCurrentIndex(0)
+            for tree in dialog.views.values():self.assertFalse(tree.topLevelItem(0).isExpanded())
+            dialog.view_level.setCurrentIndex(1)
+            for tree in dialog.views.values():
+                root=tree.topLevelItem(0)
+                self.assertTrue(root.isExpanded());self.assertFalse(root.child(0).isExpanded())
+                self.assertEqual(len(root.text(0)),9);self.assertEqual(len(root.child(0).text(0)),13)
+                self.assertEqual(root.text(1),'Zona–sector (1–9)');self.assertIn('10–13',root.child(0).text(1))
+            dialog.view_level.setCurrentIndex(2)
+            for tree in dialog.views.values():self.assertTrue(tree.topLevelItem(0).child(0).isExpanded())
+            dialog.view_level.setCurrentIndex(0)
+            for tree in dialog.views.values():self.assertFalse(tree.topLevelItem(0).isExpanded())
+            self.assertEqual(dialog.proposal,before)
         finally:dialog.close();parent.close();owner.close()

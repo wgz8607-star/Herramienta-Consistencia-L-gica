@@ -1,10 +1,10 @@
-# Renumeración predial · v0.7.2
+# Renumeración predial · v0.7.3
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.2.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.3.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -64,7 +64,7 @@ Pruebas de agrupación, deduplicación, aislamiento territorial, máximos y falt
 
 Ambas tablas muestran dos niveles: **prefijo 1–9 → código 10–13**, con los provisionales individuales desplegables debajo. Los encabezados territoriales se mantienen al filtrar. Cada subgrupo usa el prefijo completo 1–13 para mostrar **máximo manzana/vereda R1** e **inicio (máximo + 1)**. Si un grupo 1–9 contiene varios subgrupos con referencias distintas, se indica Ver subgrupos 10–13 para evitar presentar un único inicio incorrecto. El máximo e inicio de terreno se presentan por cada manzana/vereda en las filas individuales. Agotados y referencias ausentes se muestran explícitamente.
 
-Pulse cualquier encabezado **▾** para filtrar esa columna por texto o uno de los valores sugeridos. Los filtros de varias columnas se combinan con la búsqueda y el filtro de resultado. **Limpiar filtros de columnas** restablece los encabezados. **Desagrupar detalle / Agrupar** controla el árbol.
+Pulse cualquier encabezado **▾** para filtrar esa columna por texto o uno de los valores sugeridos. Los filtros de varias columnas se combinan con la búsqueda y el filtro de resultado. **Limpiar filtros de columnas** restablece los encabezados. El selector **Desagregación de la vista** controla el árbol.
 
 El Excel conserva la hoja A nuevo / B provisional, exporta las filas visibles según los filtros y añade **Grupos y maximos R1** con claves 1–9, 10–13, referencia completa e inicios de cada subgrupo. Conserva en Resumen los filtros empleados y la cantidad de filas externas omitidas.
 
@@ -80,3 +80,10 @@ En Propuesta y comparación aparece **Tomar terrenos 090x (0900–0909), condici
 - La elección se registra en Resumen del Excel; Bases R1 refleja los máximos efectivos usados. Para recalcular sin volver a consultar el servidor se conserva en memoria la colección de NPN únicos del R1 leído.
 
 La comparación genera resultados únicamente para provisionales de la propuesta seleccionada. Los no provisionales y otros registros externos del archivo no se incorporan como filas a la tabla ni a la exportación de comparación; se informa su cantidad omitida.
+
+
+## Vista por sectores en Propuesta y Comparación
+
+Ambas pestañas presentan un árbol como el diagnóstico, con **Prefijo territorial** y **Agrupación** como primeras columnas. El sector muestra el prefijo 1–9; debajo, la subdivisión 10–13 identificada con su prefijo completo 1–13; al desplegar, los provisionales muestran su manzana o vereda 1–17 y el NPN en su columna correspondiente. Los encabezados de grupo se resaltan visualmente.
+
+El selector **Desagregación de la vista** permite alternar entre **Sectores · 1–9**, **Sector y subdivisión · 1–9 → 10–13** (inicial) y **Detalle de provisionales**. Se aplica a las dos pestañas, conserva filtros y no recalcula la numeración ni crea un reporte adicional. También se puede desplegar manualmente cada sector con su flecha.

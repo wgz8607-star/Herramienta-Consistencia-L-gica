@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.3.1. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.3.2. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.3.1.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.3.2.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -44,3 +44,5 @@ Al abrir el plugin se muestra primero la selección de fuente CICA / Modelo Inte
 ### Inicio y selección territorial CICA
 
 La ventana inicial es la selección de fuente. En CICA se ocultan las conexiones y se usa la copia fija `sentencias.snc_cica_copy.cica_predio`. Pulse **Consultar departamentos y municipios CICA** y seleccione departamento y municipio. El catálogo incluye municipios con predios VALIDADO / DESCARGADO_AL_SNC. Se reutiliza la configuración de sentencias del Validador de Consistencia Lógica instalado, incluida su contraseña, sin volver a solicitarla. Para CICA debe estar instalado ese validador. El nuevo ZIP no incorpora una copia de la contraseña. Modelo Interno conserva las conexiones guardadas QGIS y la conexión directa PostgreSQL.
+
+El botón **Comprobar acceso a copia CICA** informa base, servidor, usuario de sesión, usuario efectivo y permisos USAGE/SELECT en la conexión real. La misma comprobación se realiza antes de leer la copia. No muestra contraseñas.

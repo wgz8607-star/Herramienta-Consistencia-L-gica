@@ -1,6 +1,6 @@
 from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout
 from openpyxl import Workbook
-from .database import model_schemas,source_records,cica_municipalities
+from .database import model_schemas,source_records,cica_municipalities,cica_diagnostics
 from .candidates import identify_candidates
 
 HEADERS=['Número predial','DIVIPOLA','Zona','Prefijo 13','Manzana','Prefijo 17','Terreno','Tipo provisional','Condición','Clasificación']
@@ -30,6 +30,7 @@ class CandidateDialog(QDialog):
         self.divipola=QLineEdit();self.divipola.setPlaceholderText('5 dígitos; vacío para todos los municipios');self.divipola.setMaxLength(5);form.addRow('Municipio · DIVIPOLA',self.divipola)
         self.cica_lookup=QPushButton('Consultar departamentos y municipios CICA');form.addRow(self.cica_lookup)
         self.department=QComboBox();self.cica_municipality=QComboBox();form.addRow('Departamento',self.department);form.addRow('Municipio CICA',self.cica_municipality)
+        self.diagnose=QPushButton('Comprobar acceso a copia CICA');form.addRow(self.diagnose);self.diagnose.clicked.connect(self.check_access)
         self.cica_lookup.clicked.connect(self.load_cica_municipalities);self.department.currentIndexChanged.connect(self.update_cica_municipalities);self.cica_municipality.currentIndexChanged.connect(self.invalidate)
         self.zones_widget=QWidget();zone_layout=QHBoxLayout(self.zones_widget);zone_layout.setContentsMargins(0,0,0,0);self.zones={}
         for key,label in [('URBANO','Urbano'),('CP','Centro poblado (CP)'),('RURAL','Rural')]:
@@ -61,7 +62,7 @@ class CandidateDialog(QDialog):
             field.setVisible(visible);self.connection_form.labelForField(field).setVisible(visible)
         for field in [self.department,self.cica_municipality]:
             field.setVisible(cica);self.connection_form.labelForField(field).setVisible(cica)
-        self.cica_lookup.setVisible(cica)
+        self.cica_lookup.setVisible(cica);self.diagnose.setVisible(cica)
         if cica:self.schema.addItem('snc_cica_copy')
         self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.zones_widget.setVisible(cica);self.connection_form.labelForField(self.zones_widget).setVisible(cica);self.invalidate()
 
@@ -88,6 +89,12 @@ class CandidateDialog(QDialog):
         if cica:params['dbname']='sentencias'
         if not all(params[key] for key in ('host','port','dbname','user')):raise ValueError('Complete servidor, puerto, base de datos y usuario.')
         return params
+
+    def check_access(self):
+        try:
+            params=self.params();details=self.run(lambda:cica_diagnostics(params))
+            QMessageBox.information(self,'Acceso CICA · versión 0.3.2',details)
+        except Exception as error:QMessageBox.warning(self,'Diagnóstico CICA · versión 0.3.2',str(error))
 
     def load_cica_municipalities(self):
         self.cica_codes=[];self.department.clear();self.cica_municipality.clear();self.invalidate()

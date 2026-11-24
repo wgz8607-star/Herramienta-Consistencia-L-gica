@@ -39,6 +39,25 @@ def model_schemas(params):
             return [row[0] for row in cursor.fetchall()]
 
 
+def cica_access(cursor):
+    """Check the effective identity and privileges in the actual reader session."""
+    cursor.execute("""SELECT current_database(), inet_server_addr()::text,
+        inet_server_port(), session_user, current_user,
+        has_schema_privilege(current_user,
+            (SELECT oid FROM pg_namespace WHERE nspname='snc_cica_copy'), 'USAGE'),
+        has_table_privilege(current_user,
+            (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+             WHERE n.nspname='snc_cica_copy' AND c.relname='cica_predio'), 'SELECT')""")
+    database,host,port,session,user,schema_ok,table_ok=cursor.fetchone()
+    details=(f'Base: {database} | Servidor: {host}:{port}\n'
+             f'Usuario de sesión: {session} | Usuario efectivo: {user}\n'
+             f'USAGE snc_cica_copy: {schema_ok} | SELECT cica_predio: {table_ok}')
+    if not schema_ok or not table_ok:
+        raise ValueError('La conexión real del plugin no tiene acceso a la copia CICA.\n'+details+
+                         '\nCompruebe los permisos para este usuario en este servidor y base, y confirme COMMIT.')
+    return details
+
+
 def source_records(params,model,schema,municipality='',zones=None):
     if model=='CICA' and zones is not None and (not zones or set(zones)-{'URBANO','CP','RURAL'}):
         raise ValueError('Seleccione al menos una zona válida para CICA.')
@@ -50,6 +69,7 @@ def source_records(params,model,schema,municipality='',zones=None):
         with connection:
             with connection.cursor() as cursor:
                 cursor.execute("SET LOCAL statement_timeout='90s'")
+                if model=='CICA':cica_access(cursor)
                 cursor.execute("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=%s AND lower(table_name)=%s AND lower(column_name) IN ('numero_predial','numero_predial_nacional') ORDER BY CASE WHEN lower(column_name)='numero_predial' THEN 0 ELSE 1 END",(schema,expected))
                 fields=cursor.fetchall()
                 if not fields:raise ValueError('No se encontró '+schema+'.'+expected+' con columna de número predial accesible.')
@@ -80,5 +100,17 @@ def cica_municipalities(params):
         connection.set_session(readonly=True)
         with connection,connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout='90s'")
-            cursor.execute("SELECT DISTINCT left(trim(numero_predial::text),5) AS codigo FROM snc_cica_copy.cica_predio WHERE etapa=%s AND estado_control=%s AND trim(numero_predial::text) ~ '^[0-9]{30}$' ORDER BY codigo",('VALIDADO','DESCARGADO_AL_SNC'))
-            return [row[0] for row in cursor.fetchall()]
+            details=cica_access(cursor)
+            try:
+                cursor.execute("SELECT DISTINCT left(trim(numero_predial::text),5) AS codigo FROM snc_cica_copy.cica_predio WHERE etapa=%s AND estado_control=%s AND trim(numero_predial::text) ~ '^[0-9]{30}$' ORDER BY codigo",('VALIDADO','DESCARGADO_AL_SNC'))
+                return [row[0] for row in cursor.fetchall()]
+            except psycopg2.errors.InsufficientPrivilege as error:
+                raise ValueError(str(error)+'\n'+details) from error
+
+
+def cica_diagnostics(params):
+    with closing(psycopg2.connect(**params,connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection,connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout='15s'")
+            return cica_access(cursor)

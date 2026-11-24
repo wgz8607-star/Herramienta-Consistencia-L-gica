@@ -38,6 +38,7 @@ class CandidateTests(unittest.TestCase):
         from unittest.mock import MagicMock,patch
         from validador_renumeracion.database import source_records
         connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'admin_ant','admin_ant',True,True)
         cursor.fetchall.return_value=[('ILC_Predio','numero_predial_nacional')]
         cursor.__iter__.return_value=iter([(self.code(m='A001'),)])
         with patch('psycopg2.connect',return_value=connection):
@@ -72,6 +73,7 @@ class CandidateTests(unittest.TestCase):
             return ''.join(render(part) for part in value)
         for municipality in ('','41020'):
             connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value
+            cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'admin_ant','admin_ant',True,True)
             cursor.fetchall.return_value=[('cica_predio','numero_predial')]
             cursor.__iter__.return_value=iter([])
             with patch('psycopg2.connect',return_value=connection):
@@ -85,6 +87,7 @@ class CandidateTests(unittest.TestCase):
         from unittest.mock import MagicMock,patch
         from validador_renumeracion.database import source_records
         connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'admin_ant','admin_ant',True,True)
         cursor.fetchall.return_value=[('cica_predio','numero_predial')]
         cursor.__iter__.return_value=iter([])
         with patch('psycopg2.connect',return_value=connection):
@@ -126,3 +129,15 @@ class CandidateTests(unittest.TestCase):
             with patch.object(parent,'params',side_effect=AssertionError('No debe pedir conexión QGIS')):
                 self.assertEqual(dialog.params(),params)
         finally:dialog.close();parent.close()
+
+    def test_permission_diagnostic_reports_effective_user_without_credentials(self):
+        from unittest.mock import MagicMock
+        from validador_renumeracion.database import cica_access
+        cursor=MagicMock()
+        cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'conexion_otra','lector',False,True)
+        with self.assertRaises(ValueError) as error:cica_access(cursor)
+        self.assertIn('Usuario efectivo: lector',str(error.exception))
+        self.assertIn('USAGE snc_cica_copy: False',str(error.exception))
+        self.assertNotIn('password',str(error.exception))
+        cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'admin_ant','admin_ant',True,True)
+        self.assertIn('SELECT cica_predio: True',cica_access(cursor))

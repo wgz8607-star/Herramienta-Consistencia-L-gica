@@ -51,17 +51,13 @@ class MaximaDialog(QDialog):
         self.progress=QProgressBar();self.progress.setRange(0,0);self.progress.hide();outer.addWidget(self.progress)
         self.status=QLabel('Seleccione el R1 que servirá como referencia.');self.status.setWordWrap(True);outer.addWidget(self.status)
         actions=QHBoxLayout();self.export_button=QPushButton('Exportar máximos visibles a Excel');self.export_button.setEnabled(False);self.export_button.clicked.connect(self.export)
-        close=QPushButton('Cerrar');close.clicked.connect(self.reject);actions.addWidget(self.export_button);candidates=QPushButton('Predios a renumerar · CICA / Modelo Interno');candidates.clicked.connect(self.open_candidates);actions.addWidget(candidates);actions.addStretch();actions.addWidget(close);outer.addLayout(actions)
+        close=QPushButton('Cerrar');close.clicked.connect(self.reject);actions.addWidget(self.export_button);actions.addStretch();actions.addWidget(close);outer.addLayout(actions)
         self.source_mode.currentIndexChanged.connect(self.change_source)
         self.connection.currentTextChanged.connect(self.connection_changed)
         self.tables.currentIndexChanged.connect(self.table_changed)
         self.sheet.currentTextChanged.connect(self.update_columns);self.column.currentIndexChanged.connect(self.invalidate)
         self.municipality.currentIndexChanged.connect(self.update_zones);self.zone.currentIndexChanged.connect(self.render);self.search.textChanged.connect(self.render)
         self.refresh_connections();self.change_source()
-
-    def open_candidates(self):
-        from .candidate_dialog import CandidateDialog
-        CandidateDialog(self).exec_()
 
     def invalidate(self,*_):
         self.result=None;self.export_button.setEnabled(False)

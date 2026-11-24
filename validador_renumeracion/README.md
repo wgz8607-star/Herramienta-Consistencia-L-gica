@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.4.3. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.4.4. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.4.3.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.4.4.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -63,3 +63,5 @@ La agrupación del resumen y el filtro usan posiciones 6–9 (cuatro dígitos): 
 En opción 2 el catálogo se consulta automáticamente cuando hay municipio seleccionado en la fuente, y se propone su R1 de última vigencia. CICA transmite el municipio elegido; Modelo Interno usa la DIVIPOLA indicada o un código inequívoco en el esquema. Si el municipio no tiene R1 precargado, se informa y no se selecciona por defecto otro municipio.
 
 La pestaña y hoja Excel **Por prefijo 13** se omiten para evitar una vista redundante. Se conservan los cálculos internos por prefijo territorial de 13 dígitos y las vistas Por zona–sector y Por manzana.
+
+La ventana de máximos solo incluye lectura, consulta y exportación de R1; se retira el botón para abrir predios a renumerar. Esta función permanece en la ventana principal.

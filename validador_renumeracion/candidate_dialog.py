@@ -1,7 +1,8 @@
-from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QGroupBox
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QGroupBox,QSplitter
 from openpyxl import Workbook
 from .database import model_schemas,source_records,cica_municipalities,cica_copy_date
-from .candidates import identify_candidates,candidate_statistics
+from .candidates import identify_candidates,candidate_statistics,new_block_statistics,block_name
 
 HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–veredas','Terrenos distintos (1–21)','Condición 8/9 pendiente']
 
@@ -38,8 +39,12 @@ class CandidateDialog(QDialog):
         self.stats_button=QPushButton('Ver estadísticas CICA…');self.stats_button.clicked.connect(self.open_statistics);layout.addWidget(self.stats_button)
         self.read=QPushButton('Identificar predios a renumerar');layout.addWidget(self.read)
         self.status=QLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
-        results_title=QLabel('2. Predios identificados');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
-        self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(True);self.tree.setHeaderLabels(HEADERS);layout.addWidget(self.tree,1)
+        results_title=QLabel('2. Manzanas - Veredas nuevas y predios a renumerar');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
+        split=QSplitter(Qt.Vertical);layout.addWidget(split,1)
+        top=QWidget();top_layout=QVBoxLayout(top);top_layout.setContentsMargins(0,0,0,0);top_layout.addWidget(QLabel('Manzanas o veredas nuevas · provisional en posición 14'))
+        self.new_blocks=QTreeWidget();self.new_blocks.setRootIsDecorated(False);self.new_blocks.setAlternatingRowColors(True);self.new_blocks.setHeaderLabels(HEADERS);top_layout.addWidget(self.new_blocks);split.addWidget(top)
+        bottom=QWidget();bottom_layout=QVBoxLayout(bottom);bottom_layout.setContentsMargins(0,0,0,0);bottom_layout.addWidget(QLabel('Predios a renumerar · zona–sector y manzana o vereda'))
+        self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(True);self.tree.setHeaderLabels(HEADERS);bottom_layout.addWidget(self.tree);split.addWidget(bottom);split.setSizes([220,300])
         self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False);layout.addWidget(self.export)
         self.r1_status=QLabel('Seleccione departamento y municipio para leer el R1 precargado.');self.r1_status.setWordWrap(True)
         self.r1_button=QPushButton('Leer R1 del municipio');self.r1_button.clicked.connect(self.read_selected_r1)
@@ -92,6 +97,7 @@ class CandidateDialog(QDialog):
                 result=build_maxima(database_records(params,'r1_r2',table,column))
                 return result,table,date
             result,table,date=self.run(read)
+            self.owner.source_municipality=code
             self.owner.set_result(result,'sentencias.r1_r2.'+table)
             self._r1_code=code;self.maxima_button.setEnabled(True)
             self.r1_status.setText(f'{code} · Vigencia: {date:%d/%m/%Y} · {result.unique_npns:,} NPN únicos'.replace(',','.'))
@@ -104,7 +110,7 @@ class CandidateDialog(QDialog):
         self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
 
     def invalidate(self,*_):
-        self.result=None;self.tree.clear();self.export.setEnabled(False);self.status.setText('Fuente pendiente de consultar.')
+        self.result=None;self.tree.clear();self.new_blocks.clear();self.export.setEnabled(False);self.status.setText('Fuente pendiente de consultar.')
 
     def change_source(self,*_):
         self.schema.clear();cica=self.model.currentText()=='CICA'
@@ -226,12 +232,15 @@ class CandidateDialog(QDialog):
         except Exception as error:QMessageBox.warning(self,'No se identificaron los predios',str(error))
 
     def render_candidate_statistics(self):
-        self.tree.clear()
+        self.tree.clear();self.new_blocks.clear()
+        for block in new_block_statistics(self.result['rows']):
+            self.new_blocks.addTopLevelItem(QTreeWidgetItem(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)')))
+        for column in range(self.new_blocks.columnCount()):self.new_blocks.resizeColumnToContents(column)
         for sector in candidate_statistics(self.result['rows']):
             parent=QTreeWidgetItem(self.stat_values(sector,'Zona–sector (1–9)'))
             self.tree.addTopLevelItem(parent)
             for block in sector['children']:
-                parent.addChild(QTreeWidgetItem(self.stat_values(block,'Manzana–vereda (1–17)')))
+                parent.addChild(QTreeWidgetItem(self.stat_values(block,block_name(block['prefix'])+' (1–17)')))
         for column in range(self.tree.columnCount()):self.tree.resizeColumnToContents(column)
 
     @staticmethod
@@ -246,11 +255,13 @@ class CandidateDialog(QDialog):
         try:
             book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Origen',self.origin]);summary.append(['Alcance','Identificación provisional; no aprueba ni ejecuta renumeraciones. Condiciones 8 y 9 pendientes.'])
             for key in ('total','unique','duplicates'):summary.append([key,self.result[key]])
+            new_blocks=book.create_sheet('Manzanas-Veredas nuevas');new_blocks.append(HEADERS)
+            for block in new_block_statistics(self.result['rows']):new_blocks.append(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)'))
             sectors=book.create_sheet('Por zona-sector');sectors.append(HEADERS)
             blocks=book.create_sheet('Por manzana-vereda');blocks.append(HEADERS)
             for item in candidate_statistics(self.result['rows']):
                 sectors.append(self.stat_values(item,'Zona–sector (1–9)'))
-                for block in item['children']:blocks.append(self.stat_values(block,'Manzana–vereda (1–17)'))
+                for block in item['children']:blocks.append(self.stat_values(block,block_name(block['prefix'])+' (1–17)'))
             invalid=book.create_sheet('No utilizados');invalid.append(['Fila de lectura','NPN','Motivo'])
             for row in self.result['invalid']:invalid.append(row)
             for sheet in book:

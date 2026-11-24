@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.5.1. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.6.0. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.5.1.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.6.0.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -73,3 +73,9 @@ La sección R1 precargado aparece después del municipio. **Leer R1 del municipi
 ### Resumen de predios identificados
 
 El resultado muestra únicamente estadísticas: prefijo 1–9 (municipio + zona–sector), desplegable a manzana–vereda completa 1–17. Se cuentan NPN únicos, manzanas–veredas, terrenos distintos por prefijo 1–21 y condiciones 8/9 pendientes. No se muestran filas individuales de NPN en esa tabla. El Excel exporta Por zona-sector y Por manzana-vereda. La selección Zonas CICA se retira de la ventana principal: la identificación incluye todas las zonas del municipio, conservando VALIDADO / DESCARGADO_AL_SNC. El informe de avance conserva sus propios filtros de zonas.
+
+### Dos secciones de identificación
+
+La sección 2 se denomina **Manzanas - Veredas nuevas y predios a renumerar**. Arriba se agrupan por 1–17 únicamente las manzanas/veredas con provisional en posición 14. Abajo se conserva el resumen de todos los predios identificados por 1–9, desplegable a 1–17. Urbano y CP se denominan Manzana; Rural se denomina Vereda. El Excel incluye la hoja Manzanas-Veredas nuevas además de los resúmenes previos.
+
+En Máximos, el municipio seleccionado en la fuente se transmite a la lectura del R1 y se muestra como única opción, sin Todos los municipios. Se conservan los cálculos internos por prefijo 13. Estos cambios son de identificación y consulta: la comprobación de consecutivos contra el archivo de renumeración continúa pendiente de implementación.

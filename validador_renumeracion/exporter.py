@@ -5,9 +5,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font,PatternFill
 from .core import visible_rows
 
-ZONE_FIELDS=[('DIVIPOLA','municipality'),('Zona–sector (6–9)','zone_sector'),('Zona','zone_name'),('NPN únicos','npns'),('Prefijos de 13 dígitos','prefixes'),('Máximo bloque manzana (14–17)','max_m'),('NPN R1 de referencia','witness')]
+ZONE_FIELDS=[('DIVIPOLA','municipality'),('Zona–sector (6–9)','zone_sector'),('Zona','zone_name'),('Tipo','block_label'),('NPN únicos','npns'),('Prefijos de 13 dígitos','prefixes'),('Máximo manzana / vereda (14–17)','max_m'),('NPN R1 de referencia','witness')]
 PREFIX_FIELDS=[('DIVIPOLA','municipality'),('Zona–sector (6–9)','zone_sector'),('Prefijo territorial (1–13)','prefix13'),('NPN únicos','npns'),('Última manzana','max_m'),('Siguiente manzana (informativo)','next_m'),('NPN R1 de referencia','witness')]
-BLOCK_FIELDS=[('DIVIPOLA','municipality'),('Zona–sector (6–9)','zone_sector'),('Prefijo territorial (1–13)','prefix13'),('Manzana completa (1–17)','block17'),('Manzana (14–17)','block'),('NPN únicos','npns'),('Códigos de terreno distintos','plots'),('Último terreno (18–21)','max_t'),('Siguiente terreno (informativo)','next_t'),('NPN R1 de referencia','witness')]
+BLOCK_FIELDS=[('DIVIPOLA','municipality'),('Zona–sector (6–9)','zone_sector'),('Prefijo territorial (1–13)','prefix13'),('Tipo','block_label'),('Manzana / Vereda completa (1–17)','block17'),('Manzana / Vereda (14–17)','block'),('NPN únicos','npns'),('Códigos de terreno distintos','plots'),('Último terreno (18–21)','max_t'),('Siguiente terreno (informativo)','next_t'),('NPN R1 de referencia','witness')]
 
 
 def export_maxima(filename,result,origin,catalog,municipality='',zone='',search=''):

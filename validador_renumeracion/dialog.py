@@ -65,7 +65,7 @@ class MaximaDialog(QDialog):
             tree.clear();self.tabs.setTabText(self.tabs.indexOf(tree),name)
         self.search.clear()
         self.invalid.clear();self.origin_label.setText('R1 pendiente de cargar.');self.counts.clear()
-        self.municipality.blockSignals(True);self.municipality.clear();self.municipality.addItem('Todos los municipios','');self.municipality.blockSignals(False)
+        self.municipality.blockSignals(True);self.municipality.clear();self.municipality.blockSignals(False)
         self.zone.blockSignals(True);self.zone.clear();self.zone.addItem('Todos los códigos zona–sector','');self.zone.blockSignals(False)
 
     def change_source(self,*_):
@@ -217,8 +217,10 @@ class MaximaDialog(QDialog):
     def set_result(self,result,origin):
         self.result=result;self.origin=origin;self.origin_label.setText('R1 de referencia: '+origin)
         self.counts.setText(f'Leídos: {result.source_rows:,} · NPN únicos válidos: {result.unique_npns:,} · Duplicados excluidos: {result.duplicates:,} · Vacíos: {result.blanks:,} · Inválidos: {len(result.invalid):,}'.replace(',','.'))
-        self.municipality.blockSignals(True);self.municipality.clear();self.municipality.addItem('Todos los municipios','')
+        self.municipality.blockSignals(True);self.municipality.clear()
         codes=sorted({row['municipality'] for row in result.zones},key=lambda code:(*self.catalog.get(code,('','')),code))
+        selected=getattr(self,'source_municipality','')
+        if selected:codes=[selected]
         for code in codes:
             department,name=self.catalog.get(code,('Sin departamento identificado','Sin municipio identificado'))
             self.municipality.addItem(f'{department} · {name} ({code})',code)

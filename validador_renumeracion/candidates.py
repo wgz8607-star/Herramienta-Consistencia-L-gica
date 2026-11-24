@@ -41,3 +41,13 @@ def candidate_statistics(rows):
         item['children']=[counts(block,values) for block,values in sorted(blocks.items())]
         result.append(item)
     return result
+
+
+def block_name(prefix):
+    return 'Vereda' if prefix[5:7]=='00' else 'Manzana'
+
+
+def new_block_statistics(rows):
+    """Only blocks identified as provisional at position 14."""
+    groups=candidate_statistics(row for row in rows if row[7] in ('Manzana','Manzana y terreno'))
+    return [block for sector in groups for block in sector['children']]

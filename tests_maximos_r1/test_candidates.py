@@ -218,3 +218,24 @@ class CandidateTests(unittest.TestCase):
             self.assertEqual(len(item.child(0).text(0)),17)
             self.assertEqual(item.child(0).childCount(),0)
         finally:dialog.close();parent.close()
+
+    def test_two_sections_only_position14_creates_new_block_and_labels_match_zone(self):
+        from validador_renumeracion.candidates import new_block_statistics,block_name
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        urban=self.code(m='9001')
+        rural=urban[:5]+'00'+urban[7:]
+        cp=urban[:5]+'02'+urban[7:]
+        terrain_only=self.code(m='0001',t='9001')
+        result=identify_candidates(enumerate([urban,rural,cp,terrain_only],1),'CICA')
+        blocks=new_block_statistics(result['rows'])
+        self.assertEqual(len(blocks),3)
+        self.assertEqual([block_name(b['prefix']) for b in blocks],['Vereda','Manzana','Manzana'])
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            dialog.result=result;dialog.render_candidate_statistics()
+            self.assertEqual(dialog.new_blocks.topLevelItemCount(),3)
+            self.assertIn('Vereda',dialog.new_blocks.topLevelItem(0).text(1))
+            self.assertEqual(sum(int(dialog.tree.topLevelItem(i).text(2)) for i in range(dialog.tree.topLevelItemCount())),4)
+        finally:dialog.close();parent.close()

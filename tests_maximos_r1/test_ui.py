@@ -17,13 +17,16 @@ class MaximaUiTests(unittest.TestCase):
     def test_three_sources_and_loaded_maxima_can_be_filtered_and_cleared(self):
         self.assertEqual(self.dialog.source_mode.count(),3)
         result=build_maxima([(2,npn()),(3,npn(zone='02')),(4,npn(municipality='25377'))])
+        self.dialog.source_municipality='41020'
         self.dialog.set_result(result,'Origen de prueba')
-        self.assertEqual(self.dialog.views['Por zona-sector'].topLevelItemCount(),3)
+        self.assertEqual(self.dialog.municipality.count(),1)
+        self.assertEqual(self.dialog.views['Por zona-sector'].topLevelItemCount(),2)
         self.dialog.municipality.setCurrentIndex(self.dialog.municipality.findData('41020'))
         self.dialog.zone.setCurrentIndex(self.dialog.zone.findData('0201'))
         self.assertEqual(self.dialog.views['Por zona-sector'].topLevelItemCount(),1)
         self.assertTrue(self.dialog.export_button.isEnabled())
-        self.dialog.source_mode.setCurrentIndex(1)
+        with patch.object(self.dialog,'read_tables'):
+            self.dialog.source_mode.setCurrentIndex(1)
         self.assertIsNone(self.dialog.result)
         self.assertFalse(self.dialog.export_button.isEnabled())
         self.assertEqual(self.dialog.schema_label.text(),'r1_r2')

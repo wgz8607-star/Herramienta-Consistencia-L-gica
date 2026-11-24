@@ -1,3 +1,4 @@
+from .build_info import TITLE
 from pathlib import Path
 from datetime import datetime
 import re
@@ -15,13 +16,14 @@ from .exporter import export_maxima,ZONE_FIELDS,BLOCK_FIELDS
 class MaximaDialog(QDialog):
     def __init__(self,parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Renumeración predial · Máximos R1')
+        self.setWindowTitle(TITLE+' · Máximos R1')
         self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
         self.resize(1200,820)
         self.result=None;self.busy=False;self.origin='';self.header_row=1;self._passwords={}
         self.catalog=municipality_catalog(Path(__file__).parent/'resources/divipola.xlsx')
         self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QPushButton { background: #0066B3; color: white; padding: 7px 11px; border-radius: 5px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; } QHeaderView::section { background: #0066B3; color: white; padding: 6px; }')
         outer=QVBoxLayout(self)
+        self.build_title=QLabel(TITLE);self.build_title.setStyleSheet('font-weight: bold; color: #0066B3;');outer.addWidget(self.build_title)
         title=QLabel('Máximos de manzana y terreno del R1');title.setStyleSheet('font-size: 22px; font-weight: bold; color: #0066B3;');outer.addWidget(title)
         note=QLabel('Solo consulta. Manzana: posiciones 14–17; terreno: 18–21. Zona–sector: posiciones 6–9. El máximo de manzana se calcula por prefijo 1–13 y el de terreno por manzana completa 1–17.');note.setWordWrap(True);outer.addWidget(note)
         self.inputs=QWidget();form=QFormLayout(self.inputs);form.setContentsMargins(0,4,0,4)

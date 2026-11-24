@@ -1,3 +1,4 @@
+from .build_info import TITLE
 """Review and compare a proposal. This module never writes to a database."""
 from collections import Counter
 from pathlib import Path
@@ -25,10 +26,11 @@ class ProposalDialog(QDialog):
         self.prefix_max={row['prefix13']:int(row['max_m']) for row in reference.prefixes} if reference is not None else {}
         for row in proposal:
             if row['old'][:13] not in self.prefix_max and row.get('base_m') is not None:self.prefix_max[row['old'][:13]]=row['base_m']
-        self.setWindowTitle('3. Propuesta de renumeración y comparación · v1.0.0');self.resize(1450,900)
+        self.setWindowTitle(TITLE+' · Propuesta y comparación');self.resize(1450,900)
         self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
         self.setStyleSheet(parent.styleSheet())
         layout=QVBoxLayout(self)
+        self.build_title=QLabel(TITLE);self.build_title.setStyleSheet('font-weight: bold; color: #0066B3;');layout.addWidget(self.build_title)
         title=QLabel('3. Propuesta y comparación');title.setStyleSheet('font-size: 22px; color: #0066B3; font-weight: bold;');layout.addWidget(title)
         origin=QLabel(context);origin.setWordWrap(True);layout.addWidget(origin)
         note=QLabel('Propuesta de consulta: no modifica la base. Consecutivos sin saltos, en orden de provisionales. Excel de comparación: A = nuevo; B = provisional. Los pendientes no se aprueban. «Coincide» compara archivo y propuesta; no acredita cambios aplicados en la base.');note.setWordWrap(True);layout.addWidget(note)

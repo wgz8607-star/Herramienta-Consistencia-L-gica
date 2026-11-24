@@ -108,3 +108,13 @@ class MaximaUiTests(unittest.TestCase):
             self.dialog.set_source_municipality('99999')
             self.assertIsNone(self.dialog.tables.currentData())
             self.assertIn('No hay R1',self.dialog.status.text())
+
+    def test_main_header_shows_version_and_fixed_plugin_generation_date(self):
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.build_info import TITLE
+        dialog=CandidateDialog(self.dialog)
+        try:
+            self.assertEqual(dialog.build_title.text(),TITLE)
+            self.assertIn('V1',dialog.windowTitle())
+            self.assertIn('24/11/2026',dialog.build_title.text())
+        finally:dialog.close()

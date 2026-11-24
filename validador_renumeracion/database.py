@@ -55,8 +55,12 @@ def source_records(params,model,schema,municipality=''):
             with connection.cursor(name='provisional_reader') as cursor:
                 cursor.itersize=2000
                 query=sql.SQL('SELECT {c}::text FROM {s}.{t}').format(c=sql.Identifier(column),s=sql.Identifier(schema),t=sql.Identifier(table))
-                args=()
+                filters=[];args=[]
+                if model=='CICA':
+                    filters.append(sql.SQL('{}=%s AND {}=%s').format(sql.Identifier('etapa'),sql.Identifier('estado_control')))
+                    args.extend(['VALIDADO','DESCARGADO_AL_SNC'])
                 if municipality:
-                    query+=sql.SQL(' WHERE left(trim({}::text),5)=%s').format(sql.Identifier(column));args=(municipality,)
-                cursor.execute(query,args)
+                    filters.append(sql.SQL('left(trim({}::text),5)=%s').format(sql.Identifier(column)));args.append(municipality)
+                if filters:query+=sql.SQL(' WHERE ')+sql.SQL(' AND ').join(filters)
+                cursor.execute(query,tuple(args))
                 for number,row in enumerate(cursor,1):yield number,row[0]

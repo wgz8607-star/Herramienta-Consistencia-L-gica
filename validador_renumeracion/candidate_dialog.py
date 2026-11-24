@@ -26,7 +26,7 @@ class CandidateDialog(QDialog):
         self.connection_mode.currentIndexChanged.connect(self.connection_mode_changed)
         self.schema=QComboBox();self.list_button=QPushButton('Consultar esquemas del Modelo Interno');form.addRow('Esquema',self.schema);form.addRow(self.list_button)
         self.divipola=QLineEdit();self.divipola.setPlaceholderText('5 dígitos; vacío para todos los municipios');self.divipola.setMaxLength(5);form.addRow('Municipio · DIVIPOLA',self.divipola)
-        note=QLabel('CICA: 7, 8 o 9 en posición 14 o 18. Modelo Interno: letra en posición 14 o 18. Se consulta el NPN actual, sin filtro de etapa o estado. Las condiciones 8 y 9 (posición 22) quedan identificadas para revisión especial.');note.setWordWrap(True);layout.addWidget(note)
+        note=QLabel('CICA: 7, 8 o 9 en posición 14 o 18. Modelo Interno: letra en posición 14 o 18. CICA: solo etapa VALIDADO y estado_control DESCARGADO_AL_SNC. Modelo Interno: sin filtro de etapa o estado. Las condiciones 8 y 9 (posición 22) quedan identificadas para revisión especial.');note.setWordWrap(True);layout.addWidget(note)
         self.read=QPushButton('Identificar predios a renumerar');layout.addWidget(self.read)
         self.status=QLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(HEADERS);layout.addWidget(self.tree,1)
@@ -87,6 +87,7 @@ class CandidateDialog(QDialog):
             params=self.params();self.status.setText('Leyendo los predios de la fuente…')
             result=self.run(lambda:identify_candidates(source_records(params,model,schema,code),model))
             self.result=result;self.origin=f'{model} · {params.get("dbname",params.get("service",""))}.{schema} · DIVIPOLA: {code or "Todos"}'
+            if model=='CICA':self.origin+=' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC'
             for row in result['rows']:self.tree.addTopLevelItem(QTreeWidgetItem(list(row)))
             pending=sum(row[8] in '89' for row in result['rows'])
             self.status.setText(f'{self.origin}\nLeídos: {result["total"]} · NPN únicos válidos: {result["unique"]} · Provisionales: {len(result["rows"])} · Condición especial pendiente: {pending} · Duplicados excluidos: {result["duplicates"]} · Inválidos: {len(result["invalid"])}')

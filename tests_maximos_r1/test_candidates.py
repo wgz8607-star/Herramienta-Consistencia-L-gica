@@ -61,3 +61,22 @@ class CandidateTests(unittest.TestCase):
             self.assertEqual(dialog.model.currentText(),'Modelo Interno de Levantamiento 1.0')
             self.assertEqual(dialog.params()['dbname'],'catastro')
         finally:dialog.close();parent.close()
+
+    def test_cica_requires_validado_and_descargado_with_optional_municipality(self):
+        from unittest.mock import MagicMock,patch
+        from psycopg2 import sql
+        from validador_renumeracion.database import source_records
+        def render(value):
+            if isinstance(value,sql.SQL):return value.string
+            if isinstance(value,sql.Identifier):return '.'.join('"'+part+'"' for part in value.strings)
+            return ''.join(render(part) for part in value)
+        for municipality in ('','41020'):
+            connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value
+            cursor.fetchall.return_value=[('cica_predio','numero_predial')]
+            cursor.__iter__.return_value=iter([])
+            with patch('psycopg2.connect',return_value=connection):
+                list(source_records({'dbname':'sentencias'},'CICA','snc_cica_copy',municipality))
+            query,args=cursor.execute.call_args.args
+            self.assertIn('"etapa"=%s AND "estado_control"=%s',render(query))
+            self.assertEqual(args,('VALIDADO','DESCARGADO_AL_SNC')+((municipality,) if municipality else ()))
+            self.assertEqual('left(trim(' in render(query),bool(municipality))

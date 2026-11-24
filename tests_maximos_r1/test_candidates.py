@@ -236,6 +236,26 @@ class CandidateTests(unittest.TestCase):
         try:
             dialog.result=result;dialog.render_candidate_statistics()
             self.assertEqual(dialog.new_blocks.topLevelItemCount(),3)
-            self.assertIn('Vereda',dialog.new_blocks.topLevelItem(0).text(1))
+            self.assertIn('Vereda',dialog.new_blocks.topLevelItem(0).child(0).text(1))
             self.assertEqual(sum(int(dialog.tree.topLevelItem(i).text(2)) for i in range(dialog.tree.topLevelItemCount())),4)
+        finally:dialog.close();parent.close()
+
+    def test_new_blocks_group_by_prefix9_and_can_expand_and_collapse(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from qgis.PyQt.QtCore import Qt
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            result=identify_candidates(enumerate([self.code(m='9001'),self.code(m='9002'),self.code(m='0001',t='9001')],1),'CICA')
+            dialog.result=result;dialog.render_candidate_statistics()
+            self.assertTrue(dialog.windowFlags() & Qt.WindowMinimizeButtonHint)
+            self.assertTrue(dialog.windowFlags() & Qt.WindowMaximizeButtonHint)
+            self.assertEqual(dialog.new_blocks.topLevelItemCount(),1)
+            item=dialog.new_blocks.topLevelItem(0)
+            self.assertEqual(len(item.text(0)),9)
+            self.assertEqual(item.text(3),'2')
+            self.assertEqual(item.childCount(),2)
+            dialog.expand_blocks.click();self.assertTrue(item.isExpanded())
+            dialog.collapse_blocks.click();self.assertFalse(item.isExpanded())
         finally:dialog.close();parent.close()

@@ -2,7 +2,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QGroupBox,QSplitter
 from openpyxl import Workbook
 from .database import model_schemas,source_records,cica_municipalities,cica_copy_date
-from .candidates import identify_candidates,candidate_statistics,new_block_statistics,block_name
+from .candidates import identify_candidates,candidate_statistics,new_block_statistics,new_block_groups,block_name
 
 HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–veredas','Terrenos distintos (1–21)','Condición 8/9 pendiente']
 
@@ -10,7 +10,8 @@ HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–v
 class CandidateDialog(QDialog):
     def __init__(self,parent,window_parent=None):
         super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self.copy_date='Fecha de copia pendiente de consultar'
-        self.setWindowTitle('Renumeración predial · Seleccionar fuente de datos');self.resize(1150,820)
+        self.setWindowTitle('Renumeración predial · Seleccionar fuente de datos');self.resize(1400,950)
+        self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
         self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QComboBox,QLineEdit { background: #FFFFFF; border: 1px solid #CDDFEF; border-radius: 4px; padding: 6px; } QPushButton { background: #0066B3; color: white; border-radius: 5px; padding: 8px 12px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; border: 1px solid #D9E5EF; } QHeaderView::section { background: #0066B3; color: white; padding: 7px; }')
         layout=QVBoxLayout(self)
         title=QLabel('Seleccione la fuente de datos a revisar');title.setStyleSheet('font-size: 20px; font-weight: bold; color: #0066B3;');layout.addWidget(title)
@@ -42,7 +43,8 @@ class CandidateDialog(QDialog):
         results_title=QLabel('2. Manzanas - Veredas nuevas y predios a renumerar');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
         split=QSplitter(Qt.Vertical);layout.addWidget(split,1)
         top=QWidget();top_layout=QVBoxLayout(top);top_layout.setContentsMargins(0,0,0,0);top_layout.addWidget(QLabel('Manzanas o veredas nuevas · provisional en posición 14'))
-        self.new_blocks=QTreeWidget();self.new_blocks.setRootIsDecorated(False);self.new_blocks.setAlternatingRowColors(True);self.new_blocks.setHeaderLabels(HEADERS);top_layout.addWidget(self.new_blocks);split.addWidget(top)
+        self.new_blocks=QTreeWidget();self.new_blocks.setRootIsDecorated(True);self.new_blocks.setAlternatingRowColors(True);self.new_blocks.setHeaderLabels(HEADERS);top_layout.addWidget(self.new_blocks)
+        group_controls=QHBoxLayout();self.expand_blocks=QPushButton('Desagrupar detalle');self.collapse_blocks=QPushButton('Agrupar por zona–sector');self.expand_blocks.clicked.connect(self.new_blocks.expandAll);self.collapse_blocks.clicked.connect(self.new_blocks.collapseAll);group_controls.addWidget(self.expand_blocks);group_controls.addWidget(self.collapse_blocks);group_controls.addStretch();top_layout.addLayout(group_controls);split.addWidget(top)
         bottom=QWidget();bottom_layout=QVBoxLayout(bottom);bottom_layout.setContentsMargins(0,0,0,0);bottom_layout.addWidget(QLabel('Predios a renumerar · zona–sector y manzana o vereda'))
         self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(True);self.tree.setHeaderLabels(HEADERS);bottom_layout.addWidget(self.tree);split.addWidget(bottom);split.setSizes([220,300])
         self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False);layout.addWidget(self.export)
@@ -233,8 +235,11 @@ class CandidateDialog(QDialog):
 
     def render_candidate_statistics(self):
         self.tree.clear();self.new_blocks.clear()
-        for block in new_block_statistics(self.result['rows']):
-            self.new_blocks.addTopLevelItem(QTreeWidgetItem(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)')))
+        for sector in new_block_groups(self.result['rows']):
+            parent=QTreeWidgetItem(self.stat_values(sector,'Zona–sector (1–9)'))
+            self.new_blocks.addTopLevelItem(parent)
+            for block in sector['children']:
+                parent.addChild(QTreeWidgetItem(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)')))
         for column in range(self.new_blocks.columnCount()):self.new_blocks.resizeColumnToContents(column)
         for sector in candidate_statistics(self.result['rows']):
             parent=QTreeWidgetItem(self.stat_values(sector,'Zona–sector (1–9)'))
@@ -255,6 +260,8 @@ class CandidateDialog(QDialog):
         try:
             book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Origen',self.origin]);summary.append(['Alcance','Identificación provisional; no aprueba ni ejecuta renumeraciones. Condiciones 8 y 9 pendientes.'])
             for key in ('total','unique','duplicates'):summary.append([key,self.result[key]])
+            new_groups=book.create_sheet('Nuevas por zona-sector');new_groups.append(HEADERS)
+            for sector in new_block_groups(self.result['rows']):new_groups.append(self.stat_values(sector,'Zona–sector (1–9)'))
             new_blocks=book.create_sheet('Manzanas-Veredas nuevas');new_blocks.append(HEADERS)
             for block in new_block_statistics(self.result['rows']):new_blocks.append(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)'))
             sectors=book.create_sheet('Por zona-sector');sectors.append(HEADERS)

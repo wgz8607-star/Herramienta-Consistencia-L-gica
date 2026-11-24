@@ -51,3 +51,7 @@ def new_block_statistics(rows):
     """Only blocks identified as provisional at position 14."""
     groups=candidate_statistics(row for row in rows if row[7] in ('Manzana','Manzana y terreno'))
     return [block for sector in groups for block in sector['children']]
+
+
+def new_block_groups(rows):
+    return candidate_statistics(row for row in rows if row[7] in ('Manzana','Manzana y terreno'))

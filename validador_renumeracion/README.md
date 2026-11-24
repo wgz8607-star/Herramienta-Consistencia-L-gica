@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.6.0. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.6.1. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.6.0.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.6.1.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -79,3 +79,5 @@ El resultado muestra únicamente estadísticas: prefijo 1–9 (municipio + zona�
 La sección 2 se denomina **Manzanas - Veredas nuevas y predios a renumerar**. Arriba se agrupan por 1–17 únicamente las manzanas/veredas con provisional en posición 14. Abajo se conserva el resumen de todos los predios identificados por 1–9, desplegable a 1–17. Urbano y CP se denominan Manzana; Rural se denomina Vereda. El Excel incluye la hoja Manzanas-Veredas nuevas además de los resúmenes previos.
 
 En Máximos, el municipio seleccionado en la fuente se transmite a la lectura del R1 y se muestra como única opción, sin Todos los municipios. Se conservan los cálculos internos por prefijo 13. Estos cambios son de identificación y consulta: la comprobación de consecutivos contra el archivo de renumeración continúa pendiente de implementación.
+
+La ventana principal abre maximizada y permite minimizar/restaurar/maximizar. Las manzanas o veredas nuevas se resumen por prefijo 1–9 con detalle desplegable 1–17; los botones Desagrupar detalle y Agrupar por zona–sector permiten expandir o contraer todo. Excel incluye resumen de nuevas por zona-sector y su detalle por manzana/vereda.

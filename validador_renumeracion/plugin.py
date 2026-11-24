@@ -13,7 +13,7 @@ class MaximaPlugin:
             if self.dialog is None:
                 self.reference_dialog=MaximaDialog(self.iface.mainWindow())
                 self.dialog=CandidateDialog(self.reference_dialog,self.iface.mainWindow())
-            self.dialog.showNormal();self.dialog.raise_();self.dialog.activateWindow()
+            self.dialog.showMaximized();self.dialog.raise_();self.dialog.activateWindow()
         self.action.triggered.connect(show)
         self.iface.addPluginToDatabaseMenu('Renumeración predial',self.action);self.iface.addToolBarIcon(self.action)
     def unload(self):

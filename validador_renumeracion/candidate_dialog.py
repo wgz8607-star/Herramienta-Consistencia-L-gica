@@ -4,7 +4,7 @@ from openpyxl import Workbook
 from .database import model_schemas,source_records,cica_municipalities,cica_copy_date
 from .candidates import identify_candidates,candidate_statistics,new_block_statistics,new_block_groups,block_name
 
-HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–veredas','Terrenos distintos (1–21)','Condición 8/9 pendiente']
+HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–veredas','Terrenos distintos (1–21)','Predios condición 8/9']
 
 
 class CandidateDialog(QDialog):
@@ -15,7 +15,7 @@ class CandidateDialog(QDialog):
         self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QComboBox QAbstractItemView { background: #FFFFFF; color: #17324D; selection-background-color: #0066B3; selection-color: #FFFFFF; font-weight: normal; } QComboBox QAbstractItemView::item { min-height: 26px; padding: 4px; } QComboBox QAbstractItemView::item:selected { background: #0066B3; color: #FFFFFF; } QComboBox,QLineEdit { background: #FFFFFF; border: 1px solid #CDDFEF; border-radius: 4px; padding: 6px; } QPushButton { background: #0066B3; color: white; border-radius: 5px; padding: 8px 12px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; border: 1px solid #D9E5EF; } QHeaderView::section { background: #0066B3; color: white; padding: 7px; }')
         layout=QVBoxLayout(self)
         title=QLabel('Seleccione la fuente de datos a revisar');title.setStyleSheet('font-size: 20px; font-weight: bold; color: #0066B3;');layout.addWidget(title)
-        source_card=QGroupBox('1. Fuente de datos y alcance');source_card.setStyleSheet('QGroupBox { background: white; border: 1px solid #D9E5EF; border-radius: 8px; margin-top: 12px; padding: 14px; font-weight: bold; color: #0066B3; } QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }');form=QFormLayout(source_card);form.setSpacing(8);layout.addWidget(source_card)
+        source_card=QGroupBox('1. Fuente y referencia');source_card.setStyleSheet('QGroupBox { background: white; border: 1px solid #D9E5EF; border-radius: 8px; margin-top: 12px; padding: 14px; font-weight: bold; color: #0066B3; } QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }');form=QFormLayout(source_card);form.setSpacing(8);layout.addWidget(source_card)
         self.model=QComboBox();self.model.addItems(['CICA','Modelo Interno de Levantamiento 1.0']);form.addRow('Fuente',self.model)
         self.connection_mode=QComboBox();self.connection_mode.addItems(['Conexión guardada en QGIS','Conexión directa PostgreSQL']);form.addRow('Forma de conexión',self.connection_mode)
         self.connection=QComboBox()
@@ -40,13 +40,16 @@ class CandidateDialog(QDialog):
         self.stats_button=QPushButton('Ver estadísticas CICA…');self.stats_button.clicked.connect(self.open_statistics);layout.addWidget(self.stats_button)
         self.read=QPushButton('Identificar predios a renumerar');layout.addWidget(self.read)
         self.status=QLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
-        results_title=QLabel('2. Manzanas - Veredas nuevas y predios a renumerar');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
+        results_title=QLabel('2. Alcance y diagnóstico · Manzanas - Veredas nuevas y predios a renumerar');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
+        self.scope_widget=QWidget();self.scope_layout=QHBoxLayout(self.scope_widget);self.scope_layout.setContentsMargins(0,0,0,0);self.scope_boxes={};self.scope_layout.addWidget(QLabel('Identifique los provisionales para seleccionar las zonas.'));layout.addWidget(self.scope_widget)
+        self.scope_status=QLabel('Alcance pendiente.');self.scope_status.setWordWrap(True);layout.addWidget(self.scope_status)
         split=QSplitter(Qt.Vertical);layout.addWidget(split,1)
         top=QWidget();top_layout=QVBoxLayout(top);top_layout.setContentsMargins(0,0,0,0);top_layout.addWidget(QLabel('Manzanas o veredas nuevas · provisional en posición 14'))
         self.new_blocks=QTreeWidget();self.new_blocks.setRootIsDecorated(True);self.new_blocks.setAlternatingRowColors(True);self.new_blocks.setHeaderLabels(HEADERS);top_layout.addWidget(self.new_blocks)
         group_controls=QHBoxLayout();self.expand_blocks=QPushButton('Desagrupar detalle');self.collapse_blocks=QPushButton('Agrupar por zona–sector');self.expand_blocks.clicked.connect(self.new_blocks.expandAll);self.collapse_blocks.clicked.connect(self.new_blocks.collapseAll);group_controls.addWidget(self.expand_blocks);group_controls.addWidget(self.collapse_blocks);group_controls.addStretch();top_layout.addLayout(group_controls);split.addWidget(top)
         bottom=QWidget();bottom_layout=QVBoxLayout(bottom);bottom_layout.setContentsMargins(0,0,0,0);bottom_layout.addWidget(QLabel('Predios a renumerar · zona–sector y manzana o vereda'))
         self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(True);self.tree.setHeaderLabels(HEADERS);bottom_layout.addWidget(self.tree);split.addWidget(bottom);split.setSizes([220,300])
+        self.propose_button=QPushButton('3. Generar propuesta y comparar archivo…');self.propose_button.setEnabled(False);self.propose_button.clicked.connect(self.open_proposal);layout.addWidget(self.propose_button)
         self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False);layout.addWidget(self.export)
         self.r1_status=QLabel('Seleccione departamento y municipio para leer el R1 precargado.');self.r1_status.setWordWrap(True)
         self.r1_button=QPushButton('Leer R1 del municipio');self.r1_button.clicked.connect(self.read_selected_r1)
@@ -75,6 +78,7 @@ class CandidateDialog(QDialog):
         if self._r1_code!=code:
             self._r1_code='';self.maxima_button.setEnabled(False);self.owner.invalidate()
             self.r1_status.setText('R1 precargado pendiente de leer · '+code if code else 'Seleccione departamento y municipio para leer el R1 precargado.')
+        self.update_proposal_availability()
 
     def read_selected_r1(self):
         from datetime import datetime
@@ -102,9 +106,10 @@ class CandidateDialog(QDialog):
             self.owner.source_municipality=code
             self.owner.set_result(result,'sentencias.r1_r2.'+table)
             self._r1_code=code;self.maxima_button.setEnabled(True)
-            self.r1_status.setText(f'{code} · Vigencia: {date:%d/%m/%Y} · {result.unique_npns:,} NPN únicos'.replace(',','.'))
+            self.r1_status.setText(f'Leído · {code} · Vigencia: {date:%d/%m/%Y} · {result.unique_npns:,} NPN únicos'.replace(',','.'))
         except Exception as error:
             self.r1_status.setText('R1 no disponible · '+code);QMessageBox.warning(self,'No se leyó el R1',str(error))
+        self.update_proposal_availability()
 
     def open_r1(self):
         if not self._r1_code or self.owner.result is None:return
@@ -113,6 +118,8 @@ class CandidateDialog(QDialog):
 
     def invalidate(self,*_):
         self.result=None;self.tree.clear();self.new_blocks.clear();self.export.setEnabled(False);self.status.setText('Fuente pendiente de consultar.')
+        self.propose_button.setEnabled(False);self.scope_status.setText('Alcance pendiente.')
+        for checkbox in self.scope_boxes.values():checkbox.setEnabled(False)
 
     def change_source(self,*_):
         self.schema.clear();cica=self.model.currentText()=='CICA'
@@ -127,7 +134,7 @@ class CandidateDialog(QDialog):
         self.schema.setVisible(not cica);self.connection_form.labelForField(self.schema).setVisible(not cica)
         self.copy_label.setVisible(cica and self._copy_consulted)
         self.stats_button.setVisible(cica)
-        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' Condiciones 8 y 9 en posición 22: revisión especial pendiente.')
+        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base.')
         if cica:self.schema.addItem('snc_cica_copy')
         self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.invalidate()
 
@@ -161,7 +168,7 @@ class CandidateDialog(QDialog):
         try:
             value=self.run(lambda:cica_copy_date(params))
             self.copy_date=value.strftime('%d/%m/%Y %H:%M:%S') if value else 'Fecha no disponible'
-            self.copy_label.setText('Copia base CICA — Fecha y hora del corte: '+self.copy_date);self.copy_label.setToolTip('Último registro de public.copia_cica_progreso · inicio')
+            self.copy_label.setText(('Copia base CICA · Leído — Fecha y hora del corte: ' if value else 'Copia base CICA — ')+self.copy_date);self.copy_label.setToolTip('Último registro de public.copia_cica_progreso · inicio')
         except Exception as error:
             self.copy_date='Fecha no disponible';self.copy_label.setText('Copia base CICA — Fecha y hora del corte: '+self.copy_date);self.copy_label.setToolTip(str(error))
 
@@ -230,26 +237,71 @@ class CandidateDialog(QDialog):
             result=self.run(lambda:identify_candidates(source_records(params,model,schema,code,zones),model))
             self.result=result;self.origin=f'{model} · {params.get("dbname",params.get("service",""))}.{schema} · DIVIPOLA: {code or "Todos"}'
             if model=='CICA':self.origin+=' · Corte: '+self.copy_date+' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: todas'
+            self.build_scope()
             self.render_candidate_statistics()
             pending=sum(row[8] in '89' for row in result['rows'])
-            self.status.setText(f'{self.origin}\nLeídos: {result["total"]} · NPN únicos válidos: {result["unique"]} · Provisionales: {len(result["rows"])} · Condición especial pendiente: {pending} · Duplicados excluidos: {result["duplicates"]} · Inválidos: {len(result["invalid"])}')
+            self.status.setText(f'Fuente: Leído · {self.origin}\nLeídos: {result["total"]} · NPN únicos válidos: {result["unique"]} · Provisionales: {len(result["rows"])} · Predios de condición 8/9: {pending} · Duplicados excluidos: {result["duplicates"]} · Inválidos: {len(result["invalid"])}')
             self.export.setEnabled(True)
         except Exception as error:QMessageBox.warning(self,'No se identificaron los predios',str(error))
 
     def render_candidate_statistics(self):
         self.tree.clear();self.new_blocks.clear()
-        for sector in new_block_groups(self.result['rows']):
+        if self.result is None:return
+        rows=self.selected_candidate_rows()
+        for sector in new_block_groups(rows):
             parent=QTreeWidgetItem(self.stat_values(sector,'Zona–sector (1–9)'))
             self.new_blocks.addTopLevelItem(parent)
             for block in sector['children']:
                 parent.addChild(QTreeWidgetItem(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)')))
         for column in range(self.new_blocks.columnCount()):self.new_blocks.resizeColumnToContents(column)
-        for sector in candidate_statistics(self.result['rows']):
+        for sector in candidate_statistics(rows):
             parent=QTreeWidgetItem(self.stat_values(sector,'Zona–sector (1–9)'))
             self.tree.addTopLevelItem(parent)
             for block in sector['children']:
                 parent.addChild(QTreeWidgetItem(self.stat_values(block,block_name(block['prefix'])+' (1–17)')))
         for column in range(self.tree.columnCount()):self.tree.resizeColumnToContents(column)
+        self.update_proposal_availability()
+
+    def build_scope(self):
+        while self.scope_layout.count():
+            item=self.scope_layout.takeAt(0)
+            if item.widget():item.widget().deleteLater()
+        self.scope_boxes={}
+        from .core import zone_name
+        for code in sorted({row[0][5:7] for row in self.result['rows']}):
+            checkbox=QCheckBox(zone_name(code)+' · '+code);checkbox.setChecked(True)
+            checkbox.toggled.connect(self.render_candidate_statistics);self.scope_layout.addWidget(checkbox);self.scope_boxes[code]=checkbox
+        self.scope_layout.addStretch()
+
+    def selected_candidate_rows(self):
+        if self.result is None:return []
+        if not self.scope_boxes:return self.result['rows']
+        codes={code for code,box in self.scope_boxes.items() if box.isChecked()}
+        return [row for row in self.result['rows'] if row[0][5:7] in codes]
+
+    def update_proposal_availability(self):
+        rows=self.selected_candidate_rows()
+        if self.result is not None:
+            new_blocks=len({row[0][:17] for row in rows if row[7] in ('Manzana','Manzana y terreno')})
+            self.scope_status.setText(f'Selección: {len(rows)} predios · {len({row[0][:21] for row in rows})} terrenos distintos · {new_blocks} manzanas/veredas nuevas. Un grupo de terreno consume un consecutivo.')
+        same=bool(rows) and bool(self._r1_code) and {row[0][:5] for row in rows}=={self._r1_code}
+        self.propose_button.setEnabled(same and self.owner.result is not None)
+        if rows and not same:self.propose_button.setToolTip('Lea el R1 del mismo municipio de los provisionales seleccionados.')
+        else:self.propose_button.setToolTip('Generar una propuesta de consulta; no modifica la base.')
+
+    def open_proposal(self):
+        from .renumbering import generate_proposal
+        from .proposal_dialog import ProposalDialog
+        rows=list(self.selected_candidate_rows());r1=self.owner.result
+        if not rows or r1 is None or {row[0][:5] for row in rows}!={self._r1_code}:
+            QMessageBox.warning(self,'Referencia pendiente','Lea el R1 del mismo municipio y seleccione al menos una zona.');return
+        model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno'
+        zones=sorted({row[0][5:7] for row in rows})
+        try:
+            proposal=self.run(lambda:generate_proposal(rows,r1,model))
+            context=self.origin+'\nR1: '+self.owner.origin+' · SHA256: '+r1.fingerprint+f' · R1 inválidos excluidos: {len(r1.invalid)}'+'\nZonas seleccionadas: '+', '.join(zones)+f' · Registros inválidos excluidos de la fuente: {len(self.result["invalid"])}'
+            dialog=ProposalDialog(proposal,context,self);dialog.showMaximized();dialog.exec_()
+        except Exception as error:QMessageBox.warning(self,'No se generó la propuesta',str(error))
 
     @staticmethod
     def stat_values(item,level):
@@ -261,15 +313,16 @@ class CandidateDialog(QDialog):
         if not filename:return
         if not filename.lower().endswith('.xlsx'):filename+='.xlsx'
         try:
-            book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Origen',self.origin]);summary.append(['Alcance','Identificación provisional; no aprueba ni ejecuta renumeraciones. Condiciones 8 y 9 pendientes.'])
+            rows=self.selected_candidate_rows()
+            book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Origen',self.origin]);summary.append(['Zonas seleccionadas',', '.join(sorted({row[0][5:7] for row in rows}))]);summary.append(['Alcance','Identificación de provisionales seleccionados; no modifica la base.'])
             for key in ('total','unique','duplicates'):summary.append([key,self.result[key]])
             new_groups=book.create_sheet('Nuevas por zona-sector');new_groups.append(HEADERS)
-            for sector in new_block_groups(self.result['rows']):new_groups.append(self.stat_values(sector,'Zona–sector (1–9)'))
+            for sector in new_block_groups(rows):new_groups.append(self.stat_values(sector,'Zona–sector (1–9)'))
             new_blocks=book.create_sheet('Manzanas-Veredas nuevas');new_blocks.append(HEADERS)
-            for block in new_block_statistics(self.result['rows']):new_blocks.append(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)'))
+            for block in new_block_statistics(rows):new_blocks.append(self.stat_values(block,block_name(block['prefix'])+' nueva (1–17)'))
             sectors=book.create_sheet('Por zona-sector');sectors.append(HEADERS)
             blocks=book.create_sheet('Por manzana-vereda');blocks.append(HEADERS)
-            for item in candidate_statistics(self.result['rows']):
+            for item in candidate_statistics(rows):
                 sectors.append(self.stat_values(item,'Zona–sector (1–9)'))
                 for block in item['children']:blocks.append(self.stat_values(block,block_name(block['prefix'])+' (1–17)'))
             invalid=book.create_sheet('No utilizados');invalid.append(['Fila de lectura','NPN','Motivo'])

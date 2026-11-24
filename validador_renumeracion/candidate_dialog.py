@@ -1,9 +1,9 @@
 from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QGroupBox
 from openpyxl import Workbook
-from .database import model_schemas,source_records,cica_municipalities,cica_copy_date,cica_zone_codes
-from .candidates import identify_candidates
+from .database import model_schemas,source_records,cica_municipalities,cica_copy_date
+from .candidates import identify_candidates,candidate_statistics
 
-HEADERS=['Número predial','DIVIPOLA','Zona','Prefijo 13','Manzana','Prefijo 17','Terreno','Tipo provisional','Condición','Clasificación']
+HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–veredas','Terrenos distintos (1–21)','Condición 8/9 pendiente']
 
 
 class CandidateDialog(QDialog):
@@ -34,16 +34,12 @@ class CandidateDialog(QDialog):
         self.copy_label=QLabel(self.copy_date);form.insertRow(1,'Fecha de la copia CICA',self.copy_label)
         self.copy_label.setStyleSheet('background: #E8F1FA; color: #0066B3; font-weight: bold; padding: 8px; border-left: 4px solid #0066B3;')
         self.cica_lookup.clicked.connect(self.load_cica_municipalities);self.department.currentIndexChanged.connect(self.update_cica_municipalities);self.cica_municipality.currentIndexChanged.connect(self.update_available_zones)
-        self.zones_widget=QWidget();zone_layout=QHBoxLayout(self.zones_widget);zone_layout.setContentsMargins(0,0,0,0);self.zones={}
-        for key,label in [('URBANO','Urbano'),('CP','Centro poblado (CP)'),('RURAL','Rural')]:
-            checkbox=QCheckBox(label);checkbox.setChecked(True);checkbox.toggled.connect(self.invalidate);zone_layout.addWidget(checkbox);self.zones[key]=checkbox
-        form.addRow('Zonas CICA',self.zones_widget)
         self.note=note=QLabel('CICA: 7, 8 o 9 en posición 14 o 18. Modelo Interno: letra en posición 14 o 18. CICA: solo etapa VALIDADO y estado_control DESCARGADO_AL_SNC. Modelo Interno: sin filtro de etapa o estado. Las condiciones 8 y 9 (posición 22) quedan identificadas para revisión especial.');note.setWordWrap(True);layout.addWidget(note)
         self.stats_button=QPushButton('Ver estadísticas CICA…');self.stats_button.clicked.connect(self.open_statistics);layout.addWidget(self.stats_button)
         self.read=QPushButton('Identificar predios a renumerar');layout.addWidget(self.read)
         self.status=QLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
         results_title=QLabel('2. Predios identificados');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
-        self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(HEADERS);layout.addWidget(self.tree,1)
+        self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(True);self.tree.setHeaderLabels(HEADERS);layout.addWidget(self.tree,1)
         self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False);layout.addWidget(self.export)
         self.r1_status=QLabel('Seleccione departamento y municipio para leer el R1 precargado.');self.r1_status.setWordWrap(True)
         self.r1_button=QPushButton('Leer R1 del municipio');self.r1_button.clicked.connect(self.read_selected_r1)
@@ -125,7 +121,7 @@ class CandidateDialog(QDialog):
         self.stats_button.setVisible(cica)
         self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' Condiciones 8 y 9 en posición 22: revisión especial pendiente.')
         if cica:self.schema.addItem('snc_cica_copy')
-        self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.zones_widget.setVisible(cica);self.connection_form.labelForField(self.zones_widget).setVisible(cica);self.invalidate()
+        self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.invalidate()
 
     def connection_mode_changed(self,*_):
         direct=self.connection_mode.currentIndex()==1
@@ -161,19 +157,7 @@ class CandidateDialog(QDialog):
 
     def update_available_zones(self,*_):
         self.invalidate()
-        for checkbox in self.zones.values():
-            checkbox.blockSignals(True);checkbox.setChecked(False);checkbox.hide();checkbox.blockSignals(False)
-        code=self.cica_municipality.currentData()
-        self.stats_button.setEnabled(bool(code))
-        if not code:return
-        try:
-            params=self.params();codes=self.run(lambda:cica_zone_codes(params,code))
-            available=set('RURAL' if code=='00' else 'URBANO' if code=='01' else 'CP' for code in codes if len(code)==2 and code.isdigit())
-            for key,checkbox in self.zones.items():
-                checkbox.setVisible(key in available);checkbox.setChecked(key in available)
-            self.status.setText('Zonas disponibles para VALIDADO / DESCARGADO_AL_SNC: '+', '.join(sorted(available)))
-        except Exception as error:
-            QMessageBox.warning(self,'No se consultaron las zonas CICA',str(error))
+        self.stats_button.setEnabled(bool(self.cica_municipality.currentData()))
 
     def open_statistics(self):
         from .cica_progress import CicaProgressDialog
@@ -230,17 +214,29 @@ class CandidateDialog(QDialog):
             if code and (len(code)!=5 or not code.isascii() or not code.isdigit()):raise ValueError('Ingrese una DIVIPOLA de cinco dígitos.')
             model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno';schema=self.schema.currentText()
             if not schema:raise ValueError('Consulte y seleccione el esquema del Modelo Interno.')
-            zones=tuple(key for key,checkbox in self.zones.items() if checkbox.isChecked()) if model=='CICA' else None
-            if model=='CICA' and not zones:raise ValueError('Seleccione al menos una zona para CICA.')
+            zones=None  # All zones of the selected municipality.
             params=self.params();self.status.setText('Leyendo los predios de la fuente…')
             result=self.run(lambda:identify_candidates(source_records(params,model,schema,code,zones),model))
             self.result=result;self.origin=f'{model} · {params.get("dbname",params.get("service",""))}.{schema} · DIVIPOLA: {code or "Todos"}'
-            if model=='CICA':self.origin+=' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: '+', '.join(zones)
-            for row in result['rows']:self.tree.addTopLevelItem(QTreeWidgetItem(list(row)))
+            if model=='CICA':self.origin+=' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: todas'
+            self.render_candidate_statistics()
             pending=sum(row[8] in '89' for row in result['rows'])
             self.status.setText(f'{self.origin}\nLeídos: {result["total"]} · NPN únicos válidos: {result["unique"]} · Provisionales: {len(result["rows"])} · Condición especial pendiente: {pending} · Duplicados excluidos: {result["duplicates"]} · Inválidos: {len(result["invalid"])}')
             self.export.setEnabled(True)
         except Exception as error:QMessageBox.warning(self,'No se identificaron los predios',str(error))
+
+    def render_candidate_statistics(self):
+        self.tree.clear()
+        for sector in candidate_statistics(self.result['rows']):
+            parent=QTreeWidgetItem(self.stat_values(sector,'Zona–sector (1–9)'))
+            self.tree.addTopLevelItem(parent)
+            for block in sector['children']:
+                parent.addChild(QTreeWidgetItem(self.stat_values(block,'Manzana–vereda (1–17)')))
+        for column in range(self.tree.columnCount()):self.tree.resizeColumnToContents(column)
+
+    @staticmethod
+    def stat_values(item,level):
+        return [item['prefix'],level]+[str(item[key]) for key in ('predios','blocks','plots','pending')]
 
     def save(self):
         if self.result is None:return
@@ -250,8 +246,11 @@ class CandidateDialog(QDialog):
         try:
             book=Workbook();summary=book.active;summary.title='Resumen';summary.append(['Origen',self.origin]);summary.append(['Alcance','Identificación provisional; no aprueba ni ejecuta renumeraciones. Condiciones 8 y 9 pendientes.'])
             for key in ('total','unique','duplicates'):summary.append([key,self.result[key]])
-            sheet=book.create_sheet('Provisionales');sheet.append(HEADERS)
-            for row in self.result['rows']:sheet.append(row)
+            sectors=book.create_sheet('Por zona-sector');sectors.append(HEADERS)
+            blocks=book.create_sheet('Por manzana-vereda');blocks.append(HEADERS)
+            for item in candidate_statistics(self.result['rows']):
+                sectors.append(self.stat_values(item,'Zona–sector (1–9)'))
+                for block in item['children']:blocks.append(self.stat_values(block,'Manzana–vereda (1–17)'))
             invalid=book.create_sheet('No utilizados');invalid.append(['Fila de lectura','NPN','Motivo'])
             for row in self.result['invalid']:invalid.append(row)
             for sheet in book:

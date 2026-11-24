@@ -142,23 +142,17 @@ class CandidateTests(unittest.TestCase):
         cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'admin_ant','admin_ant',True,True)
         self.assertIn('SELECT cica_predio: True',cica_access(cursor))
 
-    def test_cica_ui_only_shows_available_zones_and_hides_model_controls(self):
+    def test_cica_hides_model_controls_and_omits_zone_selection(self):
         from test_ui import app
         from validador_renumeracion.dialog import MaximaDialog
         from validador_renumeracion.candidate_dialog import CandidateDialog
-        from unittest.mock import patch
         parent=MaximaDialog();dialog=CandidateDialog(parent)
         try:
             self.assertTrue(dialog.list_button.isHidden())
             self.assertTrue(dialog.schema.isHidden())
             self.assertFalse(dialog.copy_label.isHidden())
             self.assertNotIn('Modelo Interno',dialog.note.text())
-            with patch.object(dialog,'params',return_value={}),patch('validador_renumeracion.candidate_dialog.cica_zone_codes',return_value=['00','03']):
-                dialog.cica_municipality.addItem('Seleccione',None);dialog.cica_municipality.addItem('Algeciras','41020');dialog.cica_municipality.setCurrentIndex(1)
-            self.assertTrue(dialog.zones['URBANO'].isHidden())
-            self.assertFalse(dialog.zones['URBANO'].isChecked())
-            self.assertTrue(dialog.zones['RURAL'].isChecked())
-            self.assertTrue(dialog.zones['CP'].isChecked())
+            self.assertFalse(hasattr(dialog,'zones_widget'))
         finally:dialog.close();parent.close()
 
     def test_cica_dashboard_counts_and_state_denominators(self):
@@ -196,4 +190,31 @@ class CandidateTests(unittest.TestCase):
             dialog.open_r1();self.assertTrue(parent.inputs.isHidden())
             dialog.cica_municipality.setCurrentIndex(0)
             self.assertFalse(dialog.maxima_button.isEnabled());self.assertIsNone(parent.result)
+        finally:dialog.close();parent.close()
+
+    def test_statistics_expand_from_prefix_9_to_prefix_17_and_count_unique_npns(self):
+        from validador_renumeracion.candidates import candidate_statistics
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        first=self.code(m='9001',t='9001')
+        paired=first[:21]+'2'+first[22:]
+        other=self.code(m='9002',t='9003')
+        other_sector=other[:7]+'02'+other[9:]
+        result=identify_candidates(enumerate([first,paired,other,other_sector,first],1),'CICA')
+        groups=candidate_statistics(result['rows'])
+        self.assertEqual(len(groups),2)
+        self.assertEqual(groups[0]['predios'],3)
+        self.assertEqual(groups[0]['blocks'],2)
+        self.assertEqual(groups[0]['plots'],2)
+        self.assertEqual(sum(x['predios'] for x in groups[0]['children']),3)
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            dialog.result=result;dialog.render_candidate_statistics()
+            self.assertEqual(dialog.tree.topLevelItemCount(),2)
+            item=dialog.tree.topLevelItem(0)
+            self.assertEqual(len(item.text(0)),9)
+            self.assertEqual(item.childCount(),2)
+            self.assertEqual(len(item.child(0).text(0)),17)
+            self.assertEqual(item.child(0).childCount(),0)
         finally:dialog.close();parent.close()

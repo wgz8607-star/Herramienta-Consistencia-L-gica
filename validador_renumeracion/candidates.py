@@ -21,3 +21,23 @@ def identify_candidates(records,model):
         pending='Condición '+npn[21]+': revisión especial pendiente' if npn[21] in '89' else 'Provisional identificado'
         rows.append((npn,npn[:5],npn[5:7],npn[:13],npn[13:17],npn[:17],npn[17:21],kind,npn[21],pending))
     return {'total':total,'unique':len(seen),'duplicates':duplicates,'invalid':invalid,'rows':sorted(rows)}
+
+
+def candidate_statistics(rows):
+    """Count unique candidate NPNs, grouped by 1–9 and complete block 1–17."""
+    groups={};seen=set()
+    for row in rows:
+        npn=row[0]
+        if npn in seen:continue
+        seen.add(npn)
+        sector=groups.setdefault(npn[:9],{})
+        sector.setdefault(npn[:17],[]).append(npn)
+    def counts(prefix,values):
+        return {'prefix':prefix,'predios':len(values),'blocks':len({n[:17] for n in values}),
+                'plots':len({n[:21] for n in values}),'pending':sum(n[21] in '89' for n in values)}
+    result=[]
+    for prefix,blocks in sorted(groups.items()):
+        item=counts(prefix,[n for values in blocks.values() for n in values])
+        item['children']=[counts(block,values) for block,values in sorted(blocks.items())]
+        result.append(item)
+    return result

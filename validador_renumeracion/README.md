@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.5.0. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.5.1. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.5.0.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.5.1.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -69,3 +69,7 @@ La ventana de máximos solo incluye lectura, consulta y exportación de R1; se r
 ### Lectura R1 en ventana principal
 
 La sección R1 precargado aparece después del municipio. **Leer R1 del municipio** se habilita con un municipio válido y consulta su última vigencia en sentencias.r1_r2. Al lado de la referencia y vigencia se encuentra **Consultar máximos del R1**, habilitado tras una lectura correcta. Esa ventana muestra únicamente los resultados, filtros y exportación; no pide de nuevo origen ni conexión. Al cambiar de municipio se descarta la referencia anterior.
+
+### Resumen de predios identificados
+
+El resultado muestra únicamente estadísticas: prefijo 1–9 (municipio + zona–sector), desplegable a manzana–vereda completa 1–17. Se cuentan NPN únicos, manzanas–veredas, terrenos distintos por prefijo 1–21 y condiciones 8/9 pendientes. No se muestran filas individuales de NPN en esa tabla. El Excel exporta Por zona-sector y Por manzana-vereda. La selección Zonas CICA se retira de la ventana principal: la identificación incluye todas las zonas del municipio, conservando VALIDADO / DESCARGADO_AL_SNC. El informe de avance conserva sus propios filtros de zonas.

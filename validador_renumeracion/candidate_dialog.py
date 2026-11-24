@@ -56,6 +56,14 @@ class CandidateDialog(QDialog):
             params=self.params()
             if getattr(self.owner,'selected_source_params',None)!=params:
                 self.owner.selected_source_params=dict(params);self.owner.tables.clear();self.owner.invalidate()
+            if self.model.currentText()=='CICA':code=self.cica_municipality.currentData() or ''
+            else:
+                import re
+                code=self.divipola.text().strip()
+                if not code:
+                    codes=set(re.findall(r'(?<![0-9])([0-9]{5})(?![0-9])',self.schema.currentText()))
+                    code=next(iter(codes)) if len(codes)==1 else ''
+            self.owner.set_source_municipality(code)
             self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
         except Exception as error:QMessageBox.warning(self,'Fuente pendiente',str(error))
 

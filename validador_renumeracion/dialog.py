@@ -75,6 +75,15 @@ class MaximaDialog(QDialog):
     def change_source(self,*_):
         mode=self.source_mode.currentIndex();self.file_page.setVisible(mode==0);self.db_page.setVisible(mode!=0)
         self.schema_label.setText('r1_r2' if mode==1 else 'public');self.tables.clear();self.invalidate();self.update_reference_date()
+        if mode==1 and getattr(self,'source_municipality',''):self.read_tables()
+
+    def set_source_municipality(self,code):
+        code=code or ''
+        if getattr(self,'source_municipality','')==code:return
+        self.source_municipality=code
+        if self.source_mode.currentIndex()==1:
+            self.tables.clear();self.invalidate()
+            if code:self.read_tables()
 
     def table_changed(self,*_):
         self.invalidate();self.update_reference_date()
@@ -178,6 +187,12 @@ class MaximaDialog(QDialog):
                     self.tables.addItem(f'{code} · {municipality} · {department} · {date}',(table,column))
             else:
                 for table,column in tables:self.tables.addItem(table+' · '+column,(table,column))
+            code=getattr(self,'source_municipality','') if preloaded else ''
+            if code:
+                match=next((index for index in range(self.tables.count()) if self.tables.itemData(index)[0].split('_')[1]==code),-1)
+                self.tables.setCurrentIndex(match)
+                if match<0:
+                    self.update_reference_date();self.status.setText(f'No hay R1 precargado disponible para el municipio seleccionado: {code}.');return
             self.update_reference_date()
             self.status.setText(f'{len(tables)} tablas disponibles en {params.get("dbname",params.get("service",""))}.{schema}. Seleccione el R1 y pulse Leer.')
         except Exception as error:QMessageBox.warning(self,'No se consultaron las tablas',str(error))

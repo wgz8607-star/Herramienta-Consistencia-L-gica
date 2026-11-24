@@ -94,3 +94,14 @@ class MaximaUiTests(unittest.TestCase):
         self.dialog.source_mode.setCurrentIndex(2)
         self.dialog.selected_source_params={'dbname':'modelo_seleccionado'}
         self.assertEqual(self.dialog.reference_params()['dbname'],'modelo_seleccionado')
+
+    def test_option_two_auto_selects_source_municipality_latest_and_handles_missing(self):
+        self.dialog.set_source_municipality('41020')
+        rows=[('r1_25377_20261031','numero_predial'),('r1_41020_20260930','numero_predial'),('r1_41020_20261031','numero_predial')]
+        with patch.object(self.dialog,'reference_params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.dialog.list_tables',return_value=rows):
+            self.dialog.source_mode.setCurrentIndex(1)
+            self.assertEqual(self.dialog.tables.currentData()[0],'r1_41020_20261031')
+            self.assertIn('31/10/2026',self.dialog.source_mode.itemText(1))
+            self.dialog.set_source_municipality('99999')
+            self.assertIsNone(self.dialog.tables.currentData())
+            self.assertIn('No hay R1',self.dialog.status.text())

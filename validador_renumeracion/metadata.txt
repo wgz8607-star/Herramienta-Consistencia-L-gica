@@ -1,6 +1,6 @@
 [general]
 name=Renumeración predial
-version=0.7.4
+version=0.7.5
 qgisMinimumVersion=3.28
 description=Identifica provisionales, genera propuesta con referencia R1 y compara archivos de renumeración.
 about=Consulta CICA o Modelo Interno, calcula máximos R1 y propone consecutivos por zonas seleccionadas, sin modificar la base. Compara el Excel A nuevo / B provisional, con soporte de condición 2, PH y condominios.

@@ -25,7 +25,7 @@ class ProposalDialog(QDialog):
         self.prefix_max={row['prefix13']:int(row['max_m']) for row in reference.prefixes} if reference is not None else {}
         for row in proposal:
             if row['old'][:13] not in self.prefix_max and row.get('base_m') is not None:self.prefix_max[row['old'][:13]]=row['base_m']
-        self.setWindowTitle('3. Propuesta de renumeración y comparación · v0.7.4');self.resize(1450,900)
+        self.setWindowTitle('3. Propuesta de renumeración y comparación · v0.7.5');self.resize(1450,900)
         self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
         self.setStyleSheet(parent.styleSheet())
         layout=QVBoxLayout(self)

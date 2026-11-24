@@ -133,3 +133,17 @@ def cica_zone_codes(params,municipality):
             cursor.execute("SET LOCAL statement_timeout='60s'")
             cursor.execute("SELECT DISTINCT substring(trim(numero_predial::text),6,2) FROM snc_cica_copy.cica_predio WHERE etapa=%s AND estado_control=%s AND left(trim(numero_predial::text),5)=%s AND trim(numero_predial::text) ~ '^[0-9]{30}$' ORDER BY 1",('VALIDADO','DESCARGADO_AL_SNC',municipality))
             return [row[0] for row in cursor.fetchall()]
+
+
+def model_municipalities(params,schema):
+    """Read actual municipalities from the selected schema, never guess from its name."""
+    with closing(psycopg2.connect(**params,connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection,connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout='60s'")
+            cursor.execute("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=%s AND lower(table_name)='ilc_predio' AND lower(column_name) IN ('numero_predial','numero_predial_nacional') ORDER BY CASE WHEN lower(column_name)='numero_predial' THEN 0 ELSE 1 END",(schema,))
+            fields=cursor.fetchall()
+            if not fields:raise ValueError('El esquema no contiene ILC_Predio con número predial accesible.')
+            table,column=fields[0]
+            cursor.execute(sql.SQL('SELECT DISTINCT left(btrim({c}::text),5) AS codigo FROM {s}.{t} WHERE length(btrim({c}::text))=30 AND left(btrim({c}::text),5) ~ %s ORDER BY codigo').format(c=sql.Identifier(column),s=sql.Identifier(schema),t=sql.Identifier(table)),('^[0-9]{5}$',))
+            return [row[0] for row in cursor.fetchall()]

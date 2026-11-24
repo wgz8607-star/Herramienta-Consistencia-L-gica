@@ -292,3 +292,58 @@ class CandidateTests(unittest.TestCase):
                 self.assertEqual(repository_params(),params)
                 path.write_text('archivo inválido')
                 with self.assertRaises(ValueError):repository_params()
+
+    def test_model_schema_tree_order_actual_municipality_and_no_manual_divipola(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from unittest.mock import patch
+        from qgis.PyQt.QtCore import Qt
+        owner=MaximaDialog();owner.catalog={'68575':('Santander','Puerto Wilches'),'68190':('Santander','Cimitarra')};dialog=CandidateDialog(owner)
+        try:
+            dialog.model.setCurrentIndex(1)
+            self.assertFalse(hasattr(dialog,'divipola'))
+            self.assertLess(dialog.connection_form.getWidgetPosition(dialog.list_button)[0],dialog.connection_form.getWidgetPosition(dialog.schema)[0])
+            names=['o_68575_00_01_20261030_l2','o_68575_actualizacion','o_68190_00_01_20261015']
+            with patch.object(dialog,'params',return_value={'dbname':'catastro'}),patch('validador_renumeracion.candidate_dialog.model_schemas',return_value=names),patch('validador_renumeracion.candidate_dialog.model_municipalities',return_value=['68575']) as read:
+                dialog.list_schemas();self.assertEqual(dialog.schema.currentIndex(),-1)
+                dialog.schema.rebuild_tree();root=dialog.schema.tree.topLevelItem(0)
+                self.assertEqual(root.text(0),'Santander');self.assertFalse(root.flags() & Qt.ItemIsSelectable)
+                place=next(root.child(i) for i in range(root.childCount()) if '68575' in root.child(i).text(0))
+                self.assertEqual(place.childCount(),2)
+                dialog.schema.choose_item(place.child(0))
+                self.assertEqual(dialog.reference_municipality(),'68575')
+                self.assertIn('Puerto Wilches',dialog.model_location.text())
+                self.assertTrue(dialog.r1_button.isEnabled())
+                read.assert_called_once()
+            self.assertEqual(dialog.schema.currentText(),place.child(0).text(0))
+        finally:dialog.close();owner.close()
+
+    def test_model_location_comes_from_data_even_if_schema_name_differs(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from unittest.mock import patch
+        owner=MaximaDialog();dialog=CandidateDialog(owner)
+        try:
+            dialog.model.setCurrentIndex(1)
+            with patch.object(dialog,'params',return_value={}),patch('validador_renumeracion.candidate_dialog.model_municipalities',return_value=['41020']):dialog.schema.addItem('o_68575_actualizacion')
+            self.assertEqual(dialog.reference_municipality(),'41020')
+            self.assertIn('41020',dialog.model_location.text())
+            with patch.object(dialog,'params',return_value={}),patch('validador_renumeracion.candidate_dialog.model_municipalities',return_value=['41020','25377']):dialog.schema.addItem('mixto');dialog.schema.setCurrentText('mixto')
+            self.assertEqual(dialog.reference_municipality(),'')
+            self.assertFalse(dialog.r1_button.isEnabled())
+            dialog.model_municipality.setCurrentIndex(1)
+            self.assertEqual(dialog.reference_municipality(),'41020')
+        finally:dialog.close();owner.close()
+
+    def test_model_municipalities_reader_is_readonly_and_accepts_uppercase_tables(self):
+        from unittest.mock import MagicMock,patch
+        from validador_renumeracion.database import model_municipalities
+        connection=MagicMock();cursor=connection.cursor.return_value.__enter__.return_value
+        cursor.fetchall.side_effect=[[('ILC_Predio','numero_predial_nacional')],[('68575',),('68190',)]]
+        with patch('psycopg2.connect',return_value=connection):codes=model_municipalities({'dbname':'modelo'},'o_68575_actualizacion')
+        self.assertEqual(codes,['68575','68190'])
+        connection.set_session.assert_called_once_with(readonly=True)
+        self.assertEqual(cursor.execute.call_args.args[1],('^[0-9]{5}$',))
+        connection.close.assert_called_once()

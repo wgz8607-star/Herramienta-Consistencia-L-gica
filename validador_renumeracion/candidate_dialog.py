@@ -1,7 +1,8 @@
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QDialog,QVBoxLayout,QFormLayout,QComboBox,QLineEdit,QPushButton,QLabel,QTreeWidget,QTreeWidgetItem,QMessageBox,QFileDialog,QCheckBox,QWidget,QHBoxLayout,QGroupBox,QSplitter
 from openpyxl import Workbook
-from .database import model_schemas,source_records,cica_municipalities,cica_copy_date
+from .schema_selector import SchemaSelector
+from .database import model_schemas,model_municipalities,source_records,cica_municipalities,cica_copy_date
 from .candidates import identify_candidates,candidate_statistics,new_block_statistics,new_block_groups,block_name
 
 HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–veredas','Terrenos distintos (1–21)','Predios condición 8/9']
@@ -27,10 +28,12 @@ class CandidateDialog(QDialog):
             field=QLineEdit();self.direct[key]=field
             if key=='password':field.setEchoMode(QLineEdit.Password)
             if key=='port':field.setText('5432')
-            form.addRow(label,field);field.textChanged.connect(self.invalidate)
+            form.addRow(label,field);field.textChanged.connect(self.model_connection_edited)
         self.connection_mode.currentIndexChanged.connect(self.connection_mode_changed)
-        self.schema=QComboBox();self.list_button=QPushButton('Consultar esquemas del Modelo Interno');form.addRow('Esquema',self.schema);form.addRow(self.list_button)
-        self.divipola=QLineEdit();self.divipola.setPlaceholderText('5 dígitos; vacío para todos los municipios');self.divipola.setMaxLength(5);form.addRow('Municipio · DIVIPOLA',self.divipola)
+        self.schema=SchemaSelector();self.schema.catalog=parent.catalog;self.list_button=QPushButton('Consultar esquemas');form.addRow(self.list_button);form.addRow('Esquema por municipio · DIVIPOLA',self.schema)
+        self.model_municipality=QComboBox();form.addRow('Municipio a validar',self.model_municipality)
+        self.model_location=QLabel('Seleccione un esquema para consultar su municipio.');self.model_location.setWordWrap(True);form.addRow(self.model_location)
+        self.model_municipality.currentIndexChanged.connect(self.model_municipality_changed)
         self.cica_lookup=QPushButton('Consultar departamentos y municipios CICA');form.addRow(self.cica_lookup)
         self.department=QComboBox();self.cica_municipality=QComboBox();form.addRow('Departamento',self.department);form.addRow('Municipio CICA',self.cica_municipality)
         self.copy_label=QLabel(self.copy_date);form.insertRow(form.getWidgetPosition(self.cica_lookup)[0]+1,'',self.copy_label)
@@ -57,20 +60,50 @@ class CandidateDialog(QDialog):
         r1_row=QHBoxLayout();r1_row.addWidget(self.r1_status,1);r1_row.addWidget(self.r1_button);r1_row.addWidget(self.maxima_button)
         form.insertRow(form.getWidgetPosition(self.cica_municipality)[0]+1,'R1 precargado',r1_row)
         self._r1_code=''
-        self.cica_municipality.currentIndexChanged.connect(self.update_r1_availability);self.model.currentIndexChanged.connect(self.update_r1_availability);self.divipola.textChanged.connect(self.update_r1_availability);self.schema.currentTextChanged.connect(self.update_r1_availability)
+        self.cica_municipality.currentIndexChanged.connect(self.update_r1_availability);self.model.currentIndexChanged.connect(self.update_r1_availability);self.schema.currentTextChanged.connect(self.model_schema_selected)
         self.model.currentIndexChanged.connect(self.change_source);self.connection.currentTextChanged.connect(self.change_source)
-        self.schema.currentTextChanged.connect(self.invalidate);self.divipola.textChanged.connect(self.invalidate)
+        self.schema.currentTextChanged.connect(self.invalidate)
         self.list_button.clicked.connect(self.list_schemas);self.read.clicked.connect(self.load);self.export.clicked.connect(self.save)
         self.change_source();self.connection_mode_changed();self.update_available_zones();self.update_r1_availability()
 
     def reference_municipality(self):
         if self.model.currentText()=='CICA':return self.cica_municipality.currentData() or ''
-        import re
-        code=self.divipola.text().strip()
-        if not code:
-            codes=set(re.findall(r'(?<![0-9])([0-9]{5})(?![0-9])',self.schema.currentText()))
-            code=next(iter(codes)) if len(codes)==1 else ''
-        return code if re.fullmatch(r'[0-9]{5}',code) else ''
+        return self.model_municipality.currentData() or ''
+
+    def model_connection_edited(self,*_):
+        self.invalidate()
+        if self.model.currentText()!='CICA':self.schema.clear()
+
+    def model_municipality_changed(self,*_):
+        code=self.model_municipality.currentData()
+        if code:
+            department,name=self.owner.catalog.get(code,('Departamento no identificado','Municipio no identificado'))
+            self.model_location.setText(f'Municipio a validar: {name} · {code} · {department}')
+        else:self.model_location.setText('Seleccione el municipio del esquema para validar su renumeración.')
+        self.invalidate();self.update_r1_availability()
+
+    def model_schema_selected(self,*_):
+        if self.model.currentText()=='CICA':return
+        self.model_municipality.clear();self.invalidate();self.update_r1_availability()
+        schema=self.schema.currentText()
+        if not schema:
+            self.model_location.setText('Seleccione un esquema para consultar su municipio.');return
+        self.model_location.setText('Consultando municipio del esquema…')
+        try:
+            params=self.params();codes=self.run(lambda:model_municipalities(params,schema))
+            self.model_municipality.blockSignals(True)
+            if len(codes)!=1:self.model_municipality.addItem('Seleccione municipio…',None)
+            for code in codes:
+                department,name=self.owner.catalog.get(code,('Departamento no identificado','Municipio no identificado'))
+                self.model_municipality.addItem(f'{name} · {code} · {department}',code)
+            self.model_municipality.blockSignals(False);self.model_municipality_changed()
+            if len(codes)==1:
+                department,name=self.owner.catalog.get(codes[0],('Departamento no identificado','Municipio no identificado'))
+                self.schema.locations[schema]=(department,name,codes[0])
+            if not codes:self.model_location.setText('No se identificó municipio: revise los NPN del esquema seleccionado.')
+        except Exception as error:
+            self.model_location.setText('No se pudo determinar el municipio del esquema.')
+            QMessageBox.warning(self,'Municipio del Modelo Interno',str(error))
 
     def update_r1_availability(self,*_):
         code=self.reference_municipality()
@@ -122,15 +155,15 @@ class CandidateDialog(QDialog):
         for checkbox in self.scope_boxes.values():checkbox.setEnabled(False)
 
     def change_source(self,*_):
-        self.schema.clear();cica=self.model.currentText()=='CICA'
-        for field in [self.connection_mode,self.connection,self.divipola]:
+        self.schema.clear();self.schema.locations={};cica=self.model.currentText()=='CICA'
+        for field in [self.connection_mode,self.connection,self.model_municipality]:
             field.setVisible(not cica);self.connection_form.labelForField(field).setVisible(not cica)
         for field in self.direct.values():
             visible=not cica and self.connection_mode.currentIndex()==1
             field.setVisible(visible);self.connection_form.labelForField(field).setVisible(visible)
         for field in [self.department,self.cica_municipality]:
             field.setVisible(cica);self.connection_form.labelForField(field).setVisible(cica)
-        self.cica_lookup.setVisible(cica);self.list_button.setVisible(not cica)
+        self.cica_lookup.setVisible(cica);self.list_button.setVisible(not cica);self.model_location.setVisible(not cica)
         self.schema.setVisible(not cica);self.connection_form.labelForField(self.schema).setVisible(not cica)
         self.copy_label.setVisible(cica and self._copy_consulted)
         self.stats_button.setVisible(cica)
@@ -217,9 +250,10 @@ class CandidateDialog(QDialog):
         finally:self.setEnabled(True)
 
     def list_schemas(self):
+        self.schema.blockSignals(True);self.schema.clear();self.schema.locations={};self.schema.blockSignals(False);self.model_municipality.clear();self.update_r1_availability()
         try:
             params=self.params();self.invalidate();self.status.setText('Consultando esquemas…')
-            schemas=self.run(lambda:model_schemas(params));self.schema.clear();self.schema.addItems(schemas)
+            schemas=self.run(lambda:model_schemas(params));self.schema.blockSignals(True);self.schema.clear();self.schema.addItems(schemas);self.schema.setCurrentIndex(-1);self.schema.blockSignals(False);self.model_municipality.clear();self.model_location.setText('Seleccione un esquema para consultar su municipio.');self.update_r1_availability()
             self.status.setText(f'{len(schemas)} esquemas con ILC_Predio disponibles.')
         except Exception as error:QMessageBox.warning(self,'No se consultaron los esquemas',str(error))
 
@@ -227,8 +261,8 @@ class CandidateDialog(QDialog):
         self.invalidate()
         try:
             cica=self.model.currentText()=='CICA'
-            code=(self.cica_municipality.currentData() or '') if cica else self.divipola.text().strip()
-            if cica and not code:raise ValueError('Consulte y seleccione el departamento y municipio de la copia CICA.')
+            code=self.reference_municipality()
+            if not code:raise ValueError('Consulte y seleccione el municipio de la fuente antes de identificar los provisionales.')
             if code and (len(code)!=5 or not code.isascii() or not code.isdigit()):raise ValueError('Ingrese una DIVIPOLA de cinco dígitos.')
             model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno';schema=self.schema.currentText()
             if not schema:raise ValueError('Consulte y seleccione el esquema del Modelo Interno.')

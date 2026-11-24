@@ -1,10 +1,10 @@
-# Renumeración predial · v0.7.4
+# Renumeración predial · v0.7.5
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.4.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_maximos_R1_v0.7.5.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -89,3 +89,8 @@ Ambas pestañas presentan un árbol como el diagnóstico, con **Prefijo territor
 El selector **Desagregación de la vista** permite alternar entre **Sectores · 1–9**, **Sector y subdivisión · 1–9 → 10–13** (inicial) y **Detalle de provisionales**. Se aplica a las dos pestañas, conserva filtros y no recalcula la numeración ni crea un reporte adicional. También se puede desplegar manualmente cada sector con su flecha.
 
 El paquete configurado puede incluir una configuración local de sentencias, que prevalece sobre la del validador instalado y se aplica a CICA y R1 precargado. Esa configuración se entrega solo en el ZIP privado y no se versiona en el repositorio.
+
+
+## Selección de esquemas del Modelo Interno
+
+El botón **Consultar esquemas** aparece antes del selector. El desplegable agrupa **Departamento → Municipio (DIVIPOLA) → Esquema**, con conteos por municipio y selección exclusiva de los esquemas. Los nombres sin código reconocido aparecen en Sin ubicación identificada. Al seleccionar uno se consulta el municipio real desde los NPN de ILC_Predio y se muestra en **Municipio a validar**; si solo hay uno se selecciona automáticamente. Si contiene varios, se elige entre los encontrados. No se muestra el antiguo campo manual Municipio · DIVIPOLA. La lectura de provisionales y el R1 utilizan ese municipio real. La ubicación del esquema seleccionado se actualiza en el árbol según los datos consultados.

@@ -9,7 +9,7 @@ from qgis.PyQt.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QWi
 from .core import build_maxima,visible_rows,zone_name
 from .readers import inspect_excel,file_records,municipality_catalog
 from .database import list_tables,database_records
-from .exporter import export_maxima,ZONE_FIELDS,PREFIX_FIELDS,BLOCK_FIELDS
+from .exporter import export_maxima,ZONE_FIELDS,BLOCK_FIELDS
 
 
 class MaximaDialog(QDialog):
@@ -43,7 +43,7 @@ class MaximaDialog(QDialog):
         self.filters=QWidget();row=QHBoxLayout(self.filters);row.setContentsMargins(0,0,0,0)
         self.municipality=QComboBox();self.zone=QComboBox();self.search=QLineEdit();self.search.setPlaceholderText('Buscar prefijo, manzana o número de referencia…')
         row.addWidget(QLabel('Municipio'));row.addWidget(self.municipality,2);row.addWidget(QLabel('Zona–sector (6–9)'));row.addWidget(self.zone,1);row.addWidget(self.search,2);outer.addWidget(self.filters)
-        self.tabs=QTabWidget();self.views={};self.fields={'Por zona-sector':ZONE_FIELDS,'Por prefijo 13':PREFIX_FIELDS,'Por manzana':BLOCK_FIELDS}
+        self.tabs=QTabWidget();self.views={};self.fields={'Por zona-sector':ZONE_FIELDS,'Por manzana':BLOCK_FIELDS}
         for name,fields in self.fields.items():
             tree=QTreeWidget();tree.setRootIsDecorated(False);tree.setAlternatingRowColors(True);tree.setHeaderLabels(['Departamento','Municipio']+[label for label,_ in fields]);self.tabs.addTab(tree,name);self.views[name]=tree
         self.invalid=QTreeWidget();self.invalid.setRootIsDecorated(False);self.invalid.setHeaderLabels(['Fila de origen','NPN no utilizado','Motivo']);self.tabs.addTab(self.invalid,'Registros no utilizados');outer.addWidget(self.tabs,1)
@@ -240,7 +240,7 @@ class MaximaDialog(QDialog):
 
     def render(self,*_):
         if self.result is None:return
-        datasets={'Por zona-sector':self.result.zones,'Por prefijo 13':self.result.prefixes,'Por manzana':self.result.blocks}
+        datasets={'Por zona-sector':self.result.zones,'Por manzana':self.result.blocks}
         for name,tree in self.views.items():
             rows=visible_rows(datasets[name],self.municipality.currentData() or '',self.zone.currentData() or '',self.search.text(),self.catalog)
             tree.clear()

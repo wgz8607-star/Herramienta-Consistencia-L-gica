@@ -50,13 +50,17 @@ class MaximaDialog(QDialog):
         self.progress=QProgressBar();self.progress.setRange(0,0);self.progress.hide();outer.addWidget(self.progress)
         self.status=QLabel('Seleccione el R1 que servirá como referencia.');self.status.setWordWrap(True);outer.addWidget(self.status)
         actions=QHBoxLayout();self.export_button=QPushButton('Exportar máximos visibles a Excel');self.export_button.setEnabled(False);self.export_button.clicked.connect(self.export)
-        close=QPushButton('Cerrar');close.clicked.connect(self.reject);actions.addWidget(self.export_button);actions.addStretch();actions.addWidget(close);outer.addLayout(actions)
+        close=QPushButton('Cerrar');close.clicked.connect(self.reject);actions.addWidget(self.export_button);candidates=QPushButton('Predios a renumerar · CICA / Modelo Interno');candidates.clicked.connect(self.open_candidates);actions.addWidget(candidates);actions.addStretch();actions.addWidget(close);outer.addLayout(actions)
         self.source_mode.currentIndexChanged.connect(self.change_source)
         self.connection.currentTextChanged.connect(self.connection_changed)
         self.tables.currentIndexChanged.connect(self.table_changed)
         self.sheet.currentTextChanged.connect(self.update_columns);self.column.currentIndexChanged.connect(self.invalidate)
         self.municipality.currentIndexChanged.connect(self.update_zones);self.zone.currentIndexChanged.connect(self.render);self.search.textChanged.connect(self.render)
         self.refresh_connections();self.change_source()
+
+    def open_candidates(self):
+        from .candidate_dialog import CandidateDialog
+        CandidateDialog(self).exec_()
 
     def invalidate(self,*_):
         self.result=None;self.export_button.setEnabled(False)
@@ -87,8 +91,8 @@ class MaximaDialog(QDialog):
 
     def connection_changed(self,*_):self.tables.clear();self.invalidate()
 
-    def params(self):
-        name=self.connection.currentText()
+    def params(self,preloaded=None,connection_name=None):
+        name=self.connection.currentText() if connection_name is None else connection_name
         if not name:raise ValueError('Seleccione una conexión PostgreSQL guardada en QGIS.')
         settings=QgsSettings();group='PostgreSQL/connections/'+name
         params={key:settings.value(group+'/'+setting,'') for key,setting in [('host','host'),('port','port'),('dbname','database'),('user','username'),('password','password'),('service','service')]}
@@ -105,7 +109,7 @@ class MaximaDialog(QDialog):
                 if not accepted:raise ValueError('Consulta cancelada: no se suministró la contraseña.')
                 self._passwords[name]=password
             params['password']=self._passwords[name]
-        if self.source_mode.currentIndex()==1:
+        if (self.source_mode.currentIndex()==1 if preloaded is None else preloaded):
             params['dbname']='sentencias'
         return params
 

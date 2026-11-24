@@ -1,8 +1,8 @@
 [general]
 name=Renumeración predial - Máximos R1
-version=0.1.1
+version=0.2.0
 qgisMinimumVersion=3.28
-description=Visualiza máximos de manzana y terreno del R1 por municipio, zona y prefijo territorial.
+description=Visualiza máximos R1 e identifica predios provisionales en CICA y Modelo Interno.
 about=Primera fase independiente: lectura de R1 y visualización de máximos. No realiza renumeraciones ni valida todavía los casos especiales de condición 8 y 9.
 author=Herramientas de Calidad Catastral
 category=Database

@@ -141,3 +141,36 @@ class CandidateTests(unittest.TestCase):
         self.assertNotIn('password',str(error.exception))
         cursor.fetchone.return_value=('sentencias','172.19.3.225',5432,'admin_ant','admin_ant',True,True)
         self.assertIn('SELECT cica_predio: True',cica_access(cursor))
+
+    def test_cica_ui_only_shows_available_zones_and_hides_model_controls(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from unittest.mock import patch
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            self.assertTrue(dialog.list_button.isHidden())
+            self.assertTrue(dialog.schema.isHidden())
+            self.assertFalse(dialog.copy_label.isHidden())
+            self.assertNotIn('Modelo Interno',dialog.note.text())
+            with patch.object(dialog,'params',return_value={}),patch('validador_renumeracion.candidate_dialog.cica_zone_codes',return_value=['00','03']):
+                dialog.cica_municipality.addItem('Seleccione',None);dialog.cica_municipality.addItem('Algeciras','41020');dialog.cica_municipality.setCurrentIndex(1)
+            self.assertTrue(dialog.zones['URBANO'].isHidden())
+            self.assertFalse(dialog.zones['URBANO'].isChecked())
+            self.assertTrue(dialog.zones['RURAL'].isChecked())
+            self.assertTrue(dialog.zones['CP'].isChecked())
+        finally:dialog.close();parent.close()
+
+    def test_cica_dashboard_counts_and_state_denominators(self):
+        from test_ui import app
+        from validador_renumeracion.cica_progress import CicaProgressDialog
+        from qgis.PyQt.QtCore import QTimer
+        data={'rows':[('41020','Urbano','01','VALIDADO',10,8,2,0)],'indicator_rows':[{'divipola':'41020','zona':'Urbano','codigo_zona':'01','recognized_active':8,'recognized_cancelled':1,'quality_active':8,'quality_cancelled':1,'with_areas':7,'snc':9}],'areas_available':True,'snc_available':True}
+        dialog=CicaProgressDialog(lambda:data)
+        try:
+            app.processEvents();dialog.set_data(data)
+            self.assertEqual(dialog.values['total'].text(),'10')
+            self.assertEqual(dialog.snc.text(),'9')
+            self.assertIn('Faltan 1',dialog.remaining_widgets[('quality','cancelled')].text())
+            self.assertTrue(dialog.zone_buttons['Rural'].isHidden())
+        finally:dialog.close()

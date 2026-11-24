@@ -114,3 +114,22 @@ def cica_diagnostics(params):
         with connection,connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout='15s'")
             return cica_access(cursor)
+
+
+def cica_copy_date(params):
+    with closing(psycopg2.connect(**params,connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection,connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout='15s'")
+            cursor.execute('SELECT inicio FROM public.copia_cica_progreso ORDER BY id DESC LIMIT 1')
+            row=cursor.fetchone()
+            return row[0] if row else None
+
+
+def cica_zone_codes(params,municipality):
+    with closing(psycopg2.connect(**params,connect_timeout=8)) as connection:
+        connection.set_session(readonly=True)
+        with connection,connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout='60s'")
+            cursor.execute("SELECT DISTINCT substring(trim(numero_predial::text),6,2) FROM snc_cica_copy.cica_predio WHERE etapa=%s AND estado_control=%s AND left(trim(numero_predial::text),5)=%s AND trim(numero_predial::text) ~ '^[0-9]{30}$' ORDER BY 1",('VALIDADO','DESCARGADO_AL_SNC',municipality))
+            return [row[0] for row in cursor.fetchall()]

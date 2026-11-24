@@ -1,6 +1,6 @@
 # Renumeración predial — Máximos R1
 
-Plugin QGIS independiente, versión inicial 0.3.2. No depende del Validador de Consistencia Lógica ni cambia su instalación.
+Plugin QGIS independiente, versión inicial 0.4.0. No depende del Validador de Consistencia Lógica ni cambia su instalación.
 
 ## Alcance
 
@@ -13,7 +13,7 @@ Visualiza los máximos existentes del R1 elegido. No cambia números prediales n
 
 ## Instalación
 
-En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.3.2.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
+En QGIS: Complementos → Administrar e instalar complementos → Instalar a partir de ZIP. Instale el paquete `renumeracion_maximos_R1_v0.4.0.zip`. Abra **Renumeración · Máximos R1** desde el menú de base de datos o su icono.
 
 ## Uso
 
@@ -46,3 +46,12 @@ Al abrir el plugin se muestra primero la selección de fuente CICA / Modelo Inte
 La ventana inicial es la selección de fuente. En CICA se ocultan las conexiones y se usa la copia fija `sentencias.snc_cica_copy.cica_predio`. Pulse **Consultar departamentos y municipios CICA** y seleccione departamento y municipio. El catálogo incluye municipios con predios VALIDADO / DESCARGADO_AL_SNC. Se reutiliza la configuración de sentencias del Validador de Consistencia Lógica instalado, incluida su contraseña, sin volver a solicitarla. Para CICA debe estar instalado ese validador. El nuevo ZIP no incorpora una copia de la contraseña. Modelo Interno conserva las conexiones guardadas QGIS y la conexión directa PostgreSQL.
 
 El botón **Comprobar acceso a copia CICA** informa base, servidor, usuario de sesión, usuario efectivo y permisos USAGE/SELECT en la conexión real. La misma comprobación se realiza antes de leer la copia. No muestra contraseñas.
+
+
+### Interfaz CICA y estadísticas
+
+La interfaz inicial utiliza tarjetas claras y botones azules, con controles deshabilitados en gris. En CICA se ocultan conexiones, esquema y controles/textos de Modelo Interno; se muestra la fecha de copia desde el último registro (id descendente) de `public.copia_cica_progreso.inicio`. Si el usuario de lectura no tiene permiso sobre esa tabla, se muestra fecha no disponible sin bloquear los predios. Ya no se presenta el botón de diagnóstico; se conserva la comprobación de permisos al consultar.
+
+Al seleccionar municipio se consultan únicamente sus zonas con predios `VALIDADO` y `DESCARGADO_AL_SNC`. Las zonas ausentes se ocultan y no quedan seleccionadas.
+
+**Ver estadísticas CICA…** abre el informe de avance del municipio para todas las etapas: totales, activos y cancelados; reconocimiento y control separados por estado con faltantes al 100%; activos sin área geográfica; resultado final cargados SNC. Los selectores de zonas se pueden combinar. El detalle incluye tabla por etapa y códigos NPN paginados. Las estadísticas no modifican el filtro de identificación de provisionales. Fórmulas equivalentes a las del validador: reconocimiento excluye SIN_ASIGNAR/PRE_ASIGNADO/ASIGNADO/PARA_DISPOSITIVO/EN_DISPOSITIVO; control incluye CONTROL_CALIDAD_GENERAL/CONTROL_CALIDAD_GRUPO/DEVUELTO/RECHAZADO/VALIDADO; SNC requiere VALIDADO y DESCARGADO_AL_SNC.

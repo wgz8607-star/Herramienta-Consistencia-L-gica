@@ -82,8 +82,8 @@ class MaximaUiTests(unittest.TestCase):
             self.assertIsInstance(plugin.dialog,CandidateDialog)
             self.assertTrue(plugin.dialog.isVisible())
             self.assertFalse(plugin.reference_dialog.isVisible())
-            plugin.dialog.r1_button.click();app.processEvents()
-            self.assertTrue(plugin.reference_dialog.isVisible())
+            self.assertFalse(plugin.dialog.r1_button.isEnabled())
+            self.assertFalse(plugin.dialog.maxima_button.isEnabled())
         finally:plugin.unload();window.close()
 
     def test_maxima_uses_repository_or_selected_source_without_qgis_selector(self):

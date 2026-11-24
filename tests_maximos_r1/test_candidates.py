@@ -174,3 +174,26 @@ class CandidateTests(unittest.TestCase):
             self.assertIn('Faltan 1',dialog.remaining_widgets[('quality','cancelled')].text())
             self.assertTrue(dialog.zone_buttons['Rural'].isHidden())
         finally:dialog.close()
+
+    def test_first_window_reads_latest_r1_and_enables_adjacent_maxima_button(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from unittest.mock import patch
+        parent=MaximaDialog();dialog=CandidateDialog(parent)
+        try:
+            self.assertFalse(dialog.r1_button.isEnabled())
+            dialog.cica_municipality.blockSignals(True)
+            dialog.cica_municipality.addItem('Seleccione',None);dialog.cica_municipality.addItem('Algeciras','41020');dialog.cica_municipality.setCurrentIndex(1)
+            dialog.cica_municipality.blockSignals(False);dialog.update_r1_availability()
+            self.assertTrue(dialog.r1_button.isEnabled())
+            rows=[('r1_41020_20260930','numero_predial'),('r1_41020_20261031','numero_predial'),('r1_25377_20261101','numero_predial')]
+            with patch('validador_renumeracion.repository.repository_params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.database.list_tables',return_value=rows),patch('validador_renumeracion.database.database_records',return_value=iter([(1,self.code())])) as reader:
+                dialog.read_selected_r1()
+            self.assertEqual(reader.call_args.args[2],'r1_41020_20261031')
+            self.assertIn('31/10/2026',dialog.r1_status.text())
+            self.assertTrue(dialog.maxima_button.isEnabled())
+            dialog.open_r1();self.assertTrue(parent.inputs.isHidden())
+            dialog.cica_municipality.setCurrentIndex(0)
+            self.assertFalse(dialog.maxima_button.isEnabled());self.assertIsNone(parent.result)
+        finally:dialog.close();parent.close()

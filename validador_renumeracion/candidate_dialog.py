@@ -45,27 +45,67 @@ class CandidateDialog(QDialog):
         results_title=QLabel('2. Predios identificados');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
         self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(HEADERS);layout.addWidget(self.tree,1)
         self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False);layout.addWidget(self.export)
-        self.r1_button=QPushButton('Consultar máximos del R1…');self.r1_button.clicked.connect(self.open_r1);layout.addWidget(self.r1_button)
+        self.r1_status=QLabel('Seleccione departamento y municipio para leer el R1 precargado.');self.r1_status.setWordWrap(True)
+        self.r1_button=QPushButton('Leer R1 del municipio');self.r1_button.clicked.connect(self.read_selected_r1)
+        self.maxima_button=QPushButton('Consultar máximos del R1');self.maxima_button.clicked.connect(self.open_r1);self.maxima_button.setEnabled(False)
+        r1_row=QHBoxLayout();r1_row.addWidget(self.r1_status,1);r1_row.addWidget(self.r1_button);r1_row.addWidget(self.maxima_button)
+        form.insertRow(form.getWidgetPosition(self.cica_municipality)[0]+1,'R1 precargado',r1_row)
+        self._r1_code=''
+        self.cica_municipality.currentIndexChanged.connect(self.update_r1_availability);self.model.currentIndexChanged.connect(self.update_r1_availability);self.divipola.textChanged.connect(self.update_r1_availability);self.schema.currentTextChanged.connect(self.update_r1_availability)
         self.model.currentIndexChanged.connect(self.change_source);self.connection.currentTextChanged.connect(self.change_source)
         self.schema.currentTextChanged.connect(self.invalidate);self.divipola.textChanged.connect(self.invalidate)
         self.list_button.clicked.connect(self.list_schemas);self.read.clicked.connect(self.load);self.export.clicked.connect(self.save)
-        self.change_source();self.connection_mode_changed();self.update_available_zones()
+        self.change_source();self.connection_mode_changed();self.update_available_zones();self.update_r1_availability()
+
+    def reference_municipality(self):
+        if self.model.currentText()=='CICA':return self.cica_municipality.currentData() or ''
+        import re
+        code=self.divipola.text().strip()
+        if not code:
+            codes=set(re.findall(r'(?<![0-9])([0-9]{5})(?![0-9])',self.schema.currentText()))
+            code=next(iter(codes)) if len(codes)==1 else ''
+        return code if re.fullmatch(r'[0-9]{5}',code) else ''
+
+    def update_r1_availability(self,*_):
+        code=self.reference_municipality()
+        self.r1_button.setEnabled(bool(code))
+        if self._r1_code!=code:
+            self._r1_code='';self.maxima_button.setEnabled(False);self.owner.invalidate()
+            self.r1_status.setText('R1 precargado pendiente de leer · '+code if code else 'Seleccione departamento y municipio para leer el R1 precargado.')
+
+    def read_selected_r1(self):
+        from datetime import datetime
+        from .repository import repository_params
+        from .database import list_tables,database_records
+        from .core import build_maxima
+        code=self.reference_municipality()
+        if not code:return
+        self.maxima_button.setEnabled(False);self.owner.invalidate();self._r1_code=''
+        try:
+            params=repository_params();self.r1_status.setText('Leyendo R1 del municipio '+code+'…')
+            def read():
+                tables=list_tables(params,'r1_r2',True);matches=[]
+                for table,column in tables:
+                    _,municipality,stamp=table.split('_')
+                    if municipality!=code:continue
+                    try:date=datetime.strptime(stamp,'%Y%m%d')
+                    except ValueError:continue
+                    matches.append((date,table,column))
+                if not matches:raise ValueError('No hay R1 precargado disponible para '+code+'.')
+                date,table,column=max(matches)
+                result=build_maxima(database_records(params,'r1_r2',table,column))
+                return result,table,date
+            result,table,date=self.run(read)
+            self.owner.set_result(result,'sentencias.r1_r2.'+table)
+            self._r1_code=code;self.maxima_button.setEnabled(True)
+            self.r1_status.setText(f'{code} · Vigencia: {date:%d/%m/%Y} · {result.unique_npns:,} NPN únicos'.replace(',','.'))
+        except Exception as error:
+            self.r1_status.setText('R1 no disponible · '+code);QMessageBox.warning(self,'No se leyó el R1',str(error))
 
     def open_r1(self):
-        try:
-            params=self.params()
-            if getattr(self.owner,'selected_source_params',None)!=params:
-                self.owner.selected_source_params=dict(params);self.owner.tables.clear();self.owner.invalidate()
-            if self.model.currentText()=='CICA':code=self.cica_municipality.currentData() or ''
-            else:
-                import re
-                code=self.divipola.text().strip()
-                if not code:
-                    codes=set(re.findall(r'(?<![0-9])([0-9]{5})(?![0-9])',self.schema.currentText()))
-                    code=next(iter(codes)) if len(codes)==1 else ''
-            self.owner.set_source_municipality(code)
-            self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
-        except Exception as error:QMessageBox.warning(self,'Fuente pendiente',str(error))
+        if not self._r1_code or self.owner.result is None:return
+        self.owner.inputs.hide()
+        self.owner.showNormal();self.owner.raise_();self.owner.activateWindow()
 
     def invalidate(self,*_):
         self.result=None;self.tree.clear();self.export.setEnabled(False);self.status.setText('Fuente pendiente de consultar.')

@@ -1,0 +1,12 @@
+[general]
+name=Renumeración predial - Máximos R1
+version=0.1.0
+qgisMinimumVersion=3.28
+description=Visualiza máximos de manzana y terreno del R1 por municipio, zona y prefijo territorial.
+about=Primera fase independiente: lectura de R1 y visualización de máximos. No realiza renumeraciones ni valida todavía los casos especiales de condición 8 y 9.
+author=Herramientas de Calidad Catastral
+category=Database
+icon=icon.svg
+experimental=True
+hasProcessingProvider=no
+tags=catastro,r1,renumeracion,maximos

@@ -103,7 +103,7 @@ class ProposalDialog(QDialog):
 
     def enriched(self,row):
         target=self.by_old[row['old']];maximum=self.prefix_max.get(row['old'][:13]);terrain=target.get('base_t')
-        return dict(row,predio_state=target.get('predio_state','SIN INFORMACIÓN'),territory=row['old'][:17],grouping=('Vereda' if row['old'][5:7]=='00' else 'Manzana')+' (1–17)',base_m=self.code(maximum),next_m=self.following(maximum),base_t=self.code(terrain),next_t=self.following(terrain))
+        return dict(row,predio_state=target.get('predio_state','SIN INFORMACIÓN'),territory=row['old'][:17],grouping=('Vereda' if row['old'][5:7]=='00' else 'Manzana')+' (1–17)',base_m=self.code(maximum),next_m=self.following(maximum),base_t=('Se conserva '+row['old'][17:21] if target.get('terrain_preserved') else self.code(terrain)),next_t=('No aplica' if target.get('terrain_preserved') else self.following(terrain)))
 
     def visible_data(self,name):
         data=self.proposal if name=='Propuesta' else self.comparison

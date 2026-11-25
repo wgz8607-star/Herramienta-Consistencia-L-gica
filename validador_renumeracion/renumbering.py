@@ -54,34 +54,40 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
             block_error=('Sin terreno R1 elegible: los 090x de condición 9 están excluidos' if block in terrain_max and not take_090x_as_max else 'Sin referencia R1 de terreno para la manzana/vereda 1–17')
         plots=defaultdict(list)
         for old in olds:plots[old[:21]].append(old)
-        for offset,(plot,family) in enumerate(sorted(plots.items()),1):
+        terrain_offset=0
+        for plot,family in sorted(plots.items()):
+            preserve_terrain=is_new and not provisional(plot[17],model)
             error=block_error
-            number=baseline+offset if baseline is not None else None
+            if preserve_terrain:number=int(plot[17:21])
+            else:
+                terrain_offset+=1
+                number=baseline+terrain_offset if baseline is not None else None
             if number is not None and number>9999:error='Consecutivo de terreno agotado (9999)'
             conditions=Counter(n[21] for n in family)
             # A complete PH/condominio family shares its 1–22 prefix. A condition-2
             # companion shares the terrain with one of the explicitly permitted bases.
             if any(states[n]=='ESTADO INCONSISTENTE' for n in family):error='Estados contradictorios para el mismo NPN en la fuente'
-            if any(n[21]=='5' and states[n]!='CANCELADO' for n in family):error='Condición 5 adicional: requiere estado CANCELADO comprobado'
-            if conditions['2']>1:error='Solo se admite un compañero de condición 2 por terreno'
-            if len(family)>1:
-                bases=set(conditions)-{'2','5'}
-                if '5' in conditions and not bases:
-                    error='Condición 5 adicional sin predio base diferente de condición 2'
-                allowed_bases=set('01346789') if '5' in conditions and '2' not in conditions else set('03489')
-                if len(bases)>1 or not bases.issubset(allowed_bases):
-                    error='Terreno repetido: combinación de condiciones no definida'
-                elif '2' in conditions and not bases:
-                    error='Condición 2 repetida sin predio base 0, 3, 4, 8 o 9'
-                elif any(conditions[c]>1 for c in bases if c not in '89'):
-                    error='Terreno repetido fuera de PH/condominio o pareja de condición 2'
+            if not preserve_terrain:
+                if any(n[21]=='5' and states[n]!='CANCELADO' for n in family):error='Condición 5 adicional: requiere estado CANCELADO comprobado'
+                if conditions['2']>1:error='Solo se admite un compañero de condición 2 por terreno'
+                if len(family)>1:
+                    bases=set(conditions)-{'2','5'}
+                    if '5' in conditions and not bases:
+                        error='Condición 5 adicional sin predio base diferente de condición 2'
+                    allowed_bases=set('01346789') if '5' in conditions and '2' not in conditions else set('03489')
+                    if len(bases)>1 or not bases.issubset(allowed_bases):
+                        error='Terreno repetido: combinación de condiciones no definida'
+                    elif '2' in conditions and not bases:
+                        error='Condición 2 repetida sin predio base 0, 3, 4, 8 o 9'
+                    elif any(conditions[c]>1 for c in bases if c not in '89'):
+                        error='Terreno repetido fuera de PH/condominio o pareja de condición 2'
             for old in family:
                 new='' if error else target_block+f'{number:04d}'+old[21:]
                 output.append({'old':old,'new':new,'status':'Pendiente' if error else 'Generado',
-                    'reason':error or ('Manzana/vereda nueva' if is_new else 'Terreno en manzana/vereda existente'),
+                    'reason':error or ('Solo manzana/vereda; terreno conservado '+old[17:21] if preserve_terrain else 'Manzana/vereda nueva' if is_new else 'Terreno en manzana/vereda existente'),
                     'prefix13':old[:13],'old_block':block,'new_block':target_block if not block_error else '',
                     'base_m':prefix_max.get(old[:13]),
-                    'base_t':baseline,'family':plot,'condition':old[21],'predio_state':states[old]})
+                    'base_t':None if preserve_terrain else baseline,'terrain_preserved':preserve_terrain,'family':plot,'condition':old[21],'predio_state':states[old]})
     existing=set(getattr(r1,'r1_numbers',()))
     targets=Counter(row['new'] for row in output if row['new'])
     for row in output:

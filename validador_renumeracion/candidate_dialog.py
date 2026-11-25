@@ -328,8 +328,12 @@ class CandidateDialog(QDialog):
         rows=self.selected_candidate_rows()
         if self.result is not None:
             new_blocks=len({row[0][:17] for row in rows if row[7] in ('Manzana','Manzana y terreno')})
+            from .renumbering import provisional
+            model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno'
+            terrain_changes=len({row[0][:21] for row in rows if provisional(row[0][17],model)})
+            preserved=len({row[0][:21] for row in rows if not provisional(row[0][17],model)})
             active=sum(len(row)>10 and row[10]=='ACTIVO' for row in rows);cancelled=sum(len(row)>10 and row[10]=='CANCELADO' for row in rows)
-            self.scope_status.setText(f'Provisionales: {len(rows)} · {len({row[0][:21] for row in rows})} terrenos distintos · {new_blocks} manzanas/veredas nuevas · Activos: {active} · Cancelados: {cancelled} · Otros/sin información: {len(rows)-active-cancelled}. Un grupo de terreno consume un consecutivo.')
+            self.scope_status.setText(f'Provisionales: {len(rows)} · {len({row[0][:21] for row in rows})} terrenos distintos ({terrain_changes} por renumerar, {preserved} se conservan) · {new_blocks} manzanas/veredas nuevas · Activos: {active} · Cancelados: {cancelled} · Otros/sin información: {len(rows)-active-cancelled}. Solo los grupos de terreno provisionales consumen consecutivo.')
         same=bool(rows) and bool(self._r1_code) and {row[0][:5] for row in rows}=={self._r1_code}
         self.propose_button.setEnabled(same and self.owner.result is not None)
         if rows and not same:self.propose_button.setToolTip('Lea el R1 del mismo municipio de los provisionales seleccionados.')

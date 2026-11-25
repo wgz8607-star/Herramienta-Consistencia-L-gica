@@ -37,7 +37,9 @@ Cada manzana/vereda nueva recibe <b>máximo R1 + 1</b>, dentro del mismo prefijo
 Todos sus predios reciben el mismo código definitivo 14–17.</p>
 <h2>4. Terrenos y consecutivos sin saltos</h2>
 <p>En una manzana/vereda existente se inicia en su <b>máximo terreno R1 + 1</b>.
-En una manzana/vereda nueva se inicia en <b>0001</b>.
+En una manzana/vereda nueva, los <b>terrenos provisionales</b> se renumeran desde <b>0001</b>.
+Si el terreno <b>ya es numérico no provisional</b>, se conserva 18–21 y solo se cambia la manzana/vereda.
+Un terreno conservado, por ejemplo 0008, <b>no consume</b> el 0001 ni desplaza los consecutivos de los provisionales.
 Los grupos de terreno se ordenan por su numeración provisional de menor a mayor.
 <b>Los saltos del provisional no se trasladan al definitivo.</b></p>
 <table><tr><th>Provisional</th><th>Definitivo, si el máximo es 0250</th></tr>
@@ -51,7 +53,7 @@ Se admite un compañero de condición 2 por terreno.</li>
 <li>Se admiten <b>uno o varios predios de condición 5</b>, todos <b>CANCELADOS</b>, junto al predio base válido.
 Pueden ser el segundo registro sin condición 2, con base de condición distinta de 2 y 5,
 o acompañar a la pareja base + condición 2.</li>
-<li>Si cualquier condición 5 está ACTIVA o su estado no está comprobado, el grupo queda <b>Pendiente</b>.</li>
+<li>Al renumerar terrenos, si cualquier condición 5 está ACTIVA o su estado no está comprobado, el grupo queda <b>Pendiente</b>.</li>
 <li><b>PH (9) y condominios (8):</b> sus predios con el mismo prefijo provisional <b>1–22</b>
 comparten el terreno definitivo. Cada grupo consume <b>un solo consecutivo de terreno</b>,
 no un número por cada unidad.</li>

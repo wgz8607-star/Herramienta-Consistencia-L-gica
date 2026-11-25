@@ -1,10 +1,10 @@
-# Renumeración predial · v1.0.4
+# Renumeración predial · v1.0.5
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.4.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.5.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -39,7 +39,7 @@ Se habilita **Generar propuesta y comparar archivo** cuando hay R1 del mismo mun
 1. Se ordenan los provisionales de menor a mayor. Sus saltos no se trasladan al definitivo.
 2. Cada manzana/vereda provisional completa (1–17) recibe un consecutivo desde el máximo R1 + 1 del mismo prefijo territorial 1–13. Todos sus predios comparten el nuevo bloque 14–17.
 3. Dentro de una manzana/vereda existente, los terrenos se asignan desde su máximo R1 de posiciones 18–21 + 1.
-4. En manzanas/veredas nuevas, los grupos de terreno se enumeran desde 0001, en orden de sus provisionales.
+4. En manzanas/veredas nuevas, solo los grupos de terreno provisionales se enumeran desde 0001. Los terrenos numéricos no provisionales conservan 18–21 y no consumen consecutivo; solo se renumera su manzana/vereda.
 5. Un grupo de terreno (1–21) recibe un solo consecutivo. La condición 2 puede compartirlo con un predio base de condición 0, 3, 4, 8 o 9. Se permite además un tercer predio de condición 5 únicamente si su estado en la fuente es CANCELADO. Los predios de PH (9) y condominio (8) con el mismo prefijo 1–22 comparten el terreno.
 6. Se conservan la condición en posición 22 y todo el contenido 23–30.
 7. Si falta referencia R1, se agota 9999, se repite un terreno con una combinación no definida, o hay colisión de definitivos, se marca **Pendiente** sin generar NPN para esos registros. No se inventan máximos.
@@ -124,3 +124,7 @@ El botón **Ver lógica de renumeración**, disponible en la ventana principal y
 ## V1.0.4 · Excel con dimensiones internas incorrectas
 
 La comparación y lectura R1 recorren las filas reales de las hojas, incluso si el exportador declara incorrectamente un rango A1. No se modifica el Excel de origen. Verificado con un archivo real de 5.003 registros y con una prueba de regresión para columnas fuera de ese rango declarado.
+
+## V1.0.5 · Solo cambia la manzana/vereda si el terreno no es provisional
+
+Cuando 14–17 es provisional pero 18–21 no lo es, la propuesta modifica únicamente la manzana/vereda, conservando el terreno, la condición y el sufijo. Esos terrenos no se incluyen en el contador de asignación de terrenos provisionales, ni se vuelven a validar como una nueva agrupación de terreno compartido. Los casos de estado contradictorio o colisión de NPN siguen pendientes. La observación muestra Solo manzana/vereda; terreno conservado y el inicio de terreno indica No aplica. Ejemplo: el terreno 0008 permanece 0008 y el provisional 9001 inicia en 0001. El diagnóstico distingue terrenos por renumerar y terrenos que se conservan.

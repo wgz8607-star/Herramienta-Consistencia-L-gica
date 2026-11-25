@@ -334,3 +334,50 @@ class RenumberingTests(unittest.TestCase):
             _,sheet,header,_,column=inspect_excel(broken)
             self.assertEqual(column,1)
             self.assertEqual(len(list(file_records(broken,sheet,header,column))),2)
+
+    def test_user_case_0008_is_preserved_and_9001_starts_at_0001(self):
+        prefix='2368201000000'
+        reference=build_maxima([(1,prefix+'0119'+'0001'+'0'+'00000000')])
+        pairs=[
+            ('236820100000001210008500000003','236820100000090020008500000003'),
+            ('236820100000001210008500000002','236820100000090020008500000002'),
+            ('236820100000001210008500000001','236820100000090020008500000001'),
+            ('236820100000001210001000000000','236820100000090029001000000000'),
+            ('236820100000001210001200000000','236820100000090029001200000000'),
+            ('236820100000001210002200000000','236820100000090029002200000000'),
+            ('236820100000001210003200000000','236820100000090029003200000000'),
+            ('236820100000001210004200000000','236820100000090029004200000000'),
+            ('236820100000001210005200000000','236820100000090029005200000000'),
+            ('236820100000001210006200000000','236820100000090029006200000000'),
+            ('236820100000001210007200000000','236820100000090029007200000000')]
+        previous=prefix+'9001'+'0001'+'0'+'00000000'
+        records=[(1,previous,'ACTIVO')]+[(i+2,old,'CANCELADO' if old[21]=='5' else 'ACTIVO') for i,(_,old) in enumerate(pairs)]
+        candidates=identify_candidates(records,'CICA')['rows']
+        proposal=generate_proposal(candidates,reference,'CICA');by_old={row['old']:row for row in proposal}
+        for expected,old_value in pairs:
+            self.assertEqual(by_old[old_value]['new'],expected)
+            self.assertEqual(by_old[old_value]['status'],'Generado')
+        for _,old_value in pairs[:3]:
+            self.assertTrue(by_old[old_value]['terrain_preserved'])
+            self.assertIn('terreno conservado 0008',by_old[old_value]['reason'])
+        compared=compare_proposal(proposal,[{'line':i+2,'old':old_value,'new':expected} for i,(expected,old_value) in enumerate(pairs)],True)
+        self.assertEqual(sum(row['status']=='Coincide' for row in compared),11)
+
+    def test_internal_new_block_preserves_numeric_terrain_and_does_not_consume_sequence(self):
+        values=[old('A002','0008'),old('A002','A001'),old('A002','A009')]
+        proposal=generate(values,model='Modelo Interno');by_old={row['old']:row for row in proposal}
+        self.assertEqual(by_old[values[0]]['new'][17:21],'0008')
+        self.assertEqual(by_old[values[1]]['new'][17:21],'0001')
+        self.assertEqual(by_old[values[2]]['new'][17:21],'0002')
+        self.assertTrue(all(row['new'][13:17]=='0011' for row in proposal))
+
+    def test_preserved_terrain_is_displayed_as_unchanged_and_not_missing_reference(self):
+        from test_ui import app
+        from validador_renumeracion.dialog import MaximaDialog
+        from validador_renumeracion.candidate_dialog import CandidateDialog
+        from validador_renumeracion.proposal_dialog import ProposalDialog
+        owner=MaximaDialog();parent=CandidateDialog(owner);proposal=generate([old('9001','0008'),old('9001','9001')]);dialog=ProposalDialog(proposal,'Contexto',parent)
+        try:
+            value=dialog.enriched(next(row for row in proposal if row['terrain_preserved']))
+            self.assertEqual(value['base_t'],'Se conserva 0008');self.assertEqual(value['next_t'],'No aplica')
+        finally:dialog.close();parent.close();owner.close()

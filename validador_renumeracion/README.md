@@ -1,10 +1,10 @@
-# Renumeración predial · v1.0.1
+# Renumeración predial · v1.0.2
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.1.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.2.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -97,7 +97,7 @@ El botón **Consultar esquemas** aparece antes del selector. El desplegable agru
 
 El ZIP público v1.0.0 se descarga desde GitHub y no contiene contraseñas. Configura sentencias con admin_ant. Reutiliza el acceso del validador solo si coincide con ese usuario y servidor; de lo contrario pide la contraseña una vez por sesión. La configuración local privada continúa teniendo prioridad si existe.
 
-La versión V1 (1.0.1) muestra en la parte superior de sus ventanas **Renumeración predial · V1 · Generado el 25/11/2026**. La fecha identifica la generación del paquete y es independiente del corte CICA y de la vigencia R1.
+La versión V1 (1.0.2) muestra en la parte superior de sus ventanas **Renumeración predial · V1 · Generado el 25/11/2026**. La fecha identifica la generación del paquete y es independiente del corte CICA y de la vigencia R1.
 
 
 ## V1.0.1 · Estado del predio y tercer registro de condición 5
@@ -107,3 +107,7 @@ La versión V1 (1.0.1) muestra en la parte superior de sus ventanas **Renumeraci
 - Si faltan las relaciones para comprobar el estado, se muestra SIN INFORMACIÓN y no se inventa ACTIVO. Estados contradictorios del mismo NPN se señalan como ESTADO INCONSISTENTE.
 - El terreno compartido puede tener un predio base 0/3/4/8/9, su compañero de condición 2 y un tercero de condición 5 CANCELADO. Se admite un solo adicional de condición 5 por terreno. La condición 5 activa, desconocida o no asociada a la pareja válida queda Pendiente. Todos los miembros de un grupo válido reciben el mismo terreno; se conserva la condición y el sufijo de cada predio.
 - **Estado del predio** aparece en proyección/propuesta, comparación y exportaciones (incluida columna C de Renumeracion, manteniendo A nuevo / B provisional). Es el estado de la fuente consultada, no del Excel de comparación. Se conserva al recalcular la opción 090x.
+
+## V1.0.2 · Condición 5 como segundo predio
+
+Además del tercer registro junto al predio base y la condición 2, se admite un segundo registro de condición 5 CANCELADO junto a un predio base de condición distinta de 2 y 5 (0/1/3/4/6/7/8/9), sin exigir compañero de condición 2. Ambos reciben el mismo terreno definitivo. Si el único acompañante es condición 2, o la condición 5 está activa o sin estado comprobado, el grupo queda Pendiente. Las demás reglas de condición 2 y el máximo de un adicional de condición 5 se conservan.

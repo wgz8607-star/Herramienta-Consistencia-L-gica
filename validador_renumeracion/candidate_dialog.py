@@ -168,7 +168,7 @@ class CandidateDialog(QDialog):
         self.schema.setVisible(not cica);self.connection_form.labelForField(self.schema).setVisible(not cica)
         self.copy_label.setVisible(cica and self._copy_consulted)
         self.stats_button.setVisible(cica)
-        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base; se admite un tercero de condición 5 si está CANCELADO.')
+        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base; se admite condición 5 CANCELADO como segundo con base distinta de 2, o como tercero junto a base y condición 2.')
         if cica:self.schema.addItem('snc_cica_copy')
         self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.invalidate()
 

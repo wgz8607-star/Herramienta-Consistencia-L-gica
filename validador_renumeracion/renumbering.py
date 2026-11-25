@@ -66,9 +66,10 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
             if conditions['5']>1:error='Solo se admite un predio adicional de condición 5 cancelado por terreno'
             if len(family)>1:
                 bases=set(conditions)-{'2','5'}
-                if '5' in conditions and (not bases or '2' not in conditions):
-                    error='Condición 5 adicional sin predio base y compañero de condición 2'
-                if len(bases)>1 or not bases.issubset(set('03489')):
+                if '5' in conditions and not bases:
+                    error='Condición 5 adicional sin predio base diferente de condición 2'
+                allowed_bases=set('01346789') if '5' in conditions and '2' not in conditions else set('03489')
+                if len(bases)>1 or not bases.issubset(allowed_bases):
                     error='Terreno repetido: combinación de condiciones no definida'
                 elif '2' in conditions and not bases:
                     error='Condición 2 repetida sin predio base 0, 3, 4, 8 o 9'

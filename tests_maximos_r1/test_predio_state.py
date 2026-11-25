@@ -49,7 +49,7 @@ class PredioStateTests(unittest.TestCase):
     def test_additional_condition5_is_not_unrestricted_repetition(self):
         proposal,candidates,r1=projected()
         two=[row for row in candidates['rows'] if row[8]!='2']
-        self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(two,r1,'CICA')))
+        self.assertTrue(all(row['status']=='Generado' for row in generate_proposal(two,r1,'CICA')))
         extra=old('0010','9001','5',suffix='00000001')
         records=[(i,row[0],row[10]) for i,row in enumerate(candidates['rows'])]+[(5,extra,'CANCELADO')]
         rows=identify_candidates(records,'CICA')['rows']
@@ -119,3 +119,21 @@ class PredioStateTests(unittest.TestCase):
                 column=comparison[0].index('Estado del predio')
                 self.assertEqual(comparison[-1][column],'CANCELADO');book.close()
         finally:dialog.close();parent.close();owner.close()
+
+    def test_condition5_can_be_second_with_base_different_from_condition2(self):
+        r1=build_maxima([(1,npn(block='0010',plot='0020'))])
+        for model,plot in [('CICA','9001'),('Modelo Interno','A001')]:
+            for base in '01346789':
+                records=[(1,old('0010',plot,base),'ACTIVO'),(2,old('0010',plot,'5'),'CANCELADO')]
+                rows=identify_candidates(records,model)['rows'];proposal=generate_proposal(rows,r1,model)
+                self.assertTrue(all(row['status']=='Generado' for row in proposal),(model,base))
+                self.assertEqual({row['new'][17:21] for row in proposal},{'0021'})
+                self.assertEqual({row['new'][21] for row in proposal},{base,'5'})
+            pair2=identify_candidates([(1,old('0010',plot,'2'),'ACTIVO'),(2,old('0010',plot,'5'),'CANCELADO')],model)['rows']
+            self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(pair2,r1,model)))
+
+    def test_second_condition5_still_requires_cancelled_state(self):
+        r1=build_maxima([(1,npn(block='0010',plot='0020'))])
+        for state in ('ACTIVO',None):
+            rows=identify_candidates([(1,old('0010','9001','0'),'ACTIVO'),(2,old('0010','9001','5'),state)],'CICA')['rows']
+            self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(rows,r1,'CICA')))

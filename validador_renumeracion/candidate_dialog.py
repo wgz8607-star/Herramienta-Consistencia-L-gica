@@ -168,7 +168,7 @@ class CandidateDialog(QDialog):
         self.schema.setVisible(not cica);self.connection_form.labelForField(self.schema).setVisible(not cica)
         self.copy_label.setVisible(cica and self._copy_consulted)
         self.stats_button.setVisible(cica)
-        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base.')
+        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base; se admite un tercero de condición 5 si está CANCELADO.')
         if cica:self.schema.addItem('snc_cica_copy')
         self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.invalidate()
 
@@ -318,7 +318,8 @@ class CandidateDialog(QDialog):
         rows=self.selected_candidate_rows()
         if self.result is not None:
             new_blocks=len({row[0][:17] for row in rows if row[7] in ('Manzana','Manzana y terreno')})
-            self.scope_status.setText(f'Selección: {len(rows)} predios · {len({row[0][:21] for row in rows})} terrenos distintos · {new_blocks} manzanas/veredas nuevas. Un grupo de terreno consume un consecutivo.')
+            active=sum(len(row)>10 and row[10]=='ACTIVO' for row in rows);cancelled=sum(len(row)>10 and row[10]=='CANCELADO' for row in rows)
+            self.scope_status.setText(f'Selección: {len(rows)} predios · {len({row[0][:21] for row in rows})} terrenos distintos · {new_blocks} manzanas/veredas nuevas · Activos: {active} · Cancelados: {cancelled} · Otros/sin información: {len(rows)-active-cancelled}. Un grupo de terreno consume un consecutivo.')
         same=bool(rows) and bool(self._r1_code) and {row[0][:5] for row in rows}=={self._r1_code}
         self.propose_button.setEnabled(same and self.owner.result is not None)
         if rows and not same:self.propose_button.setToolTip('Lea el R1 del mismo municipio de los provisionales seleccionados.')

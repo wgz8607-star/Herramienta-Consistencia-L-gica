@@ -1,10 +1,10 @@
-# Renumeración predial · v1.0.0
+# Renumeración predial · v1.0.1
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.0.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.1.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -40,7 +40,7 @@ Se habilita **Generar propuesta y comparar archivo** cuando hay R1 del mismo mun
 2. Cada manzana/vereda provisional completa (1–17) recibe un consecutivo desde el máximo R1 + 1 del mismo prefijo territorial 1–13. Todos sus predios comparten el nuevo bloque 14–17.
 3. Dentro de una manzana/vereda existente, los terrenos se asignan desde su máximo R1 de posiciones 18–21 + 1.
 4. En manzanas/veredas nuevas, los grupos de terreno se enumeran desde 0001, en orden de sus provisionales.
-5. Un grupo de terreno (1–21) recibe un solo consecutivo. La condición 2 puede compartirlo con un predio base de condición 0, 3, 4, 8 o 9. Los predios de PH (9) y condominio (8) con el mismo prefijo 1–22 comparten el terreno.
+5. Un grupo de terreno (1–21) recibe un solo consecutivo. La condición 2 puede compartirlo con un predio base de condición 0, 3, 4, 8 o 9. Se permite además un tercer predio de condición 5 únicamente si su estado en la fuente es CANCELADO. Los predios de PH (9) y condominio (8) con el mismo prefijo 1–22 comparten el terreno.
 6. Se conservan la condición en posición 22 y todo el contenido 23–30.
 7. Si falta referencia R1, se agota 9999, se repite un terreno con una combinación no definida, o hay colisión de definitivos, se marca **Pendiente** sin generar NPN para esos registros. No se inventan máximos.
 
@@ -97,4 +97,13 @@ El botón **Consultar esquemas** aparece antes del selector. El desplegable agru
 
 El ZIP público v1.0.0 se descarga desde GitHub y no contiene contraseñas. Configura sentencias con admin_ant. Reutiliza el acceso del validador solo si coincide con ese usuario y servidor; de lo contrario pide la contraseña una vez por sesión. La configuración local privada continúa teniendo prioridad si existe.
 
-La versión V1 (1.0.0) muestra en la parte superior de sus ventanas **Renumeración predial · V1 · Generado el 24/11/2026**. La fecha identifica la generación del paquete y es independiente del corte CICA y de la vigencia R1.
+La versión V1 (1.0.1) muestra en la parte superior de sus ventanas **Renumeración predial · V1 · Generado el 25/11/2026**. La fecha identifica la generación del paquete y es independiente del corte CICA y de la vigencia R1.
+
+
+## V1.0.1 · Estado del predio y tercer registro de condición 5
+
+- **CICA:** el estado se lee directamente de `snc_cica_copy.cica_predio.estado`, conservando los filtros VALIDADO / DESCARGADO_AL_SNC.
+- **Modelo Interno:** CANCELADO si existe alguna novedad asociada al predio cuyo `ilicode` contenga `cancelacion`, sin distinguir mayúsculas ni tilde; ACTIVO si no existe tal novedad. Se usan las relaciones `ilc_datosadicionaleslevantamientocatastral`, `ilc_estructuranovedadnumeropredial` y su dominio `ilc_estructuranovedadnumeropredial_tipo_novedad`, como en el validador, con `EXISTS` para no multiplicar predios. No se utiliza el campo estado del Modelo Interno como sustituto de esa regla.
+- Si faltan las relaciones para comprobar el estado, se muestra SIN INFORMACIÓN y no se inventa ACTIVO. Estados contradictorios del mismo NPN se señalan como ESTADO INCONSISTENTE.
+- El terreno compartido puede tener un predio base 0/3/4/8/9, su compañero de condición 2 y un tercero de condición 5 CANCELADO. Se admite un solo adicional de condición 5 por terreno. La condición 5 activa, desconocida o no asociada a la pareja válida queda Pendiente. Todos los miembros de un grupo válido reciben el mismo terreno; se conserva la condición y el sufijo de cada predio.
+- **Estado del predio** aparece en proyección/propuesta, comparación y exportaciones (incluida columna C de Renumeracion, manteniendo A nuevo / B provisional). Es el estado de la fuente consultada, no del Excel de comparación. Se conserva al recalcular la opción 090x.

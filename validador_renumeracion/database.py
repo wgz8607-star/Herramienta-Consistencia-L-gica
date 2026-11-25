@@ -58,6 +58,35 @@ def cica_access(cursor):
     return details
 
 
+def source_state_expression(cursor,schema,model,columns):
+    if model=='CICA':
+        return (sql.SQL('{}::text').format(sql.Identifier('p',columns['estado'])) if 'estado' in columns else sql.SQL('NULL::text')),()
+    if 't_id' not in columns:return sql.SQL('NULL::text'),()
+    needed={
+        'ilc_datosadicionaleslevantamientocatastral':{'t_id','ilc_predio'},
+        'ilc_estructuranovedadnumeropredial':{'ilc_dtsdcnltmntctstral_novedad_numeros_prediales','tipo_novedad'},
+        'ilc_estructuranovedadnumeropredial_tipo_novedad':{'t_id','ilicode'},
+    }
+    cursor.execute('SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=%s AND lower(table_name)=ANY(%s)',(schema,list(needed)))
+    tables={};fields={name:{} for name in needed}
+    for table,column in cursor.fetchall():
+        name=table.lower()
+        if name in fields:tables[name]=table;fields[name][column.lower()]=column
+    if any(not names.issubset(fields[table]) for table,names in needed.items()):return sql.SQL('NULL::text'),()
+    d,n,t=needed
+    expression=sql.SQL("""CASE WHEN EXISTS (
+        SELECT 1 FROM {d} d JOIN {n} n ON n.{link}=d.{dtid}
+        JOIN {t} t ON t.{ttid}=n.{typeid}
+        WHERE d.{predio}=p.{ptid}
+        AND translate(lower(coalesce(t.{label}::text,'')), 'áéíóúüñ', 'aeiouun') LIKE %s
+        ) THEN 'CANCELADO' ELSE 'ACTIVO' END""").format(
+        d=sql.Identifier(schema,tables[d]),n=sql.Identifier(schema,tables[n]),t=sql.Identifier(schema,tables[t]),
+        link=sql.Identifier(fields[n]['ilc_dtsdcnltmntctstral_novedad_numeros_prediales']),dtid=sql.Identifier(fields[d]['t_id']),
+        ttid=sql.Identifier(fields[t]['t_id']),typeid=sql.Identifier(fields[n]['tipo_novedad']),
+        predio=sql.Identifier(fields[d]['ilc_predio']),ptid=sql.Identifier(columns['t_id']),label=sql.Identifier(fields[t]['ilicode']))
+    return expression,('%cancelacion%',)
+
+
 def source_records(params,model,schema,municipality='',zones=None):
     if model=='CICA' and zones is not None and (not zones or set(zones)-{'URBANO','CP','RURAL'}):
         raise ValueError('Seleccione al menos una zona válida para CICA.')
@@ -70,14 +99,17 @@ def source_records(params,model,schema,municipality='',zones=None):
             with connection.cursor() as cursor:
                 cursor.execute("SET LOCAL statement_timeout='90s'")
                 if model=='CICA':cica_access(cursor)
-                cursor.execute("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=%s AND lower(table_name)=%s AND lower(column_name) IN ('numero_predial','numero_predial_nacional') ORDER BY CASE WHEN lower(column_name)='numero_predial' THEN 0 ELSE 1 END",(schema,expected))
+                cursor.execute("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=%s AND lower(table_name)=%s AND lower(column_name) IN ('numero_predial','numero_predial_nacional','estado','t_id') ORDER BY CASE WHEN lower(column_name)='numero_predial' THEN 0 ELSE 1 END",(schema,expected))
                 fields=cursor.fetchall()
-                if not fields:raise ValueError('No se encontró '+schema+'.'+expected+' con columna de número predial accesible.')
-                table,column=fields[0]
+                npn_fields=[(table,column) for table,column in fields if column.lower() in ('numero_predial','numero_predial_nacional')]
+                if not npn_fields:raise ValueError('No se encontró '+schema+'.'+expected+' con columna de número predial accesible.')
+                table,column=npn_fields[0]
+                columns={name.lower():name for name_table,name in fields if name_table==table}
+                state_expression,state_args=source_state_expression(cursor,schema,model,columns)
             with connection.cursor(name='provisional_reader') as cursor:
                 cursor.itersize=2000
-                query=sql.SQL('SELECT {c}::text FROM {s}.{t}').format(c=sql.Identifier(column),s=sql.Identifier(schema),t=sql.Identifier(table))
-                filters=[];args=[]
+                query=sql.SQL('SELECT {c}::text, {state} AS predio_estado FROM {s}.{t} AS p').format(c=sql.Identifier(column),state=state_expression,s=sql.Identifier(schema),t=sql.Identifier(table))
+                filters=[];args=list(state_args)
                 if model=='CICA':
                     filters.append(sql.SQL('{}=%s AND {}=%s').format(sql.Identifier('etapa'),sql.Identifier('estado_control')))
                     args.extend(['VALIDADO','DESCARGADO_AL_SNC'])
@@ -91,7 +123,7 @@ def source_records(params,model,schema,municipality='',zones=None):
                     filters.append(sql.SQL('left(trim({}::text),5)=%s').format(sql.Identifier(column)));args.append(municipality)
                 if filters:query+=sql.SQL(' WHERE ')+sql.SQL(' AND ').join(filters)
                 cursor.execute(query,tuple(args))
-                for number,row in enumerate(cursor,1):yield number,row[0]
+                for number,row in enumerate(cursor,1):yield number,row[0],row[1] if len(row)>1 else None
 
 
 def cica_municipalities(params):

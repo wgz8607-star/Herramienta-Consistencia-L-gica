@@ -1,17 +1,25 @@
 """Identify provisional NPNs without changing or approving renumerations."""
 import re
+from collections import defaultdict
+
+
+def predio_state(value):
+    return str(value).strip().upper() if value is not None and str(value).strip() else 'SIN INFORMACIÓN'
 
 
 def identify_candidates(records,model):
     if model not in ('CICA','Modelo Interno'):raise ValueError('Fuente no reconocida.')
-    seen=set();rows=[];invalid=[];duplicates=total=0
-    for number,raw in records:
+    seen=set();rows=[];invalid=[];duplicates=total=0;states=defaultdict(set)
+    for record in records:
+        number,raw=record[:2]
+        state=predio_state(record[2] if len(record)>2 else None)
         total+=1
         npn=raw.strip() if isinstance(raw,str) else ''
         if not re.fullmatch(r'[0-9A-Za-z]{30}',npn) or not npn[:13].isdigit() or not npn[21:].isdigit():
             invalid.append((number,str(raw or ''),'NPN de 30 caracteres no válido'));continue
         if model=='CICA' and not npn.isdigit():
             invalid.append((number,npn,'CICA requiere NPN numérico'));continue
+        states[npn].add(state)
         if npn in seen:duplicates+=1;continue
         seen.add(npn)
         provisional=lambda value:value in '789' if model=='CICA' else value.isalpha()
@@ -20,6 +28,7 @@ def identify_candidates(records,model):
         kind='Manzana y terreno' if manzana and terreno else 'Manzana' if manzana else 'Terreno'
         pending='Condición '+npn[21]+': revisión especial pendiente' if npn[21] in '89' else 'Provisional identificado'
         rows.append((npn,npn[:5],npn[5:7],npn[:13],npn[13:17],npn[:17],npn[17:21],kind,npn[21],pending))
+    rows=[row+(next(iter(states[row[0]])) if len(states[row[0]])==1 else 'ESTADO INCONSISTENTE',) for row in rows]
     return {'total':total,'unique':len(seen),'duplicates':duplicates,'invalid':invalid,'rows':sorted(rows)}
 
 

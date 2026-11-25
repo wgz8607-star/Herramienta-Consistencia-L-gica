@@ -16,7 +16,7 @@ class CandidateTests(unittest.TestCase):
     def test_model_any_letter_special_condition_and_invalids(self):
         result=identify_candidates(enumerate([self.code(m='Z001'),self.code(t='c001',condition='9'),self.code(m='9001'),'123',None],1),'Modelo Interno')
         self.assertEqual(len(result['rows']),2);self.assertEqual(len(result['invalid']),2)
-        self.assertTrue(any('revisión especial pendiente' in row[-1] for row in result['rows']))
+        self.assertTrue(any('revisión especial pendiente' in row[9] for row in result['rows']))
         self.assertEqual(len(identify_candidates([(1,self.code(m='A001'))],'CICA')['invalid']),1)
 
     def test_source_dialog_resets_and_uses_explicit_connection_source(self):

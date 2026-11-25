@@ -3,6 +3,7 @@ from collections import defaultdict,Counter
 import re
 from openpyxl import load_workbook
 from .readers import normalized
+from .candidates import predio_state
 
 
 def provisional(value,model):
@@ -24,8 +25,13 @@ def terrain_baselines(r1,take_090x_as_max=False):
 
 def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
     if model not in ('CICA','Modelo Interno'):raise ValueError('Fuente no reconocida.')
+    candidate_rows=list(candidate_rows)
     prefix_max={r['prefix13']:int(r['max_m']) for r in r1.prefixes}
     terrain_max=terrain_baselines(r1,take_090x_as_max)
+    state_values=defaultdict(set)
+    for row in candidate_rows:
+        state_values[row[0]].add(predio_state(row[10] if len(row)>10 else row[1] if len(row)==2 else None))
+    states={old:next(iter(values)) if len(values)==1 else 'ESTADO INCONSISTENTE' for old,values in state_values.items()}
     blocks=defaultdict(list)
     for old in sorted({r[0] for r in candidate_rows if provisional(r[0][13],model) or provisional(r[0][17],model)}):blocks[old[:17]].append(old)
     new_blocks=defaultdict(list)
@@ -55,8 +61,13 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
             conditions=Counter(n[21] for n in family)
             # A complete PH/condominio family shares its 1–22 prefix. A condition-2
             # companion shares the terrain with one of the explicitly permitted bases.
+            if any(states[n]=='ESTADO INCONSISTENTE' for n in family):error='Estados contradictorios para el mismo NPN en la fuente'
+            if any(n[21]=='5' and states[n]!='CANCELADO' for n in family):error='Condición 5 adicional: requiere estado CANCELADO comprobado'
+            if conditions['5']>1:error='Solo se admite un predio adicional de condición 5 cancelado por terreno'
             if len(family)>1:
-                bases=set(conditions)-{'2'}
+                bases=set(conditions)-{'2','5'}
+                if '5' in conditions and (not bases or '2' not in conditions):
+                    error='Condición 5 adicional sin predio base y compañero de condición 2'
                 if len(bases)>1 or not bases.issubset(set('03489')):
                     error='Terreno repetido: combinación de condiciones no definida'
                 elif '2' in conditions and not bases:
@@ -69,7 +80,7 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
                     'reason':error or ('Manzana/vereda nueva' if is_new else 'Terreno en manzana/vereda existente'),
                     'prefix13':old[:13],'old_block':block,'new_block':target_block if not block_error else '',
                     'base_m':prefix_max.get(old[:13]),
-                    'base_t':baseline,'family':plot,'condition':old[21]})
+                    'base_t':baseline,'family':plot,'condition':old[21],'predio_state':states[old]})
     existing=set(getattr(r1,'r1_numbers',()))
     targets=Counter(row['new'] for row in output if row['new'])
     for row in output:
@@ -124,5 +135,5 @@ def compare_proposal(proposal,file_rows,only_provisionals=False):
                 status='Sin cambio fuera del alcance' if actual==old else 'Fuera del alcance consultado'
                 reason='No corresponde a los provisionales identificados en la fuente seleccionada'
             result.append({'old':old,'expected':target['new'] if target else '', 'actual':actual,
-                           'status':status,'reason':reason,'line':entry['line'] if entry else ''})
+                           'status':status,'reason':reason,'line':entry['line'] if entry else '', 'predio_state':target.get('predio_state','SIN INFORMACIÓN') if target else 'SIN INFORMACIÓN'})
     return result

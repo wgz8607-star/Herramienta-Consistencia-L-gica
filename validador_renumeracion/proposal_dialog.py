@@ -9,8 +9,8 @@ from openpyxl import load_workbook,Workbook
 from openpyxl.styles import Font,PatternFill
 from .renumbering import read_comparison,compare_proposal,generate_proposal
 
-PROPOSAL_FIELDS=[('Provisional','old'),('Definitivo esperado','new'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t')]
-COMPARE_FIELDS=[('Provisional','old'),('Definitivo esperado','expected'),('Definitivo del archivo','actual'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t'),('Fila Excel','line')]
+PROPOSAL_FIELDS=[('Provisional','old'),('Definitivo esperado','new'),('Estado del predio','predio_state'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t')]
+COMPARE_FIELDS=[('Provisional','old'),('Definitivo esperado','expected'),('Definitivo del archivo','actual'),('Estado del predio','predio_state'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t'),('Fila Excel','line')]
 
 
 
@@ -21,7 +21,7 @@ class ProposalDialog(QDialog):
         self.fields={'Propuesta':[('Prefijo territorial','territory'),('Agrupación','grouping')]+PROPOSAL_FIELDS,'Comparación':[('Prefijo territorial','territory'),('Agrupación','grouping')]+COMPARE_FIELDS}
         reference=getattr(getattr(parent,'owner',None),'result',None)
         self.reference=reference;self.applied_090x=False;self.compared=False
-        self.generation_rows=[(row['old'],) for row in proposal]
+        self.generation_rows=[(row['old'],row.get('predio_state')) for row in proposal]
         self.generation_model='Modelo Interno' if hasattr(parent,'model') and parent.model.currentText()!='CICA' else 'CICA'
         self.prefix_max={row['prefix13']:int(row['max_m']) for row in reference.prefixes} if reference is not None else {}
         for row in proposal:
@@ -101,7 +101,7 @@ class ProposalDialog(QDialog):
 
     def enriched(self,row):
         target=self.by_old[row['old']];maximum=self.prefix_max.get(row['old'][:13]);terrain=target.get('base_t')
-        return dict(row,territory=row['old'][:17],grouping=('Vereda' if row['old'][5:7]=='00' else 'Manzana')+' (1–17)',base_m=self.code(maximum),next_m=self.following(maximum),base_t=self.code(terrain),next_t=self.following(terrain))
+        return dict(row,predio_state=target.get('predio_state','SIN INFORMACIÓN'),territory=row['old'][:17],grouping=('Vereda' if row['old'][5:7]=='00' else 'Manzana')+' (1–17)',base_m=self.code(maximum),next_m=self.following(maximum),base_t=self.code(terrain),next_t=self.following(terrain))
 
     def visible_data(self,name):
         data=self.proposal if name=='Propuesta' else self.comparison
@@ -227,8 +227,8 @@ class ProposalDialog(QDialog):
             for status,count in sorted(Counter(r['status'] for r in self.proposal).items()):summary.append(['Propuesta completa · '+status,count])
             for status,count in sorted(Counter(r['status'] for r in self.visible_data('Propuesta')).items()):summary.append(['Propuesta visible · '+status,count])
             for status,count in sorted(Counter(r['status'] for r in self.visible_data('Comparación')).items()):summary.append(['Comparación · '+status,count])
-            sheet=book.create_sheet('Renumeracion');sheet.append(['Nuevo esperado','Provisional','Resultado','Observación'])
-            for row in self.visible_data('Propuesta'):sheet.append([row['new'],row['old'],row['status'],row['reason']])
+            sheet=book.create_sheet('Renumeracion');sheet.append(['Nuevo esperado','Provisional','Estado del predio','Resultado','Observación'])
+            for row in self.visible_data('Propuesta'):sheet.append([row['new'],row['old'],row.get('predio_state','SIN INFORMACIÓN'),row['status'],row['reason']])
             audit=book.create_sheet('Bases R1');audit.append([label for label,_ in PROPOSAL_FIELDS])
             for row in self.visible_data('Propuesta'):audit.append([row.get(key) for _,key in PROPOSAL_FIELDS])
             sheet=book.create_sheet('Comparacion');sheet.append([label for label,_ in COMPARE_FIELDS])

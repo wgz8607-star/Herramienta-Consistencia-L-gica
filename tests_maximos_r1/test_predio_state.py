@@ -53,7 +53,9 @@ class PredioStateTests(unittest.TestCase):
         extra=old('0010','9001','5',suffix='00000001')
         records=[(i,row[0],row[10]) for i,row in enumerate(candidates['rows'])]+[(5,extra,'CANCELADO')]
         rows=identify_candidates(records,'CICA')['rows']
-        self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(rows,r1,'CICA')))
+        proposal=generate_proposal(rows,r1,'CICA')
+        self.assertTrue(all(row['status']=='Generado' for row in proposal))
+        self.assertEqual({row['new'][17:21] for row in proposal},{'0021'})
 
     def test_duplicate_npn_with_conflicting_states_is_reported(self):
         number=old('0010','9001','5')
@@ -137,3 +139,31 @@ class PredioStateTests(unittest.TestCase):
         for state in ('ACTIVO',None):
             rows=identify_candidates([(1,old('0010','9001','0'),'ACTIVO'),(2,old('0010','9001','5'),state)],'CICA')['rows']
             self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(rows,r1,'CICA')))
+
+    def test_multiple_condition5_cancelled_records_share_one_terrain(self):
+        r1=build_maxima([(1,npn(block='0010',plot='0020'))])
+        for base in '01346789':
+            for with_condition2 in (False,True):
+                if with_condition2 and base not in '03489':continue
+                records=[(1,old('0010','9001',base),'ACTIVO')]
+                if with_condition2:records.append((2,old('0010','9001','2'),'ACTIVO'))
+                records.extend((10+i,old('0010','9001','5',suffix=f'{i:08d}'),'CANCELADO') for i in range(4))
+                proposal=generate_proposal(identify_candidates(records,'CICA')['rows'],r1,'CICA')
+                self.assertTrue(all(row['status']=='Generado' for row in proposal),(base,with_condition2))
+                self.assertEqual({row['new'][17:21] for row in proposal},{'0021'})
+                self.assertTrue(all(row['new'][21:]==row['old'][21:] for row in proposal))
+                active5=list(records);active5[-1]=(active5[-1][0],active5[-1][1],'ACTIVO')
+                self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(identify_candidates(active5,'CICA')['rows'],r1,'CICA')))
+
+    def test_unlimited_repetition_is_not_extended_to_other_conditions(self):
+        r1=build_maxima([(1,npn(block='0010',plot='0020'))])
+        for base in '013467':
+            records=[(1,old('0010','9001',base,suffix='00000001'),'ACTIVO'),(2,old('0010','9001',base,suffix='00000002'),'ACTIVO'),(3,old('0010','9001','5'),'CANCELADO')]
+            self.assertTrue(all(row['status']=='Pendiente' for row in generate_proposal(identify_candidates(records,'CICA')['rows'],r1,'CICA')))
+
+    def test_multiple_condition2_not_enabled_by_condition5_rule(self):
+        r1=build_maxima([(1,npn(block='0010',plot='0020'))])
+        records=[(1,old('0010','9001','0'),'ACTIVO'),(2,old('0010','9001','2',suffix='00000001'),'ACTIVO'),(3,old('0010','9001','2',suffix='00000002'),'ACTIVO'),(4,old('0010','9001','5'),'CANCELADO')]
+        proposal=generate_proposal(identify_candidates(records,'CICA')['rows'],r1,'CICA')
+        self.assertTrue(all(row['status']=='Pendiente' for row in proposal))
+        self.assertTrue(all('condición 2' in row['reason'] for row in proposal))

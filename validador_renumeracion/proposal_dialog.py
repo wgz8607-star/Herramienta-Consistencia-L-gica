@@ -1,4 +1,6 @@
 from .build_info import TITLE
+from .logic_dialog import show_renumbering_logic
+from .provisional_style import ProvisionalLabel,emphasize_item,emphasize_workbook
 """Review and compare a proposal. This module never writes to a database."""
 from collections import Counter
 from pathlib import Path
@@ -33,14 +35,14 @@ class ProposalDialog(QDialog):
         self.build_title=QLabel(TITLE);self.build_title.setStyleSheet('font-weight: bold; color: #0066B3;');layout.addWidget(self.build_title)
         title=QLabel('3. Propuesta y comparación');title.setStyleSheet('font-size: 22px; color: #0066B3; font-weight: bold;');layout.addWidget(title)
         origin=QLabel(context);origin.setWordWrap(True);layout.addWidget(origin)
-        note=QLabel('Propuesta de consulta: no modifica la base. Consecutivos sin saltos, en orden de provisionales. Excel de comparación: A = nuevo; B = provisional. Los pendientes no se aprueban. «Coincide» compara archivo y propuesta; no acredita cambios aplicados en la base.');note.setWordWrap(True);layout.addWidget(note)
+        note=ProvisionalLabel('Propuesta de consulta: no modifica la base. Consecutivos sin saltos, en orden de provisionales. Excel de comparación: A = nuevo; B = provisional. Los pendientes no se aprueban. «Coincide» compara archivo y propuesta; no acredita cambios aplicados en la base.');note.setWordWrap(True);layout.addWidget(note)
         totals=Counter(row['status'] for row in proposal)
-        self.summary=QLabel(f'Provisionales en la propuesta: {len(proposal)} · Generados: {totals["Generado"]} · Pendientes: {totals["Pendiente"]}');self.summary.setWordWrap(True);layout.addWidget(self.summary)
+        self.summary=ProvisionalLabel(f'Provisionales en la propuesta: {len(proposal)} · Generados: {totals["Generado"]} · Pendientes: {totals["Pendiente"]}');self.summary.setWordWrap(True);layout.addWidget(self.summary)
         self.take_090x=QCheckBox('Tomar terrenos 090x (0900–0909), condición 9, como máximos R1');self.take_090x.setChecked(False);self.take_090x.setEnabled(reference is not None and bool(proposal));self.take_090x.toggled.connect(self.recalculate);layout.addWidget(self.take_090x)
         self.policy_status=QLabel('Sin marcar: los terrenos 090x con condición 9 no elevan el máximo de terreno. Los máximos de manzana/vereda se conservan.');self.policy_status.setWordWrap(True);layout.addWidget(self.policy_status)
         row=QHBoxLayout();self.browse=QPushButton('Cargar archivo de renumeración…');self.browse.clicked.connect(self.choose_file);row.addWidget(self.browse)
         self.sheet=QComboBox();row.addWidget(self.sheet,1);self.compare_button=QPushButton('Comparar columnas A / B');self.compare_button.setEnabled(False);self.compare_button.clicked.connect(self.compare);row.addWidget(self.compare_button);layout.addLayout(row)
-        self.file_status=QLabel('Archivo pendiente de cargar. Solo se presentan los provisionales de la propuesta seleccionada.');self.file_status.setWordWrap(True);layout.addWidget(self.file_status)
+        self.file_status=ProvisionalLabel('Archivo pendiente de cargar. Solo se presentan los provisionales de la propuesta seleccionada.');self.file_status.setWordWrap(True);layout.addWidget(self.file_status)
         row=QHBoxLayout();self.status_filter=QComboBox();self.status_filter.addItem('Todos los resultados','');self.search=QLineEdit();self.search.setPlaceholderText('Buscar NPN o prefijo…');row.addWidget(self.status_filter);row.addWidget(self.search,1);layout.addLayout(row)
         controls=QHBoxLayout();controls.addWidget(QLabel('Desagregación de la vista'))
         self.view_level=QComboBox();self.view_level.addItems(['Sectores · posiciones 1–9','Sector y subdivisión · 1–9 → 10–13','Detalle de provisionales'])
@@ -50,7 +52,7 @@ class ProposalDialog(QDialog):
         for name,fields in self.fields.items():
             tree=QTreeWidget();tree.setRootIsDecorated(True);tree.setAlternatingRowColors(True);tree.setHeaderLabels([label+' ▾' for label,_ in fields]);tree.header().setSectionsClickable(True);tree.header().sectionClicked.connect(lambda column,view=name:self.open_column_filter(view,column));self.tabs.addTab(tree,name);self.views[name]=tree
         self.invalid=QTreeWidget();self.invalid.setRootIsDecorated(False);self.invalid.setHeaderLabels(['Fila Excel','A · Nuevo','B · Provisional','Motivo']);self.tabs.addTab(self.invalid,'Filas no utilizadas');layout.addWidget(self.tabs,1)
-        row=QHBoxLayout();export=QPushButton('Exportar propuesta y comparación');export.clicked.connect(self.export);row.addWidget(export);row.addStretch();close=QPushButton('Cerrar');close.clicked.connect(self.accept);row.addWidget(close);layout.addLayout(row)
+        row=QHBoxLayout();export=QPushButton('Exportar propuesta y comparación');export.clicked.connect(self.export);row.addWidget(export);self.logic_button=QPushButton('Ver lógica de renumeración');self.logic_button.clicked.connect(lambda:show_renumbering_logic(self));row.addWidget(self.logic_button);row.addStretch();close=QPushButton('Cerrar');close.clicked.connect(self.accept);row.addWidget(close);layout.addLayout(row)
         self.sheet.currentTextChanged.connect(self.clear_comparison);self.tabs.currentChanged.connect(self.update_filters);self.status_filter.currentIndexChanged.connect(self.render);self.search.textChanged.connect(self.render);self.update_filters()
 
     def apply_view_level(self,*_):
@@ -176,13 +178,18 @@ class ProposalDialog(QDialog):
                     font=child.font(0);font.setBold(True)
                     for column in range(len(fields)):child.setFont(column,font);child.setBackground(column,QColor('#F3F6FA'))
                     child.setToolTip(0,'Prefijo completo 1–13: '+prefix13);roots[prefix9].addChild(child);children[prefix13]=child
+                    for column,(_,key) in enumerate(fields):
+                        if key=='status':emphasize_item(child,column)
                 item=QTreeWidgetItem(['' if row.get(key) is None else str(row.get(key,'')) for _,key in fields])
                 color='#217346' if row['status']=='Coincide' else '#BE594D' if row['status'] in ('Diferencia','Provisional duplicado en archivo','Definitivo duplicado en archivo') else '#9B6400' if 'Pendiente' in row['status'] or row['status']=='Falta en archivo' else '#17324D'
                 for column in range(len(fields)):item.setForeground(column,QColor(color))
+                for column,(_,key) in enumerate(fields):
+                    if key=='old':emphasize_item(item,column)
                 children[prefix13].addChild(item)
             for prefix9,root in roots.items():
                 for column,(_,key) in enumerate(fields):
-                    if key=='status':root.setText(column,str(sum(info['count'] for prefix,info in group_info.items() if prefix.startswith(prefix9)))+' provisionales')
+                    if key=='status':
+                        root.setText(column,str(sum(info['count'] for prefix,info in group_info.items() if prefix.startswith(prefix9)))+' provisionales');emphasize_item(root,column)
                     if key in ('base_m','next_m'):
                         subgroups=[info for prefix,info in group_info.items() if prefix.startswith(prefix9)]
                         root.setText(column,subgroups[0]['max_m' if key=='base_m' else 'next_m'] if len(subgroups)==1 else 'Ver subgrupos 10–13')
@@ -246,5 +253,6 @@ class ProposalDialog(QDialog):
                 for row in sheet:
                     for cell in row:
                         if isinstance(cell.value,str):cell.data_type='s'
+            emphasize_workbook(book)
             book.save(filename);book.close();self.file_status.setText('Exportado: '+filename)
         except Exception as error:QMessageBox.warning(self,'No se exportó',str(error))

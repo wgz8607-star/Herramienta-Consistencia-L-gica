@@ -1,4 +1,4 @@
 """Build identity, fixed when the plugin package is generated."""
-VERSION='1.0.2'
+VERSION='1.0.3'
 GENERATED_ON='25/11/2026'
 TITLE=f'Renumeración predial · V1 · Generado el {GENERATED_ON}'

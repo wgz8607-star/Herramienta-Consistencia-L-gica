@@ -63,7 +63,7 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
             # companion shares the terrain with one of the explicitly permitted bases.
             if any(states[n]=='ESTADO INCONSISTENTE' for n in family):error='Estados contradictorios para el mismo NPN en la fuente'
             if any(n[21]=='5' and states[n]!='CANCELADO' for n in family):error='Condición 5 adicional: requiere estado CANCELADO comprobado'
-            if conditions['5']>1:error='Solo se admite un predio adicional de condición 5 cancelado por terreno'
+            if conditions['2']>1:error='Solo se admite un compañero de condición 2 por terreno'
             if len(family)>1:
                 bases=set(conditions)-{'2','5'}
                 if '5' in conditions and not bases:

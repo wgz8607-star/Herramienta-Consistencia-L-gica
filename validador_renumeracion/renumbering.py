@@ -98,6 +98,7 @@ def read_comparison(filename,sheet=None):
     rows=[];invalid=[]
     try:
         worksheet=book[sheet] if sheet else book[book.sheetnames[0]]
+        worksheet.reset_dimensions()  # Some exporters declare A1 despite having thousands of rows.
         for number,values in enumerate(worksheet.iter_rows(max_col=2,values_only=True),1):
             new,old=values
             if new in (None,'') and old in (None,''):continue

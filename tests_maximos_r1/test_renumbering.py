@@ -304,3 +304,33 @@ class RenumberingTests(unittest.TestCase):
             for tree in dialog.views.values():self.assertFalse(tree.topLevelItem(0).isExpanded())
             self.assertEqual(dialog.proposal,before)
         finally:dialog.close();parent.close();owner.close()
+
+    def test_excel_with_false_a1_dimension_reads_actual_rows_without_modifying_file(self):
+        import zipfile,re
+        from validador_renumeracion.readers import inspect_excel,file_records
+        with tempfile.TemporaryDirectory() as directory:
+            original=Path(directory)/'original.xlsx';broken=Path(directory)/'exportado.xlsx'
+            proposal=generate([old(),old('9003')])
+            book=Workbook();sheet=book.active;sheet.title='resumen'
+            sheet.append(['Número predial SNC','Número predial CICA'])
+            for row in proposal:sheet.append([row['new'],row['old']])
+            book.save(original);book.close()
+            with zipfile.ZipFile(original) as source,zipfile.ZipFile(broken,'w',zipfile.ZIP_DEFLATED) as target:
+                for entry in source.infolist():
+                    data=source.read(entry.filename)
+                    if entry.filename=='xl/worksheets/sheet1.xml':data=re.sub(rb'<dimension ref="[^"]+"',b'<dimension ref="A1"',data)
+                    target.writestr(entry,data)
+            before=broken.read_bytes();rows,invalid=read_comparison(broken)
+            self.assertEqual(len(rows),2);self.assertEqual(invalid,[])
+            self.assertEqual(rows[1]['old'],proposal[1]['old'])
+            self.assertEqual(broken.read_bytes(),before)
+            # The R1 reader is protected against the same invalid dimension metadata.
+            book=Workbook();sheet=book.active;sheet.title='R1';sheet.append(['Otra','numero_predial']);sheet.append(['x',npn()]);sheet.append(['y',npn(plot='0009')]);book.save(original);book.close()
+            with zipfile.ZipFile(original) as source,zipfile.ZipFile(broken,'w',zipfile.ZIP_DEFLATED) as target:
+                for entry in source.infolist():
+                    data=source.read(entry.filename)
+                    if entry.filename=='xl/worksheets/sheet1.xml':data=re.sub(rb'<dimension ref="[^"]+"',b'<dimension ref="A1"',data)
+                    target.writestr(entry,data)
+            _,sheet,header,_,column=inspect_excel(broken)
+            self.assertEqual(column,1)
+            self.assertEqual(len(list(file_records(broken,sheet,header,column))),2)

@@ -1,10 +1,10 @@
-# Renumeración predial · v1.0.3
+# Renumeración predial · v1.0.4
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.3.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.4.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -120,3 +120,7 @@ Las menciones y cantidades de provisionales se resaltan en negrita y ámbar en l
 Se permiten uno o varios predios de condición 5 compartiendo un terreno con el predio base válido, con o sin compañero de condición 2 según las reglas anteriores. Todos los adicionales de condición 5 deben estar CANCELADOS. Reciben un único consecutivo compartido y conservan sus respectivas condiciones y sufijos. Una condición 5 activa o de estado no comprobado mantiene el grupo Pendiente. La ampliación no modifica las reglas de repetición de otras condiciones; PH y condominios conservan su tratamiento propio. Los NPN idénticos siguen contándose una sola vez y los estados contradictorios se señalan.
 
 El botón **Ver lógica de renumeración**, disponible en la ventana principal y en Propuesta y comparación, abre una explicación de las reglas, posiciones del NPN, ejemplo de consecutivos sin saltos, repetición de terrenos, estados y casos pendientes. Desde la propuesta indica además la política 090x seleccionada. La condición 2 conserva un único compañero por terreno; la ampliación de varios adicionales corresponde a condición 5 cancelada.
+
+## V1.0.4 · Excel con dimensiones internas incorrectas
+
+La comparación y lectura R1 recorren las filas reales de las hojas, incluso si el exportador declara incorrectamente un rango A1. No se modifica el Excel de origen. Verificado con un archivo real de 5.003 registros y con una prueba de regresión para columnas fuera de ese rango declarado.

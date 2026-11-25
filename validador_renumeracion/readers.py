@@ -19,6 +19,7 @@ def inspect_excel(filename,sheet=None):
         names=book.sheetnames
         selected=sheet or next((name for name in names if name.casefold()=='r1'),names[0])
         worksheet=book[selected]
+        worksheet.reset_dimensions()
         for number,row in enumerate(worksheet.iter_rows(max_row=50,values_only=True),1):
             headers=[str(value or '') for value in row]
             candidates=[index for index,value in enumerate(headers) if normalized(value) in NPN_NAMES]
@@ -33,7 +34,8 @@ def file_records(filename,sheet='',header_row=1,column=0):
     if path.suffix.lower()=='.xlsx':
         book=load_workbook(path,read_only=True,data_only=True)
         try:
-            for number,row in enumerate(book[sheet or book.sheetnames[0]].iter_rows(min_row=header_row+1,values_only=True),header_row+1):
+            worksheet=book[sheet or book.sheetnames[0]];worksheet.reset_dimensions()
+            for number,row in enumerate(worksheet.iter_rows(min_row=header_row+1,max_col=column+1,values_only=True),header_row+1):
                 yield number,row[column] if column<len(row) else None
         finally:book.close()
     elif path.suffix.lower()=='.txt':

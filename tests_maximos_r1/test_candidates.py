@@ -181,6 +181,7 @@ class CandidateTests(unittest.TestCase):
             dialog.cica_municipality.addItem('Seleccione',None);dialog.cica_municipality.addItem('Algeciras','41020');dialog.cica_municipality.setCurrentIndex(1)
             dialog.cica_municipality.blockSignals(False);dialog.update_r1_availability()
             self.assertTrue(dialog.r1_button.isEnabled())
+            dialog.r1_mode.setCurrentIndex(1)
             rows=[('r1_41020_20260930','numero_predial'),('r1_41020_20261031','numero_predial'),('r1_25377_20261101','numero_predial')]
             with patch('validador_renumeracion.repository.repository_params',return_value={'dbname':'sentencias'}),patch('validador_renumeracion.database.list_tables',return_value=rows),patch('validador_renumeracion.database.database_records',return_value=iter([(1,self.code())])) as reader:
                 dialog.read_selected_r1()

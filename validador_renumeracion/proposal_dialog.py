@@ -11,8 +11,8 @@ from openpyxl import load_workbook,Workbook
 from openpyxl.styles import Font,PatternFill
 from .renumbering import read_comparison,compare_proposal,generate_proposal
 
-PROPOSAL_FIELDS=[('Provisional','old'),('Definitivo esperado','new'),('Estado del predio','predio_state'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t')]
-COMPARE_FIELDS=[('Provisional','old'),('Definitivo esperado','expected'),('Definitivo del archivo','actual'),('Estado del predio','predio_state'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1','base_t'),('Inicio terreno','next_t'),('Fila Excel','line')]
+PROPOSAL_FIELDS=[('Provisional','old'),('Definitivo esperado','new'),('Estado del predio','predio_state'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1/inicial','r1_base_t'),('Máximo adicional','override_t'),('Máximo terreno aplicado','base_t'),('Inicio terreno','next_t')]
+COMPARE_FIELDS=[('Provisional','old'),('Definitivo esperado','expected'),('Definitivo del archivo','actual'),('Estado del predio','predio_state'),('Resultado','status'),('Observación','reason'),('Máximo manzana/vereda R1','base_m'),('Inicio manzana/vereda','next_m'),('Máximo terreno R1/inicial','r1_base_t'),('Máximo adicional','override_t'),('Máximo terreno aplicado','base_t'),('Inicio terreno','next_t'),('Fila Excel','line')]
 
 
 
@@ -22,8 +22,9 @@ class ProposalDialog(QDialog):
         self.by_old={row['old']:row for row in proposal};self.column_filters={'Propuesta':{},'Comparación':{}}
         self.fields={'Propuesta':[('Prefijo territorial','territory'),('Agrupación','grouping')]+PROPOSAL_FIELDS,'Comparación':[('Prefijo territorial','territory'),('Agrupación','grouping')]+COMPARE_FIELDS}
         reference=getattr(getattr(parent,'owner',None),'result',None)
-        self.reference=reference;self.applied_090x=False;self.compared=False
+        self.reference=reference;self.terrain_overrides={};self.applied_090x=False;self.compared=False
         self.generation_rows=[(row['old'],row.get('predio_state')) for row in proposal]
+        self.generation_cica_prefixes=getattr(parent,'cica_prefixes','789')
         self.generation_model='Modelo Interno' if hasattr(parent,'model') and parent.model.currentText()!='CICA' else 'CICA'
         self.prefix_max={row['prefix13']:int(row['max_m']) for row in reference.prefixes} if reference is not None else {}
         for row in proposal:
@@ -33,26 +34,28 @@ class ProposalDialog(QDialog):
         self.setStyleSheet(parent.styleSheet())
         layout=QVBoxLayout(self)
         self.build_title=QLabel(TITLE);self.build_title.setStyleSheet('font-weight: bold; color: #0066B3;');layout.addWidget(self.build_title)
-        title=QLabel('3. Propuesta y comparación');title.setStyleSheet('font-size: 22px; color: #0066B3; font-weight: bold;');layout.addWidget(title)
+        title=QLabel('4. Propuesta y comparación');title.setStyleSheet('font-size: 22px; color: #0066B3; font-weight: bold;');layout.addWidget(title)
         origin=QLabel(context);origin.setWordWrap(True);layout.addWidget(origin)
         note=ProvisionalLabel('Propuesta de consulta: no modifica la base. Consecutivos sin saltos, en orden de provisionales. Excel de comparación: A = nuevo; B = provisional. Los pendientes no se aprueban. «Coincide» compara archivo y propuesta; no acredita cambios aplicados en la base.');note.setWordWrap(True);layout.addWidget(note)
         totals=Counter(row['status'] for row in proposal)
         self.summary=ProvisionalLabel(f'Provisionales en la propuesta: {len(proposal)} · Generados: {totals["Generado"]} · Pendientes: {totals["Pendiente"]}');self.summary.setWordWrap(True);layout.addWidget(self.summary)
-        self.take_090x=QCheckBox('Tomar terrenos 090x (0900–0909), condición 9, como máximos R1');self.take_090x.setChecked(False);self.take_090x.setEnabled(reference is not None and bool(proposal));self.take_090x.toggled.connect(self.recalculate);layout.addWidget(self.take_090x)
+        self.take_090x=QCheckBox('4.1 Tomar terrenos 090x (0900–0909), condición 9, como máximos R1');self.take_090x.setChecked(False);self.take_090x.setEnabled(reference is not None and bool(proposal));self.take_090x.toggled.connect(self.recalculate);layout.addWidget(self.take_090x)
+        self.overrides_button=QPushButton('4.2 Máximo adicional por manzana/vereda…');self.overrides_button.setEnabled(reference is not None and bool(proposal));self.overrides_button.clicked.connect(self.edit_maximum_overrides);layout.addWidget(self.overrides_button)
+        self.override_status=QLabel('Máximos adicionales: ninguno.');layout.addWidget(self.override_status)
         self.policy_status=QLabel('Sin marcar: los terrenos 090x con condición 9 no elevan el máximo de terreno. Los máximos de manzana/vereda se conservan.');self.policy_status.setWordWrap(True);layout.addWidget(self.policy_status)
-        row=QHBoxLayout();self.browse=QPushButton('Cargar archivo de renumeración…');self.browse.clicked.connect(self.choose_file);row.addWidget(self.browse)
-        self.sheet=QComboBox();row.addWidget(self.sheet,1);self.compare_button=QPushButton('Comparar columnas A / B');self.compare_button.setEnabled(False);self.compare_button.clicked.connect(self.compare);row.addWidget(self.compare_button);layout.addLayout(row)
+        row=QHBoxLayout();self.browse=QPushButton('5. Cargar archivo de renumeración…');self.browse.clicked.connect(self.choose_file);row.addWidget(self.browse)
+        self.sheet=QComboBox();row.addWidget(self.sheet,1);self.compare_button=QPushButton('6. Comparar columnas A / B');self.compare_button.setEnabled(False);self.compare_button.clicked.connect(self.compare);row.addWidget(self.compare_button);layout.addLayout(row)
         self.file_status=ProvisionalLabel('Archivo pendiente de cargar. Solo se presentan los provisionales de la propuesta seleccionada.');self.file_status.setWordWrap(True);layout.addWidget(self.file_status)
         row=QHBoxLayout();self.status_filter=QComboBox();self.status_filter.addItem('Todos los resultados','');self.search=QLineEdit();self.search.setPlaceholderText('Buscar NPN o prefijo…');row.addWidget(self.status_filter);row.addWidget(self.search,1);layout.addLayout(row)
         controls=QHBoxLayout();controls.addWidget(QLabel('Desagregación de la vista'))
         self.view_level=QComboBox();self.view_level.addItems(['Sectores · posiciones 1–9','Sector y subdivisión · 1–9 → 10–13','Detalle de provisionales'])
         self.view_level.setCurrentIndex(1);self.view_level.currentIndexChanged.connect(self.apply_view_level);controls.addWidget(self.view_level)
-        clear=QPushButton('Limpiar filtros de columnas');clear.clicked.connect(self.clear_column_filters);controls.addWidget(clear);controls.addStretch();layout.addLayout(controls)
+        clear=QPushButton('6.1 Limpiar filtros de columnas');clear.clicked.connect(self.clear_column_filters);controls.addWidget(clear);controls.addStretch();layout.addLayout(controls)
         self.tabs=QTabWidget();self.views={}
         for name,fields in self.fields.items():
             tree=QTreeWidget();tree.setRootIsDecorated(True);tree.setAlternatingRowColors(True);tree.setHeaderLabels([label+' ▾' for label,_ in fields]);tree.header().setSectionsClickable(True);tree.header().sectionClicked.connect(lambda column,view=name:self.open_column_filter(view,column));self.tabs.addTab(tree,name);self.views[name]=tree
         self.invalid=QTreeWidget();self.invalid.setRootIsDecorated(False);self.invalid.setHeaderLabels(['Fila Excel','A · Nuevo','B · Provisional','Motivo']);self.tabs.addTab(self.invalid,'Filas no utilizadas');layout.addWidget(self.tabs,1)
-        row=QHBoxLayout();export=QPushButton('Exportar propuesta y comparación');export.clicked.connect(self.export);row.addWidget(export);self.logic_button=QPushButton('Ver lógica de renumeración');self.logic_button.clicked.connect(lambda:show_renumbering_logic(self));row.addWidget(self.logic_button);row.addStretch();close=QPushButton('Cerrar');close.clicked.connect(self.accept);row.addWidget(close);layout.addLayout(row)
+        row=QHBoxLayout();export=QPushButton('7. Exportar propuesta y comparación');export.clicked.connect(self.export);row.addWidget(export);self.logic_button=QPushButton('0. Ver lógica de renumeración');self.logic_button.clicked.connect(lambda:show_renumbering_logic(self));row.addWidget(self.logic_button);row.addStretch();close=QPushButton('8. Cerrar propuesta');close.clicked.connect(self.accept);row.addWidget(close);layout.addLayout(row)
         self.sheet.currentTextChanged.connect(self.clear_comparison);self.tabs.currentChanged.connect(self.update_filters);self.status_filter.currentIndexChanged.connect(self.render);self.search.textChanged.connect(self.render);self.update_filters()
 
     def apply_view_level(self,*_):
@@ -67,20 +70,30 @@ class ProposalDialog(QDialog):
         omitted=sum(row['old'] not in self.by_old for row in self.file_rows)
         self.file_status.setText(Path(self.filename).name+' · hoja '+self.sheet.currentText()+' · '+' · '.join(f'{key}: {count}' for key,count in sorted(counts.items()))+f' · Filas inválidas: {len(self.invalid_rows)} · Fuera del alcance omitidos: {omitted}')
 
+    def edit_maximum_overrides(self):
+        from .maximum_overrides import MaximumOverridesDialog
+        dialog=MaximumOverridesDialog(self.proposal,self.reference,self.terrain_overrides,self)
+        if dialog.exec_()!=QDialog.Accepted:return
+        previous=self.terrain_overrides;self.terrain_overrides=dialog.values
+        if not self.recalculate(self.take_090x.isChecked()):
+            self.terrain_overrides=previous;return
+        result='propuesta y comparación recalculadas' if self.compared else 'propuesta recalculada; cargue el archivo para comparar'
+        self.override_status.setText(f'Máximos adicionales: {len(self.terrain_overrides)} manzanas/veredas · '+result)
+
     def recalculate(self,checked):
         if self.reference is None:return
         try:
-            proposal=self.parent().run(lambda:generate_proposal(self.generation_rows,self.reference,self.generation_model,checked))
+            proposal=self.parent().run(lambda:generate_proposal(self.generation_rows,self.reference,self.generation_model,checked,self.generation_cica_prefixes,self.terrain_overrides))
             self.proposal=proposal;self.by_old={row['old']:row for row in proposal};self.applied_090x=checked
             totals=Counter(row['status'] for row in proposal)
             self.summary.setText(f'Provisionales en la propuesta: {len(proposal)} · Generados: {totals["Generado"]} · Pendientes: {totals["Pendiente"]}')
             self.policy_status.setText(('Incluidos' if checked else 'Excluidos')+' del máximo de terreno: 0900–0909 con condición 9. Máximos de manzana/vereda sin cambios.')
             if self.compared:
                 self.comparison=compare_proposal(proposal,self.file_rows,only_provisionals=True);self.update_comparison_status()
-            self.update_filters()
+            self.update_filters();return True
         except Exception as error:
             self.take_090x.blockSignals(True);self.take_090x.setChecked(self.applied_090x);self.take_090x.blockSignals(False)
-            QMessageBox.warning(self,'No se recalculó la propuesta',str(error))
+            QMessageBox.warning(self,'No se recalculó la propuesta',str(error));return False
 
     def clear_comparison(self,*_):
         self.compared=False;self.comparison=[];self.file_rows=[];self.invalid_rows=[];self.invalid.clear()
@@ -103,7 +116,7 @@ class ProposalDialog(QDialog):
 
     def enriched(self,row):
         target=self.by_old[row['old']];maximum=self.prefix_max.get(row['old'][:13]);terrain=target.get('base_t')
-        return dict(row,predio_state=target.get('predio_state','SIN INFORMACIÓN'),territory=row['old'][:17],grouping=('Vereda' if row['old'][5:7]=='00' else 'Manzana')+' (1–17)',base_m=self.code(maximum),next_m=self.following(maximum),base_t=('Se conserva '+row['old'][17:21] if target.get('terrain_preserved') else self.code(terrain)),next_t=('No aplica' if target.get('terrain_preserved') else self.following(terrain)))
+        return dict(row,predio_state=target.get('predio_state','SIN INFORMACIÓN'),territory=row['old'][:17],grouping=('Vereda' if row['old'][5:7]=='00' else 'Manzana')+' (1–17)',base_m=self.code(maximum),next_m=self.following(maximum),r1_base_t=self.code(target.get('r1_base_t',target.get('base_t'))),override_t=(self.code(target.get('override_t')) if target.get('override_t') is not None else '—'),base_t=('Se conserva '+row['old'][17:21] if target.get('terrain_preserved') else self.code(terrain)),next_t=('No aplica' if target.get('terrain_preserved') else self.following(terrain)))
 
     def visible_data(self,name):
         data=self.proposal if name=='Propuesta' else self.comparison
@@ -173,7 +186,7 @@ class ProposalDialog(QDialog):
                         if key=='status':values[index]=f'{info["count"]} provisionales'
                         elif key=='base_m':values[index]=info['max_m']
                         elif key=='next_m':values[index]=info['next_m']
-                        elif key in ('base_t','next_t'):values[index]='Por manzana/vereda'
+                        elif key in ('base_t','next_t','r1_base_t','override_t'):values[index]='Por manzana/vereda'
                     child=QTreeWidgetItem(values)
                     font=child.font(0);font.setBold(True)
                     for column in range(len(fields)):child.setFont(column,font);child.setBackground(column,QColor('#F3F6FA'))
@@ -244,6 +257,9 @@ class ProposalDialog(QDialog):
             for name in self.fields:
                 for item in self.group_summary(self.visible_data(name)):groups.append([name,item['prefix9'],item['part10_13'],item['prefix13'],item['count'],item['max_m'],item['next_m'],item['blocks']])
             summary.append(['Fuera del alcance omitidos',sum(row['old'] not in self.by_old for row in self.file_rows)]);summary.append(['Vista del filtro de resultado',self.tabs.tabText(self.tabs.currentIndex())]);summary.append(['Filtros de columnas',str(self.column_filters)]);summary.append(['Búsqueda',self.search.text()]);summary.append(['Filtro de resultado',self.status_filter.currentText()])
+            extras=book.create_sheet('Maximos adicionales');extras.append(['Manzana/vereda (1–17)','Máximo adicional','NPN de referencia','Observación'])
+            for block,data in sorted(self.terrain_overrides.items()):extras.append([block,data['max_t'],data.get('npn',''),data.get('note','')])
+            summary.append(['Manzanas/veredas con máximo adicional',len(self.terrain_overrides)])
             invalid=book.create_sheet('Filas no utilizadas');invalid.append(['Fila Excel','A · Nuevo','B · Provisional','Motivo'])
             for row in self.invalid_rows:invalid.append(row)
             for sheet in book:

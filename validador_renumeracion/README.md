@@ -1,10 +1,10 @@
-# Renumeración predial · v1.0.5
+# Renumeración predial · v1.1.0
 
 Plugin QGIS 3.28 o superior para identificar provisionales, consultar máximos R1, generar una propuesta y compararla con un archivo de renumeración. Todas las consultas de base se realizan en modo de solo lectura. No aplica actualizaciones de NPN.
 
 ## Instalación
 
-Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.0.5.zip`.
+Complementos → Administrar e instalar complementos → Instalar a partir de ZIP → `renumeracion_predial_v1.1.0.zip`.
 
 Abra **Renumeración predial** desde el menú de base de datos o el icono. La ventana abre maximizada y permite minimizar y restaurar.
 
@@ -20,7 +20,7 @@ Abra **Renumeración predial** desde el menú de base de datos o el icono. La ve
 
 ## 2. Alcance y diagnóstico
 
-Pulse **Identificar predios a renumerar**. CICA identifica 7, 8 o 9 en posición 14 o 18; Modelo Interno, cualquier letra en esas posiciones.
+Pulse **Identificar predios a renumerar**. CICA confirma por separado si 7xxx y 8xxx son provisionales en posiciones 14 o 18; 9xxx siempre lo es. Modelo Interno identifica cualquier letra en esas posiciones.
 
 - Arriba: manzanas/veredas nuevas (provisional en posición 14), agrupadas por prefijo 1–9, con detalle desplegable 1–17.
 - Abajo: todos los predios identificados, en el mismo resumen desplegable 1–9 → 1–17.
@@ -128,3 +128,16 @@ La comparación y lectura R1 recorren las filas reales de las hojas, incluso si 
 ## V1.0.5 · Solo cambia la manzana/vereda si el terreno no es provisional
 
 Cuando 14–17 es provisional pero 18–21 no lo es, la propuesta modifica únicamente la manzana/vereda, conservando el terreno, la condición y el sufijo. Esos terrenos no se incluyen en el contador de asignación de terrenos provisionales, ni se vuelven a validar como una nueva agrupación de terreno compartido. Los casos de estado contradictorio o colisión de NPN siguen pendientes. La observación muestra Solo manzana/vereda; terreno conservado y el inicio de terreno indica No aplica. Ejemplo: el terreno 0008 permanece 0008 y el provisional 9001 inicia en 0001. El diagnóstico distingue terrenos por renumerar y terrenos que se conservan.
+
+
+## V1.1.0 · Flujo numerado, R1 temporal y máximos adicionales
+
+1. **Consultar fuente y municipio.**
+2. **Cargar R1:** opción 1 por defecto, archivo Excel/TXT temporal dentro del plugin, con selección de hoja y columna NPN. Se restringe al municipio seleccionado y se informa cuántos registros de otros municipios se omiten. No se sube el archivo a PostgreSQL ni se modifica. La opción 2 conserva el R1 precargado. Cambiar el origen invalida la referencia anterior. El botón 2.1 consulta los máximos cargados.
+3. **Identificar provisionales.** CICA pregunta con dos casillas independientes: 7xxx y 8xxx. Se puede seleccionar una, ambas o ninguna; 9xxx siempre es provisional. Cancelar evita consultar la fuente. La elección se conserva en el diagnóstico, la generación, la comparación y cualquier recálculo, incluido 090x, y queda en la procedencia exportada. Las series desmarcadas se tratan como números no provisionales.
+4. **Generar propuesta.** La opción 4.2 permite añadir un máximo de terreno temporal por manzana/vereda 1–17. Se puede escribir el NPN completo del predio máximo (debe pertenecer a esa misma manzana/vereda) o un número de terreno y una observación. Se aplica el mayor entre el máximo R1 elegible y el adicional; un adicional puede completar una referencia de terreno ausente, pero no inventa máximos de manzana/vereda 1–13.
+5. **Cargar archivo de renumeración.**
+6. **Comparar A nuevo / B provisional.**
+7. **Exportar.** Se conservan los criterios CICA, la procedencia R1 y los máximos adicionales en su propia hoja. Las columnas distinguen máximo R1/inicial, máximo adicional y máximo aplicado.
+
+Al guardar un máximo adicional se regenera la propuesta y, si ya existe un archivo comparado, se vuelve a comparar automáticamente con las filas cargadas. Quitar un adicional y guardar restaura el cálculo sin ese aporte. No se consulta de nuevo el Excel ni se escriben cambios en la base.

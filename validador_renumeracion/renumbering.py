@@ -4,10 +4,11 @@ import re
 from openpyxl import load_workbook
 from .readers import normalized
 from .candidates import predio_state
+from .numbering_policy import normalize_cica_prefixes,is_provisional
 
 
-def provisional(value,model):
-    return value in '789' if model=='CICA' else value.isascii() and value.isalpha()
+def provisional(value,model,cica_prefixes='789'):
+    return is_provisional(value,model,cica_prefixes)
 
 
 def terrain_baselines(r1,take_090x_as_max=False):
@@ -23,9 +24,15 @@ def terrain_baselines(r1,take_090x_as_max=False):
     return maxima
 
 
-def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
+def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False,cica_prefixes='789',terrain_overrides=None):
     if model not in ('CICA','Modelo Interno'):raise ValueError('Fuente no reconocida.')
+    cica_prefixes=normalize_cica_prefixes(cica_prefixes)
     candidate_rows=list(candidate_rows)
+    terrain_overrides=terrain_overrides or {}
+    for block,data in terrain_overrides.items():
+        value=data.get('max_t') if isinstance(data,dict) else data
+        if not re.fullmatch(r'[0-9A-Za-z]{17}',block) or type(value) is not int or not 0<=value<=9999:
+            raise ValueError('Máximo adicional inválido para manzana/vereda '+str(block))
     prefix_max={r['prefix13']:int(r['max_m']) for r in r1.prefixes}
     terrain_max=terrain_baselines(r1,take_090x_as_max)
     state_values=defaultdict(set)
@@ -33,10 +40,10 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
         state_values[row[0]].add(predio_state(row[10] if len(row)>10 else row[1] if len(row)==2 else None))
     states={old:next(iter(values)) if len(values)==1 else 'ESTADO INCONSISTENTE' for old,values in state_values.items()}
     blocks=defaultdict(list)
-    for old in sorted({r[0] for r in candidate_rows if provisional(r[0][13],model) or provisional(r[0][17],model)}):blocks[old[:17]].append(old)
+    for old in sorted({r[0] for r in candidate_rows if provisional(r[0][13],model,cica_prefixes) or provisional(r[0][17],model,cica_prefixes)}):blocks[old[:17]].append(old)
     new_blocks=defaultdict(list)
     for block in blocks:
-        if provisional(block[13],model):new_blocks[block[:13]].append(block)
+        if provisional(block[13],model,cica_prefixes):new_blocks[block[:13]].append(block)
     assigned={};errors={}
     for prefix,values in sorted(new_blocks.items()):
         for offset,block in enumerate(sorted(values),1):
@@ -46,9 +53,12 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
             assigned[block]=prefix+f'{maximum+offset:04d}'
     output=[]
     for block,olds in sorted(blocks.items()):
-        is_new=provisional(block[13],model)
+        is_new=provisional(block[13],model,cica_prefixes)
         target_block=assigned.get(block,block)
-        baseline=0 if is_new else terrain_max.get(block)
+        r1_baseline=0 if is_new else terrain_max.get(block)
+        override=terrain_overrides.get(block)
+        extra=override.get('max_t') if isinstance(override,dict) else override
+        baseline=max(r1_baseline if r1_baseline is not None else 0,extra) if extra is not None else r1_baseline
         block_error=errors.get(block,'')
         if baseline is None:
             block_error=('Sin terreno R1 elegible: los 090x de condición 9 están excluidos' if block in terrain_max and not take_090x_as_max else 'Sin referencia R1 de terreno para la manzana/vereda 1–17')
@@ -56,7 +66,7 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
         for old in olds:plots[old[:21]].append(old)
         terrain_offset=0
         for plot,family in sorted(plots.items()):
-            preserve_terrain=is_new and not provisional(plot[17],model)
+            preserve_terrain=is_new and not provisional(plot[17],model,cica_prefixes)
             error=block_error
             if preserve_terrain:number=int(plot[17:21])
             else:
@@ -87,7 +97,7 @@ def generate_proposal(candidate_rows,r1,model,take_090x_as_max=False):
                     'reason':error or ('Solo manzana/vereda; terreno conservado '+old[17:21] if preserve_terrain else 'Manzana/vereda nueva' if is_new else 'Terreno en manzana/vereda existente'),
                     'prefix13':old[:13],'old_block':block,'new_block':target_block if not block_error else '',
                     'base_m':prefix_max.get(old[:13]),
-                    'base_t':None if preserve_terrain else baseline,'terrain_preserved':preserve_terrain,'family':plot,'condition':old[21],'predio_state':states[old]})
+                    'base_t':None if preserve_terrain else baseline,'r1_base_t':r1_baseline,'override_t':extra,'override_npn':override.get('npn','') if isinstance(override,dict) else '','override_note':override.get('note','') if isinstance(override,dict) else '','terrain_preserved':preserve_terrain,'family':plot,'condition':old[21],'predio_state':states[old]})
     existing=set(getattr(r1,'r1_numbers',()))
     targets=Counter(row['new'] for row in output if row['new'])
     for row in output:

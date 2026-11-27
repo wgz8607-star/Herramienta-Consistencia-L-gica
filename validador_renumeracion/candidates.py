@@ -1,14 +1,16 @@
 """Identify provisional NPNs without changing or approving renumerations."""
 import re
 from collections import defaultdict
+from .numbering_policy import normalize_cica_prefixes,is_provisional
 
 
 def predio_state(value):
     return str(value).strip().upper() if value is not None and str(value).strip() else 'SIN INFORMACIÓN'
 
 
-def identify_candidates(records,model):
+def identify_candidates(records,model,cica_prefixes='789'):
     if model not in ('CICA','Modelo Interno'):raise ValueError('Fuente no reconocida.')
+    cica_prefixes=normalize_cica_prefixes(cica_prefixes)
     seen=set();rows=[];invalid=[];duplicates=total=0;states=defaultdict(set)
     for record in records:
         number,raw=record[:2]
@@ -22,7 +24,7 @@ def identify_candidates(records,model):
         states[npn].add(state)
         if npn in seen:duplicates+=1;continue
         seen.add(npn)
-        provisional=lambda value:value in '789' if model=='CICA' else value.isalpha()
+        provisional=lambda value:is_provisional(value,model,cica_prefixes)
         manzana,terreno=provisional(npn[13]),provisional(npn[17])
         if not manzana and not terreno:continue
         kind='Manzana y terreno' if manzana and terreno else 'Manzana' if manzana else 'Terreno'

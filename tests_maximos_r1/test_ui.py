@@ -116,5 +116,5 @@ class MaximaUiTests(unittest.TestCase):
         try:
             self.assertEqual(dialog.build_title.text(),TITLE)
             self.assertIn('V1',dialog.windowTitle())
-            self.assertIn('25/11/2026',dialog.build_title.text())
+            self.assertIn('27/11/2026',dialog.build_title.text())
         finally:dialog.close()

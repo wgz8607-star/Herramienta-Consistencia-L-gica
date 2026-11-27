@@ -17,10 +17,10 @@ El estado se toma de <b>cica_predio.estado</b>.</p>
 <p><b>Modelo Interno:</b> esquema seleccionado. Es CANCELADO si alguna novedad asociada contiene
 la palabra <b>cancelación</b>, sin distinguir mayúsculas ni tilde; si no la tiene, es ACTIVO.
 Si no se puede consultar esa relación, se informa SIN INFORMACIÓN.</p>
-<p><span class="provisional">Provisional CICA:</span> 7, 8 o 9 en posición 14 o 18.
+<p><span class="provisional">Provisional CICA:</span> 9 en posición 14 o 18; las series 7xxx y 8xxx se confirman por separado antes de comprobar.
 <span class="provisional">Provisional Modelo Interno:</span> una letra en posición 14 o 18.</p>
 <h2>2. Referencia R1 y alcance</h2>
-<p>Los máximos se obtienen únicamente del <b>R1 leído para el mismo municipio</b>.
+<p>La referencia es el <b>R1 leído para el mismo municipio</b>, cargado temporalmente en el plugin desde Excel/TXT o seleccionado entre precargados. Se pueden añadir máximos de terreno conocidos posteriores al corte.
 Solo se propone la renumeración de las zonas seleccionadas entre los provisionales identificados.</p>
 <table><tr><th>Posiciones del NPN</th><th>Uso</th></tr>
 <tr><td>1–5</td><td>Municipio DIVIPOLA</td></tr>
@@ -67,6 +67,12 @@ solo afecta a <b>18–21</b> cuando <b>22 = 9</b>.</p>
 <li><b>Marcada:</b> también participan en el máximo.</li></ul>
 <p>La opción no cambia el máximo de manzana/vereda. Al cambiarla se recalculan la propuesta
 y una comparación ya cargada; la elección se registra en Excel.</p>
+<h2>6.1 Máximos adicionales por manzana/vereda</h2>
+<p>Si el R1 perdió temporalidad, el botón <b>4.2 Máximo adicional</b> permite introducir un máximo de terreno
+para cada manzana/vereda (1–17), opcionalmente con el NPN completo del predio y una observación.
+Se aplica el <b>mayor entre el R1 y el adicional</b>; no se rebaja un máximo conocido del R1.</p>
+<p>Al guardar, se regenera la propuesta y se vuelve a comparar el archivo ya cargado, sin tener que abrirlo de nuevo.
+El Excel registra los adicionales y los valores usados. No se modifica el R1 ni la base.</p>
 <h2>7. Condición y sufijo</h2>
 <p>Se conserva la <b>condición en posición 22</b> y todo el contenido de <b>23–30</b>.
 La propuesta contiene el estado ACTIVO/CANCELADO obtenido de la fuente, también en la comparación y el Excel.</p>
@@ -96,7 +102,7 @@ class RenumberingLogicDialog(QDialog):
             policy=QLabel('Propuesta actual · 090x como máximos R1: '+('Sí' if parent.take_090x.isChecked() else 'No'))
             policy.setStyleSheet('background:#E8F1FA;padding:8px;color:#0066B3;font-weight:bold;');layout.addWidget(policy)
         self.browser=QTextBrowser();self.browser.setOpenExternalLinks(False);self.browser.setHtml(LOGIC_HTML);layout.addWidget(self.browser,1)
-        buttons=QDialogButtonBox(QDialogButtonBox.Close);buttons.button(QDialogButtonBox.Close).setText('Cerrar');buttons.rejected.connect(self.reject);layout.addWidget(buttons)
+        buttons=QDialogButtonBox(QDialogButtonBox.Close);buttons.button(QDialogButtonBox.Close).setText('0.1 Cerrar lógica');buttons.rejected.connect(self.reject);layout.addWidget(buttons)
 
 
 def show_renumbering_logic(parent):

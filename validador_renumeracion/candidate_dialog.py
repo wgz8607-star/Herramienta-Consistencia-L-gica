@@ -13,7 +13,7 @@ HEADERS=['Prefijo territorial','Agrupación','Predios a renumerar','Manzanas–v
 
 class CandidateDialog(QDialog):
     def __init__(self,parent,window_parent=None):
-        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self.copy_date='Fecha de copia pendiente de consultar';self._copy_consulted=False
+        super().__init__(parent if window_parent is None else window_parent);self.owner=parent;self.result=None;self.origin='';self.cica_codes=[];self.copy_date='Fecha de copia pendiente de consultar';self._copy_consulted=False;self.cica_prefixes='789'
         self.setWindowTitle(TITLE+' · Seleccionar fuente de datos');self.resize(1400,950)
         self.setWindowFlags(self.windowFlags()|Qt.WindowMinimizeButtonHint|Qt.WindowMaximizeButtonHint)
         self.setStyleSheet('QDialog { background: #F3F6FA; } QLabel { color: #17324D; } QComboBox QAbstractItemView { background: #FFFFFF; color: #17324D; selection-background-color: #0066B3; selection-color: #FFFFFF; font-weight: normal; } QComboBox QAbstractItemView::item { min-height: 26px; padding: 4px; } QComboBox QAbstractItemView::item:selected { background: #0066B3; color: #FFFFFF; } QComboBox,QLineEdit { background: #FFFFFF; border: 1px solid #CDDFEF; border-radius: 4px; padding: 6px; } QPushButton { background: #0066B3; color: white; border-radius: 5px; padding: 8px 12px; } QPushButton:disabled { background: #E9ECEF; color: #7B8490; } QTreeWidget { background: white; alternate-background-color: #F3F8FC; border: 1px solid #D9E5EF; } QHeaderView::section { background: #0066B3; color: white; padding: 7px; }')
@@ -33,37 +33,40 @@ class CandidateDialog(QDialog):
             if key=='port':field.setText('5432')
             form.addRow(label,field);field.textChanged.connect(self.model_connection_edited)
         self.connection_mode.currentIndexChanged.connect(self.connection_mode_changed)
-        self.schema=SchemaSelector();self.schema.catalog=parent.catalog;self.list_button=QPushButton('Consultar esquemas');form.addRow(self.list_button);form.addRow('Esquema por municipio · DIVIPOLA',self.schema)
+        self.schema=SchemaSelector();self.schema.catalog=parent.catalog;self.list_button=QPushButton('1. Consultar esquemas');form.addRow(self.list_button);form.addRow('Esquema por municipio · DIVIPOLA',self.schema)
         self.model_municipality=QComboBox();form.addRow('Municipio a validar',self.model_municipality)
         self.model_location=QLabel('Seleccione un esquema para consultar su municipio.');self.model_location.setWordWrap(True);form.addRow(self.model_location)
         self.model_municipality.currentIndexChanged.connect(self.model_municipality_changed)
-        self.cica_lookup=QPushButton('Consultar departamentos y municipios CICA');form.addRow(self.cica_lookup)
+        self.cica_lookup=QPushButton('1. Consultar departamentos y municipios CICA');form.addRow(self.cica_lookup)
         self.department=QComboBox();self.cica_municipality=QComboBox();form.addRow('Departamento',self.department);form.addRow('Municipio CICA',self.cica_municipality)
         self.copy_label=QLabel(self.copy_date);form.insertRow(form.getWidgetPosition(self.cica_lookup)[0]+1,'',self.copy_label)
         self.copy_label.setStyleSheet('background: #E8F1FA; color: #0066B3; font-weight: bold; padding: 8px; border-left: 4px solid #0066B3;')
         self.cica_lookup.clicked.connect(self.load_cica_municipalities);self.department.currentIndexChanged.connect(self.update_cica_municipalities);self.cica_municipality.currentIndexChanged.connect(self.update_available_zones)
         self.note=note=ProvisionalLabel('CICA: 7, 8 o 9 en posición 14 o 18. Modelo Interno: letra en posición 14 o 18. CICA: solo etapa VALIDADO y estado_control DESCARGADO_AL_SNC. Modelo Interno: sin filtro de etapa o estado. Las condiciones 8 y 9 (posición 22) quedan identificadas para revisión especial.');note.setWordWrap(True);layout.addWidget(note)
-        self.stats_button=QPushButton('Ver estadísticas CICA…');self.stats_button.clicked.connect(self.open_statistics);layout.addWidget(self.stats_button)
-        self.read=QPushButton('Identificar predios a renumerar');layout.addWidget(self.read)
+        self.stats_button=QPushButton('1.1 Ver estadísticas CICA (opcional)');self.stats_button.clicked.connect(self.open_statistics);layout.addWidget(self.stats_button)
+        self.read=QPushButton('3. Identificar provisionales');layout.addWidget(self.read)
         self.status=ProvisionalLabel('Seleccione la fuente y su conexión.');self.status.setWordWrap(True);layout.addWidget(self.status)
-        results_title=QLabel('2. Alcance y diagnóstico · Manzanas - Veredas nuevas y predios a renumerar');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
+        results_title=QLabel('3. Alcance y diagnóstico · Manzanas - Veredas nuevas y predios a renumerar');results_title.setStyleSheet('color: #0066B3; font-size: 16px; font-weight: bold;');layout.addWidget(results_title)
         self.scope_widget=QWidget();self.scope_layout=QHBoxLayout(self.scope_widget);self.scope_layout.setContentsMargins(0,0,0,0);self.scope_boxes={};self.scope_layout.addWidget(ProvisionalLabel('Identifique los provisionales para seleccionar las zonas.'));layout.addWidget(self.scope_widget)
         self.scope_status=ProvisionalLabel('Alcance pendiente.');self.scope_status.setWordWrap(True);layout.addWidget(self.scope_status)
         split=QSplitter(Qt.Vertical);layout.addWidget(split,1)
         top=QWidget();top_layout=QVBoxLayout(top);top_layout.setContentsMargins(0,0,0,0);top_layout.addWidget(ProvisionalLabel('Manzanas o veredas nuevas · provisional en posición 14'))
         self.new_blocks=QTreeWidget();self.new_blocks.setRootIsDecorated(True);self.new_blocks.setAlternatingRowColors(True);self.new_blocks.setHeaderLabels(HEADERS);top_layout.addWidget(self.new_blocks)
-        group_controls=QHBoxLayout();self.expand_blocks=QPushButton('Desagrupar detalle');self.collapse_blocks=QPushButton('Agrupar por zona–sector');self.expand_blocks.clicked.connect(self.new_blocks.expandAll);self.collapse_blocks.clicked.connect(self.new_blocks.collapseAll);group_controls.addWidget(self.expand_blocks);group_controls.addWidget(self.collapse_blocks);group_controls.addStretch();top_layout.addLayout(group_controls);split.addWidget(top)
+        group_controls=QHBoxLayout();self.expand_blocks=QPushButton('3.1 Desagrupar detalle');self.collapse_blocks=QPushButton('3.2 Agrupar por zona–sector');self.expand_blocks.clicked.connect(self.new_blocks.expandAll);self.collapse_blocks.clicked.connect(self.new_blocks.collapseAll);group_controls.addWidget(self.expand_blocks);group_controls.addWidget(self.collapse_blocks);group_controls.addStretch();top_layout.addLayout(group_controls);split.addWidget(top)
         bottom=QWidget();bottom_layout=QVBoxLayout(bottom);bottom_layout.setContentsMargins(0,0,0,0);bottom_layout.addWidget(QLabel('Predios a renumerar · zona–sector y manzana o vereda'))
         self.tree=QTreeWidget();self.tree.setAlternatingRowColors(True);self.tree.setRootIsDecorated(True);self.tree.setHeaderLabels(HEADERS);bottom_layout.addWidget(self.tree);split.addWidget(bottom);split.setSizes([220,300])
-        self.propose_button=QPushButton('3. Generar propuesta y comparar archivo…');self.propose_button.setEnabled(False);self.propose_button.clicked.connect(self.open_proposal);layout.addWidget(self.propose_button)
-        self.export=QPushButton('Exportar identificación a Excel');self.export.setEnabled(False)
-        export_actions=QHBoxLayout();export_actions.addWidget(self.export);self.logic_button=QPushButton('Ver lógica de renumeración');self.logic_button.clicked.connect(lambda:show_renumbering_logic(self));export_actions.addWidget(self.logic_button);layout.addLayout(export_actions)
-        self.r1_status=QLabel('Seleccione departamento y municipio para leer el R1 precargado.');self.r1_status.setWordWrap(True)
-        self.r1_button=QPushButton('Leer R1 del municipio');self.r1_button.clicked.connect(self.read_selected_r1)
-        self.maxima_button=QPushButton('Consultar máximos del R1');self.maxima_button.clicked.connect(self.open_r1);self.maxima_button.setEnabled(False)
+        self.propose_button=QPushButton('4. Generar propuesta y comparar archivo…');self.propose_button.setEnabled(False);self.propose_button.clicked.connect(self.open_proposal);layout.addWidget(self.propose_button)
+        self.export=QPushButton('3.3 Exportar diagnóstico a Excel');self.export.setEnabled(False)
+        export_actions=QHBoxLayout();export_actions.addWidget(self.export);self.logic_button=QPushButton('0. Ver lógica de renumeración');self.logic_button.clicked.connect(lambda:show_renumbering_logic(self));export_actions.addWidget(self.logic_button);layout.addLayout(export_actions)
+        self.r1_status=QLabel('Seleccione municipio para cargar o leer el R1.');self.r1_status.setWordWrap(True)
+        self.r1_mode=QComboBox();self.r1_mode.addItems(['Opción 1: R1 cargado por usuario · temporal','Opción 2: R1 precargado del municipio'])
+        form.insertRow(form.getWidgetPosition(self.cica_municipality)[0]+1,'2. Origen R1',self.r1_mode)
+        self.r1_button=QPushButton('2. Cargar R1 temporal');self.r1_button.clicked.connect(self.read_selected_r1)
+        self.maxima_button=QPushButton('2.1 Consultar máximos del R1');self.maxima_button.clicked.connect(self.open_r1);self.maxima_button.setEnabled(False)
         r1_row=QHBoxLayout();r1_row.addWidget(self.r1_status,1);r1_row.addWidget(self.r1_button);r1_row.addWidget(self.maxima_button)
-        form.insertRow(form.getWidgetPosition(self.cica_municipality)[0]+1,'R1 precargado',r1_row)
+        form.insertRow(form.getWidgetPosition(self.r1_mode)[0]+1,'Referencia R1',r1_row)
         self._r1_code=''
+        self.r1_mode.currentIndexChanged.connect(self.change_r1_mode)
         self.cica_municipality.currentIndexChanged.connect(self.update_r1_availability);self.model.currentIndexChanged.connect(self.update_r1_availability);self.schema.currentTextChanged.connect(self.model_schema_selected)
         self.model.currentIndexChanged.connect(self.change_source);self.connection.currentTextChanged.connect(self.change_source)
         self.schema.currentTextChanged.connect(self.invalidate)
@@ -114,10 +117,50 @@ class CandidateDialog(QDialog):
         self.r1_button.setEnabled(bool(code))
         if self._r1_code!=code:
             self._r1_code='';self.maxima_button.setEnabled(False);self.owner.invalidate()
-            self.r1_status.setText('R1 precargado pendiente de leer · '+code if code else 'Seleccione departamento y municipio para leer el R1 precargado.')
+            self.r1_status.setText(('R1 temporal pendiente de cargar · ' if self.r1_mode.currentIndex()==0 else 'R1 precargado pendiente de leer · ')+code if code else 'Seleccione municipio antes de cargar el R1.')
+        self.update_proposal_availability()
+
+    def change_r1_mode(self,*_):
+        self._r1_code='';self.maxima_button.setEnabled(False);self.owner.invalidate()
+        self.r1_button.setText('2. Cargar R1 temporal' if self.r1_mode.currentIndex()==0 else '2. Leer R1 del municipio')
+        self.update_r1_availability()
+
+    def read_temporary_r1(self):
+        from pathlib import Path
+        from .temporary_r1 import TemporaryR1Dialog
+        from .readers import file_records
+        from .core import build_maxima
+        code=self.reference_municipality()
+        if not code:return
+        filename,_=QFileDialog.getOpenFileName(self,'2. Cargar R1 temporal','','R1 (*.xlsx *.txt *.TXT)')
+        if not filename:return
+        self._r1_code='';self.owner.invalidate();self.maxima_button.setEnabled(False)
+        try:
+            dialog=TemporaryR1Dialog(filename,self)
+            if dialog.exec_()!=QDialog.Accepted:self.update_r1_availability();return
+            sheet=dialog.sheet.currentText() if Path(filename).suffix.lower()=='.xlsx' else ''
+            header=dialog.header;column=dialog.column.currentData() or 0
+            def read():
+                skipped=[0]
+                def records():
+                    for number,raw in file_records(filename,sheet,header,column):
+                        if isinstance(raw,str) and len(raw.strip())==30 and raw.strip()[:5].isdigit() and raw.strip()[:5]!=code:
+                            skipped[0]+=1;continue
+                        yield number,raw
+                result=build_maxima(records())
+                if not result.unique_npns:raise ValueError('El archivo no contiene NPN válidos del municipio '+code+'.')
+                return result,skipped[0]
+            result,skipped=self.run(read)
+            self.owner.source_municipality=code
+            self.owner.set_result(result,f'R1 temporal · {Path(filename).name} · hoja {sheet or "TXT"} · municipio {code} · Otros municipios omitidos: {skipped}')
+            self._r1_code=code;self.maxima_button.setEnabled(True)
+            self.r1_status.setText(f'Leído · R1 temporal: {Path(filename).name} · {code} · {result.unique_npns:,} NPN únicos · Otros municipios omitidos: {skipped}')
+        except Exception as error:QMessageBox.warning(self,'No se cargó el R1 temporal',str(error))
         self.update_proposal_availability()
 
     def read_selected_r1(self):
+        if self.r1_mode.currentIndex()==0:
+            self.read_temporary_r1();return
         from datetime import datetime
         from .repository import repository_params
         from .database import list_tables,database_records
@@ -171,7 +214,7 @@ class CandidateDialog(QDialog):
         self.schema.setVisible(not cica);self.connection_form.labelForField(self.schema).setVisible(not cica)
         self.copy_label.setVisible(cica and self._copy_consulted)
         self.stats_button.setVisible(cica)
-        self.note.setText(('CICA: provisionales 7, 8 o 9 en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base; se admiten uno o varios predios de condición 5 CANCELADO con el predio base válido, con o sin compañero de condición 2.')
+        self.note.setText(('CICA: confirme por separado 7xxx y 8xxx; 9xxx siempre es provisional, en posición 14 o 18. Solo VALIDADO / DESCARGADO_AL_SNC.' if cica else 'Modelo Interno: letra en posición 14 o 18.')+' PH y condominios comparten terreno por prefijo 1–22; condición 2 comparte con su predio base; se admiten uno o varios predios de condición 5 CANCELADO con el predio base válido, con o sin compañero de condición 2.')
         if cica:self.schema.addItem('snc_cica_copy')
         self.schema.setEnabled(not cica);self.list_button.setEnabled(not cica);self.invalidate()
 
@@ -270,11 +313,17 @@ class CandidateDialog(QDialog):
             if code and (len(code)!=5 or not code.isascii() or not code.isdigit()):raise ValueError('Ingrese una DIVIPOLA de cinco dígitos.')
             model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno';schema=self.schema.currentText()
             if not schema:raise ValueError('Consulte y seleccione el esquema del Modelo Interno.')
+            if cica:
+                from .cica_options import CicaProvisionalOptions
+                options=CicaProvisionalOptions(self.cica_prefixes,self)
+                if options.exec_()!=QDialog.Accepted:return
+                self.cica_prefixes=options.prefixes()
+            prefixes=self.cica_prefixes
             zones=None  # All zones of the selected municipality.
             params=self.params();self.status.setText('Leyendo los predios de la fuente…')
-            result=self.run(lambda:identify_candidates(source_records(params,model,schema,code,zones),model))
+            result=self.run(lambda:identify_candidates(source_records(params,model,schema,code,zones),model,prefixes))
             self.result=result;self.origin=f'{model} · {params.get("dbname",params.get("service",""))}.{schema} · DIVIPOLA: {code or "Todos"}'
-            if model=='CICA':self.origin+=' · Corte: '+self.copy_date+' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: todas'
+            if model=='CICA':self.origin+=' · Provisionales CICA: '+', '.join(c+'xxx' for c in self.cica_prefixes)+' · Corte: '+self.copy_date+' · etapa=VALIDADO · estado_control=DESCARGADO_AL_SNC · Zonas: todas'
             self.build_scope()
             self.render_candidate_statistics()
             pending=sum(row[8] in '89' for row in result['rows'])
@@ -304,7 +353,7 @@ class CandidateDialog(QDialog):
                 for child_index in range(root.childCount()):
                     child=root.child(child_index);emphasize_item(child,2)
                     prefix=child.text(0)
-                    if len(prefix)==17 and (prefix[13] in '789' if self.model.currentText()=='CICA' else prefix[13].isalpha()):emphasize_item(child,0)
+                    if len(prefix)==17 and (prefix[13] in self.cica_prefixes if self.model.currentText()=='CICA' else prefix[13].isalpha()):emphasize_item(child,0)
         self.update_proposal_availability()
 
     def build_scope(self):
@@ -330,8 +379,8 @@ class CandidateDialog(QDialog):
             new_blocks=len({row[0][:17] for row in rows if row[7] in ('Manzana','Manzana y terreno')})
             from .renumbering import provisional
             model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno'
-            terrain_changes=len({row[0][:21] for row in rows if provisional(row[0][17],model)})
-            preserved=len({row[0][:21] for row in rows if not provisional(row[0][17],model)})
+            terrain_changes=len({row[0][:21] for row in rows if provisional(row[0][17],model,self.cica_prefixes)})
+            preserved=len({row[0][:21] for row in rows if not provisional(row[0][17],model,self.cica_prefixes)})
             active=sum(len(row)>10 and row[10]=='ACTIVO' for row in rows);cancelled=sum(len(row)>10 and row[10]=='CANCELADO' for row in rows)
             self.scope_status.setText(f'Provisionales: {len(rows)} · {len({row[0][:21] for row in rows})} terrenos distintos ({terrain_changes} por renumerar, {preserved} se conservan) · {new_blocks} manzanas/veredas nuevas · Activos: {active} · Cancelados: {cancelled} · Otros/sin información: {len(rows)-active-cancelled}. Solo los grupos de terreno provisionales consumen consecutivo.')
         same=bool(rows) and bool(self._r1_code) and {row[0][:5] for row in rows}=={self._r1_code}
@@ -348,7 +397,7 @@ class CandidateDialog(QDialog):
         model='CICA' if self.model.currentText()=='CICA' else 'Modelo Interno'
         zones=sorted({row[0][5:7] for row in rows})
         try:
-            proposal=self.run(lambda:generate_proposal(rows,r1,model))
+            proposal=self.run(lambda:generate_proposal(rows,r1,model,cica_prefixes=self.cica_prefixes))
             context=self.origin+'\nR1: '+self.owner.origin+' · SHA256: '+r1.fingerprint+f' · R1 inválidos excluidos: {len(r1.invalid)}'+'\nZonas seleccionadas: '+', '.join(zones)+f' · Registros inválidos excluidos de la fuente: {len(self.result["invalid"])}'
             dialog=ProposalDialog(proposal,context,self);dialog.showMaximized();dialog.exec_()
         except Exception as error:QMessageBox.warning(self,'No se generó la propuesta',str(error))
